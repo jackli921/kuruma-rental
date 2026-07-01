@@ -1,3 +1,4 @@
+import { ViewModeProvider } from '@/vite/ViewModeProvider'
 import { useOperatorUnreadBadge, useUnreadBadge } from '@/vite/messaging'
 import type { NavItem } from '@/vite/nav/MobileMenu'
 import { Navbar } from '@/vite/nav/Navbar'
@@ -84,7 +85,9 @@ function renderNavbar(data: Session | undefined) {
   mockUseSession.mockReturnValue({ data } as unknown as ReturnType<typeof useSession>)
   return render(
     <IntlProvider locale="en" messages={en}>
-      <Navbar />
+      <ViewModeProvider>
+        <Navbar />
+      </ViewModeProvider>
     </IntlProvider>,
   )
 }
