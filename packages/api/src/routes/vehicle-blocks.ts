@@ -33,7 +33,15 @@ export function createVehicleBlockRoutes(service: VehicleBlockService) {
       const range = parseDateRange(c, true)
       if (!range.ok) return range.response
 
-      const blocks = await service.listBlocks(toCallerContext(user), range.from, range.to)
+      // #1230 slice 5b: a picker admin narrows the fleet read to one operator. The
+      // service drops the id for any non-bypass caller, so a tenant read never widens.
+      const operatorId = c.req.query('operatorId')
+      const blocks = await service.listBlocks(
+        toCallerContext(user),
+        range.from,
+        range.to,
+        operatorId,
+      )
       return ok(c, blocks)
     })
     .post('/vehicles/:vehicleId/blocks', async (c) => {
