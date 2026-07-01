@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { type OperatorClass, archiveOperatorClass } from '@/vite/operator-classes/api'
+import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
 import { useTranslations } from 'use-intl'
@@ -24,9 +25,11 @@ interface DeleteClassDialogProps {
 export function DeleteClassDialog({ vehicleClass, onOpenChange }: DeleteClassDialogProps) {
   const t = useTranslations('business.classes')
   const queryClient = useQueryClient()
+  // Cookie writes need the double-submit CSRF token echoed in the header (#1304).
+  const csrfToken = useSession().data?.csrfToken ?? ''
 
   const { mutate, isPending, error } = useMutation({
-    mutationFn: archiveOperatorClass,
+    mutationFn: (id: string) => archiveOperatorClass(id, csrfToken),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['operator-classes'] })
       onOpenChange(false)

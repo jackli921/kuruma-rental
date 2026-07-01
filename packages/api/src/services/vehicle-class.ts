@@ -135,7 +135,7 @@ export class VehicleClassService {
       }
     }
 
-    const updated = await this.repo.update(id, data)
+    const updated = await this.repo.update(ctx, id, data)
     if (!updated) {
       return { ok: false, error: 'Vehicle class not found', status: 404 }
     }
@@ -174,7 +174,7 @@ export class VehicleClassService {
       }
     }
 
-    const archived = await this.repo.archive(id)
+    const archived = await this.repo.archive(ctx, id)
     if (!archived) {
       return { ok: false, error: 'Vehicle class not found', status: 404 }
     }

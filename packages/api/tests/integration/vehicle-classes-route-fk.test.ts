@@ -115,7 +115,7 @@ describe('vehicle-class update() cannot re-home a row across operators (#1279)',
   })
 
   it('ignores operatorId in the payload while applying other fields', async () => {
-    const updated = await repo.update(classA.id, { operatorId: opBId, seats: 7 })
+    const updated = await repo.update(SYSTEM_CONTEXT, classA.id, { operatorId: opBId, seats: 7 })
     expect(updated?.operatorId).toBe(opAId)
     expect(updated?.seats).toBe(7)
 
