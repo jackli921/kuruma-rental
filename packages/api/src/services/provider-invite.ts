@@ -1,5 +1,4 @@
 import type { CreateProviderInviteInput } from '@kuruma/shared/validators/provider-invite'
-import { randomToken } from '../auth/google'
 import { ConflictError } from '../auth/guards'
 import { sha256Hex } from '../auth/token-hash'
 import {
@@ -9,10 +8,9 @@ import {
   pgErrorCode,
 } from '../pg-errors'
 import type { OperatorRepository, ProviderInviteRepository } from '../repositories/types'
-
-// Invites are short-lived: a leaked link is only useful for a week, and the
-// recipient is expected to accept promptly during onboarding.
-export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+import { mintInvite } from './invite-mint'
+// Re-export so existing importers (tests, etc.) keep working without touching their imports.
+export { INVITE_TTL_MS } from './invite-mint'
 
 /** Raised when an invite is minted against an operatorId with no matching row.
  *  The route maps this to a 404 so a bad target reads as a client error, not a
@@ -80,16 +78,19 @@ export class ProviderInviteService {
     const operator = await this.operatorRepo.findById(input.operatorId)
     if (!operator) throw new OperatorNotFoundError(input.operatorId)
 
-    const token = randomToken(32)
-    const expiresAt = new Date(Date.now() + (this.config.ttlMs ?? INVITE_TTL_MS))
+    const minted = mintInvite({
+      webBaseUrl: this.config.webBaseUrl,
+      // exactOptionalPropertyTypes: spread only when defined, not as `ttlMs: undefined`
+      ...(this.config.ttlMs !== undefined ? { ttlMs: this.config.ttlMs } : {}),
+    })
     try {
       await this.repo.create({
         email: input.email,
         operatorId: input.operatorId,
         role: input.role,
-        tokenHash: sha256Hex(token),
+        tokenHash: minted.tokenHash,
         status: 'PENDING',
-        expiresAt,
+        expiresAt: minted.expiresAt,
         invitedByUserId,
         acceptedByUserId: null,
       })
@@ -112,8 +113,7 @@ export class ProviderInviteService {
       operatorId: input.operatorId,
       email: input.email,
     })
-    const base = this.config.webBaseUrl.replace(/\/$/, '')
-    return { token, inviteUrl: `${base}/provider/invite/${token}`, expiresAt }
+    return { token: minted.token, inviteUrl: minted.inviteUrl, expiresAt: minted.expiresAt }
   }
 
   // Public, unauthenticated invite preview for the acceptance page. Looked up by
