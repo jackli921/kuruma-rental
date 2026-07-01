@@ -2,10 +2,10 @@ import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import {
   featureFlagsQueryOptions,
-  isBuildTimeEnabled,
   isOperatorBlocksEnabled,
   isOperatorManualBookingEnabled,
   isVisibleToViewer,
+  resolveFeatureFlag,
   useFeatureFlag,
 } from '@/vite/config'
 import { isOperatorSession } from '@/vite/guards'
@@ -96,7 +96,7 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
     // now-runtime-toggleable fleet-timeline flag (#1322), so read its effective value
     // from the overrides map (warmed app-wide by FeatureFlagsProvider) to match.
     const overrides = await context.queryClient.ensureQueryData(featureFlagsQueryOptions())
-    const timelineEnabled = overrides.FLEET_TIMELINE ?? isBuildTimeEnabled('FLEET_TIMELINE')
+    const timelineEnabled = resolveFeatureFlag(overrides, 'FLEET_TIMELINE')
     const view = parseCalendarView(deps.view, timelineEnabled)
     const { from, to } = calendarRange(view, parseCalendarDate(deps.date))
     return Promise.all([

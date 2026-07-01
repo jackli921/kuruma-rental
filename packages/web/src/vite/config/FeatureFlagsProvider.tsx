@@ -1,7 +1,7 @@
 import type { FeatureFlagKey, FeatureFlagOverrides } from '@kuruma/shared/feature-flags/registry'
 import { useQuery } from '@tanstack/react-query'
 import { createContext, useContext, useMemo } from 'react'
-import { featureFlagsQueryOptions, isBuildTimeEnabled } from './feature-flags-runtime'
+import { featureFlagsQueryOptions, resolveFeatureFlag } from './feature-flags-runtime'
 
 // Empty overrides => every flag falls back to its build-time default, so a
 // consumer rendered outside the provider (or before the query resolves) behaves
@@ -30,5 +30,5 @@ export function FeatureFlagsProvider({ children }: { readonly children: React.Re
  */
 export function useFeatureFlag(key: FeatureFlagKey): boolean {
   const overrides = useContext(FeatureFlagOverridesContext)
-  return overrides[key] ?? isBuildTimeEnabled(key)
+  return resolveFeatureFlag(overrides, key)
 }
