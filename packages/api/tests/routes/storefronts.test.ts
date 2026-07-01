@@ -293,7 +293,7 @@ describe('storefront routes (#391)', () => {
       const other = await makeOperator(ctx, 'Other Co', 'other')
       await makeInsurance(ctx, op.id, { name: 'Active' })
       const archived = await makeInsurance(ctx, op.id, { name: 'Old' })
-      await ctx.insuranceOptionRepo.archive(archived.id)
+      await ctx.insuranceOptionRepo.archive(SYSTEM_CONTEXT, archived.id)
       await makeInsurance(ctx, other.id, { name: 'Foreign' })
 
       const res = await ctx.app.request(`/storefronts/${namba.id}/insurance-options`)

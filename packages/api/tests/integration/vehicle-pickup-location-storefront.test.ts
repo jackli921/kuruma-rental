@@ -158,9 +158,13 @@ describe('a UI-created vehicle surfaces in storefront search (#1262)', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('storefront search returned an error result')
     const card = result.data.storefronts.find((s) => s.locationId === location.id)
+    expect(card?.locationId).toBe(location.id)
+    // Exactly the two AVAILABLE cars at this location in this window: the beforeAll
+    // baseline positive control plus the car created above (same class, same free
+    // slot). A precise count, not a vacuous ">= 1".
     const availableInCard =
       card?.classSummaries.reduce((sum, cs) => sum + cs.availableCount, 0) ?? 0
-    expect(availableInCard).toBeGreaterThanOrEqual(1)
+    expect(availableInCard).toBe(2)
   })
 
   it('a vehicle created with NO pickup location stays invisible to renters (the pre-#1262 gap)', async () => {

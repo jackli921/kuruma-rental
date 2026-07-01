@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button'
 import { formatJstDateTimeLocal } from '@/lib/datetime'
 import type { CreateBookingInput } from '@/vite/bookings/api'
 import type { AvailableVehicleData } from '@/vite/storefronts/api'
+import { carryForwardFilters } from '@/vite/storefronts/params'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
@@ -23,6 +24,11 @@ interface ReservationWizardProps {
   readonly insuranceOptions: ReservationInsuranceOption[]
   readonly from: Date
   readonly to: Date
+  /** Active search filters carried in from the storefront so the "back to listing"
+   *  link returns to a listing that still has the renter's class/region/pickup (#1291). */
+  readonly classFilter?: string | string[] | undefined
+  readonly pickupLocationId?: string | undefined
+  readonly region?: string | undefined
 }
 
 const STEPS = ['dates', 'addOns', 'insurance', 'confirm', 'payment'] as const
@@ -43,6 +49,9 @@ export function ReservationWizard({
   insuranceOptions,
   from,
   to,
+  classFilter,
+  pickupLocationId,
+  region,
 }: ReservationWizardProps) {
   const t = useTranslations('reservation')
   const [stepIndex, setStepIndex] = useState(0)
@@ -150,7 +159,11 @@ export function ReservationWizard({
             <Link
               to="/$locale/storefronts/$locationId"
               params={{ locale, locationId }}
-              search={{ from: formatJstDateTimeLocal(from), to: formatJstDateTimeLocal(to) }}
+              search={{
+                from: formatJstDateTimeLocal(from),
+                to: formatJstDateTimeLocal(to),
+                ...carryForwardFilters({ class: classFilter, pickupLocationId, region }),
+              }}
               className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="size-4" />

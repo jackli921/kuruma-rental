@@ -17,6 +17,12 @@ export interface VehicleClassRepository {
   findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined>
   findBySlug(ctx: CallerContext, slug: string): Promise<VehicleClass | undefined>
   create(data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>): Promise<VehicleClass>
-  update(id: string, data: Partial<VehicleClass>): Promise<VehicleClass | undefined>
-  archive(id: string): Promise<VehicleClass | undefined>
+  // #1288: ctx-scoped writes — the tenant predicate is enforced in the WHERE
+  // clause (defense-in-depth behind the service's scoped findById).
+  update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<VehicleClass>,
+  ): Promise<VehicleClass | undefined>
+  archive(ctx: CallerContext, id: string): Promise<VehicleClass | undefined>
 }

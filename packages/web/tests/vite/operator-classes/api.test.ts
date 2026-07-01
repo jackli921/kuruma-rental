@@ -93,12 +93,12 @@ describe('operator-classes api', () => {
     const fetchMock = stubFetch({ success: true, data: created })
 
     const input = { operatorId: 'op1', name: 'SUV', slug: 'suv', seats: 5, luggageCapacity: 2 }
-    const result = await createOperatorClass(input as never)
+    const result = await createOperatorClass(input as never, 'test-csrf')
 
     expect(fetchMock).toHaveBeenCalledWith('/api/vehicle-classes', {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'test-csrf' },
       body: JSON.stringify(input),
     })
     expect(result).toEqual(created)
@@ -106,12 +106,12 @@ describe('operator-classes api', () => {
 
   it('update PATCHes the :id resource', async () => {
     const fetchMock = stubFetch({ success: true, data: { ...validClass, name: 'Renamed' } })
-    await updateOperatorClass('c1', { name: 'Renamed' } as never)
+    await updateOperatorClass('c1', { name: 'Renamed' } as never, 'test-csrf')
 
     expect(fetchMock).toHaveBeenCalledWith('/api/vehicle-classes/c1', {
       method: 'PATCH',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'test-csrf' },
       body: JSON.stringify({ name: 'Renamed' }),
     })
   })
@@ -119,11 +119,12 @@ describe('operator-classes api', () => {
   it('archive DELETEs the :id resource (soft archive)', async () => {
     const archived = { ...validClass, status: 'ARCHIVED' as const }
     const fetchMock = stubFetch({ success: true, data: archived })
-    const result = await archiveOperatorClass('c1')
+    const result = await archiveOperatorClass('c1', 'test-csrf')
 
     expect(fetchMock).toHaveBeenCalledWith('/api/vehicle-classes/c1', {
       method: 'DELETE',
       credentials: 'include',
+      headers: { 'X-CSRF-Token': 'test-csrf' },
     })
     expect(result).toEqual(archived)
   })

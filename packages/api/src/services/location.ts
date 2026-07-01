@@ -34,8 +34,22 @@ export type LocationCreateData = Omit<
   'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude' | 'coordinateSource'
 > & { latitude?: number | null | undefined; longitude?: number | null | undefined }
 
+// #1288: a Pick (not Omit) so operatorId can't be typed into the update path —
+// the tenant anchor is immutable, and the repo strip is no longer the sole
+// backstop. New mutable Location columns must be added here explicitly.
 export type LocationUpdateData = Partial<
-  Omit<Location, 'id' | 'createdAt' | 'updatedAt' | 'coordinateSource'>
+  Pick<
+    Location,
+    | 'name'
+    | 'address'
+    | 'latitude'
+    | 'longitude'
+    | 'operatingHours'
+    | 'timezone'
+    | 'defaultTurnaroundMinutes'
+    | 'regionId'
+    | 'status'
+  >
 > & { regeocode?: boolean }
 
 const DUPLICATE_NAME_MESSAGE = 'A location with this name already exists'
@@ -159,7 +173,7 @@ export class LocationService {
     if (!region.ok) return region
 
     try {
-      const updated = await this.repo.update(id, {
+      const updated = await this.repo.update(ctx, id, {
         ...this.toPatch(data, resolution),
         regionId: region.regionId,
       })
@@ -194,7 +208,7 @@ export class LocationService {
       }
     }
 
-    const archived = await this.repo.archive(id)
+    const archived = await this.repo.archive(ctx, id)
     if (!archived) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
     return { ok: true, location: archived }
   }
