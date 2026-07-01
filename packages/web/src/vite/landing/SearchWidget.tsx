@@ -6,7 +6,12 @@ import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import { DateTimeRangePicker } from '@/vite/search/DateTimeRangePicker'
 import type { DateTimeRange } from '@/vite/search/datetime-range'
 import { carryForwardFilters, defaultSearchRange } from '@/vite/storefronts/params'
-import { persistSearchRange, readPersistedRange } from '@/vite/storefronts/storage'
+import {
+  persistSearchRange,
+  persistSearchRegion,
+  readPersistedRange,
+  readPersistedRegion,
+} from '@/vite/storefronts/storage'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { Search } from 'lucide-react'
@@ -29,14 +34,17 @@ export function SearchWidget() {
   // from/to strings StorefrontSearchForm does, so `/search` parses them directly.
   const [range, setRange] = useState<DateTimeRange>(initialRange)
   // The region anchor (#651 Slice 3): a slug, or null for "search everywhere".
-  // Starts empty on the landing page; a chosen region always wins over geolocation.
-  const [region, setRegion] = useState<string | null>(null)
+  // Restored from this session so a return visit keeps the renter's last area
+  // instead of resetting to "Anywhere" (#1291); a chosen region always wins over
+  // geolocation.
+  const [region, setRegion] = useState<string | null>(readPersistedRegion)
 
-  // Persist first so returning to the landing page restores this range; the
-  // region slug carries forward so the search route can filter to its subtree.
+  // Persist first so returning to the landing page restores this range + region;
+  // the region slug carries forward so the search route can filter to its subtree.
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     persistSearchRange(range.from, range.to)
+    persistSearchRegion(region)
     navigate({
       to: '/$locale/search',
       params: { locale },
