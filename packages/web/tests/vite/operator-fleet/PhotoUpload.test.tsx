@@ -9,6 +9,12 @@ import en from '../../../messages/en.json'
 
 // Mock the foundation api module: the unit under test is the controlled
 // component's guard + wiring, not the HTTP layer (covered by api.ts).
+// The control reads the CSRF token from the session and echoes it on every photo
+// write (#1304); mock a fixed token so the assertions can pin it.
+vi.mock('@/vite/session', () => ({
+  useSession: () => ({ data: { csrfToken: 'test-csrf' } }),
+}))
+
 const uploadVehiclePhotos = vi.fn()
 const deleteVehiclePhoto = vi.fn()
 vi.mock('@/vite/operator-fleet/api', async (importOriginal) => {
@@ -70,7 +76,7 @@ describe('PhotoUpload', () => {
     await userEvent.upload(screen.getByLabelText(photosCopy.uploadPhotos), file)
 
     await waitFor(() => expect(uploadVehiclePhotos).toHaveBeenCalledTimes(1))
-    expect(uploadVehiclePhotos).toHaveBeenCalledWith('veh_1', [file])
+    expect(uploadVehiclePhotos).toHaveBeenCalledWith('veh_1', [file], 'test-csrf')
   })
 
   it('rejects an oversize file client-side, shows an error, and never uploads', async () => {
@@ -90,6 +96,6 @@ describe('PhotoUpload', () => {
     await userEvent.click(screen.getByRole('button', { name: photosCopy.deletePhoto }))
 
     await waitFor(() => expect(deleteVehiclePhoto).toHaveBeenCalledTimes(1))
-    expect(deleteVehiclePhoto).toHaveBeenCalledWith('veh_1', '/p/a.png')
+    expect(deleteVehiclePhoto).toHaveBeenCalledWith('veh_1', '/p/a.png', 'test-csrf')
   })
 })

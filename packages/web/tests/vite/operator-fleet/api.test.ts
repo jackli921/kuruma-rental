@@ -8,6 +8,7 @@ import {
   type VehicleRow,
   bulkUpdateVehicleStatus,
   createVehicle,
+  deleteVehiclePhoto,
   fetchOperatorFleet,
   fetchVehicleClassOptions,
   fetchVehicleDetail,
@@ -15,6 +16,7 @@ import {
   retireVehicle,
   updateVehicle,
   updateVehicleStatus,
+  uploadVehiclePhotos,
   vehicleDetailQueryOptions,
   vehicleRowFromDetail,
 } from '@/vite/operator-fleet/api'
@@ -345,11 +347,16 @@ describe('operator-fleet writes (#817 response validation)', () => {
     const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: vehicleRowRaw() }, 201))
     vi.stubGlobal('fetch', fetchMock)
 
-    const row = await createVehicle({} as CreateVehicleInput)
+    const row = await createVehicle({} as CreateVehicleInput, 'csrf-tok')
 
     const [url, init] = fetchMock.mock.calls[0]!
     expect(new URL(url as string, 'http://x').pathname).toBe('/api/vehicles')
     expect((init as RequestInit).method).toBe('POST')
+    // #1304: the cookie-authed write must echo the session CSRF token, or the guard 403s.
+    expect((init as RequestInit).headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': 'csrf-tok',
+    })
     expect(row).toMatchObject({ id: 'veh-1', name: 'Toyota Alphard', status: 'AVAILABLE' })
   })
 
@@ -361,7 +368,7 @@ describe('operator-fleet writes (#817 response validation)', () => {
       ),
     )
 
-    const row = await createVehicle({} as CreateVehicleInput)
+    const row = await createVehicle({} as CreateVehicleInput, 'csrf-tok')
 
     expect(row).not.toHaveProperty('utilization')
   })
@@ -370,11 +377,15 @@ describe('operator-fleet writes (#817 response validation)', () => {
     const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: vehicleRowRaw() }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const row = await updateVehicle('veh-1', {} as UpdateVehicleInput)
+    const row = await updateVehicle('veh-1', {} as UpdateVehicleInput, 'csrf-tok')
 
     const [url, init] = fetchMock.mock.calls[0]!
     expect(new URL(url as string, 'http://x').pathname).toBe('/api/vehicles/veh-1')
     expect((init as RequestInit).method).toBe('PATCH')
+    expect((init as RequestInit).headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': 'csrf-tok',
+    })
     expect(row).toMatchObject({ id: 'veh-1', status: 'AVAILABLE' })
   })
 
@@ -384,10 +395,14 @@ describe('operator-fleet writes (#817 response validation)', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    const row = await updateVehicleStatus('veh-1', 'MAINTENANCE', 'Oil change')
+    const row = await updateVehicleStatus('veh-1', 'MAINTENANCE', 'csrf-tok', 'Oil change')
 
     const [url, init] = fetchMock.mock.calls[0]!
     expect(new URL(url as string, 'http://x').pathname).toBe('/api/vehicles/veh-1/status')
+    expect((init as RequestInit).headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': 'csrf-tok',
+    })
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({
       status: 'MAINTENANCE',
       reason: 'Oil change',
@@ -404,11 +419,14 @@ describe('operator-fleet writes (#817 response validation)', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    const rows = await bulkUpdateVehicleStatus(['veh-1', 'veh-2'], 'MAINTENANCE')
+    const rows = await bulkUpdateVehicleStatus(['veh-1', 'veh-2'], 'MAINTENANCE', 'csrf-tok')
 
-    expect(new URL(fetchMock.mock.calls[0]![0] as string, 'http://x').pathname).toBe(
-      '/api/vehicles/bulk-status',
-    )
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(new URL(url as string, 'http://x').pathname).toBe('/api/vehicles/bulk-status')
+    expect((init as RequestInit).headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': 'csrf-tok',
+    })
     expect(rows.map((r) => r.id)).toEqual(['veh-1', 'veh-2'])
   })
 
@@ -418,12 +436,50 @@ describe('operator-fleet writes (#817 response validation)', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    const row = await retireVehicle('veh-1')
+    const row = await retireVehicle('veh-1', 'csrf-tok')
 
     const [url, init] = fetchMock.mock.calls[0]!
     expect(new URL(url as string, 'http://x').pathname).toBe('/api/vehicles/veh-1')
     expect((init as RequestInit).method).toBe('DELETE')
+    // DELETE is still a cookie-authed mutation — the CSRF header rides along (#1304).
+    expect((init as RequestInit).headers).toEqual({ 'X-CSRF-Token': 'csrf-tok' })
     expect(row.status).toBe('RETIRED')
+  })
+
+  it('uploadVehiclePhotos POSTs multipart to /vehicles/:id/photos with the CSRF header', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: { uploaded: ['/p/a.png'], total: 1 } }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const file = new File(['x'], 'a.png', { type: 'image/png' })
+    const result = await uploadVehiclePhotos('veh-1', [file], 'csrf-tok')
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(new URL(url as string, 'http://x').pathname).toBe('/api/vehicles/veh-1/photos')
+    expect((init as RequestInit).method).toBe('POST')
+    // Multipart upload is a cookie-authed mutation — the CSRF header rides along,
+    // and Content-Type is left unset so the browser sets the multipart boundary (#1304).
+    expect((init as RequestInit).headers).toEqual({ 'X-CSRF-Token': 'csrf-tok' })
+    expect((init as RequestInit).body).toBeInstanceOf(FormData)
+    expect(result).toEqual({ uploaded: ['/p/a.png'], total: 1 })
+  })
+
+  it('deleteVehiclePhoto DELETEs /vehicles/:id/photos?url= with the CSRF header', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: { deleted: '/p/a.png', remaining: 0 } }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await deleteVehiclePhoto('veh-1', '/p/a.png', 'csrf-tok')
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    const parsed = new URL(url as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicles/veh-1/photos')
+    expect(parsed.searchParams.get('url')).toBe('/p/a.png')
+    expect((init as RequestInit).method).toBe('DELETE')
+    expect((init as RequestInit).headers).toEqual({ 'X-CSRF-Token': 'csrf-tok' })
+    expect(result).toEqual({ deleted: '/p/a.png', remaining: 0 })
   })
 
   // Each of the three distinct unwrap paths must reject a drifted row:
@@ -435,7 +491,9 @@ describe('operator-fleet writes (#817 response validation)', () => {
       ),
     )
 
-    await expect(createVehicle({} as CreateVehicleInput)).rejects.toBeInstanceOf(ParseError)
+    await expect(createVehicle({} as CreateVehicleInput, 'csrf-tok')).rejects.toBeInstanceOf(
+      ParseError,
+    )
   })
 
   it('bulkUpdateVehicleStatus rejects with ParseError when one row drifts (array via writeJson)', async () => {
@@ -449,9 +507,9 @@ describe('operator-fleet writes (#817 response validation)', () => {
       ),
     )
 
-    await expect(bulkUpdateVehicleStatus(['veh-1', 'veh-2'], 'MAINTENANCE')).rejects.toBeInstanceOf(
-      ParseError,
-    )
+    await expect(
+      bulkUpdateVehicleStatus(['veh-1', 'veh-2'], 'MAINTENANCE', 'csrf-tok'),
+    ).rejects.toBeInstanceOf(ParseError)
   })
 
   it('retireVehicle rejects with ParseError on a drifted row (inline unwrap path)', async () => {
@@ -460,6 +518,6 @@ describe('operator-fleet writes (#817 response validation)', () => {
       vi.fn(async () => jsonResponse({ success: true, data: vehicleRowRaw({ createdAt: 42 }) })),
     )
 
-    await expect(retireVehicle('veh-1')).rejects.toBeInstanceOf(ParseError)
+    await expect(retireVehicle('veh-1', 'csrf-tok')).rejects.toBeInstanceOf(ParseError)
   })
 })

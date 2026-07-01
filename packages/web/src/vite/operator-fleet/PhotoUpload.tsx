@@ -1,4 +1,5 @@
 import { FLEET_QUERY_KEY, deleteVehiclePhoto, uploadVehiclePhotos } from '@/vite/operator-fleet/api'
+import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type ChangeEvent, useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
@@ -33,6 +34,8 @@ interface PhotoUploadProps {
 export function PhotoUpload({ vehicleId, photos = [] }: PhotoUploadProps) {
   const t = useTranslations('business.vehicles.photos')
   const queryClient = useQueryClient()
+  // Cookie writes need the double-submit CSRF token echoed in the header (#1304).
+  const csrfToken = useSession().data?.csrfToken ?? ''
   const inputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,7 +44,7 @@ export function PhotoUpload({ vehicleId, photos = [] }: PhotoUploadProps) {
   const uploadMutation = useMutation({
     mutationFn: (files: File[]) => {
       if (!vehicleId) throw new Error('vehicleId required to upload')
-      return uploadVehiclePhotos(vehicleId, files)
+      return uploadVehiclePhotos(vehicleId, files, csrfToken)
     },
     onSuccess: invalidateFleet,
     onError: (e) => setError(e instanceof Error ? e.message : t('uploading')),
@@ -50,7 +53,7 @@ export function PhotoUpload({ vehicleId, photos = [] }: PhotoUploadProps) {
   const deleteMutation = useMutation({
     mutationFn: (url: string) => {
       if (!vehicleId) throw new Error('vehicleId required to delete')
-      return deleteVehiclePhoto(vehicleId, url)
+      return deleteVehiclePhoto(vehicleId, url, csrfToken)
     },
     onSuccess: invalidateFleet,
     onError: (e) => setError(e instanceof Error ? e.message : t('deletePhoto')),
