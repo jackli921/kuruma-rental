@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
 import {
   EXEMPTIONS,
   type RepoFile,
   findViolations,
-  hasDrizzleSeal,
+  hasUnsealedDrizzleSpread,
   inMemoryReconstructsUnpinned,
   introspectOperatorScopedExports,
   runLint,
   setPayloads,
-  setSpreadsPayload,
   setWritesOperatorId,
   updatedTableExports,
 } from './lint-tenant-anchor-immutability'
@@ -21,6 +21,12 @@ describe('updatedTableExports', () => {
 
   test('is empty when the repo never calls .update()', () => {
     expect(updatedTableExports('this.db.select().from(regions)')).toEqual([])
+  })
+
+  test('resolves the last segment of a qualified .update(schema.table) call', () => {
+    expect(updatedTableExports('this.db.update(schema.feeSchedules).set({})')).toEqual([
+      'feeSchedules',
+    ])
   })
 })
 
@@ -36,17 +42,51 @@ describe('setPayloads', () => {
   })
 })
 
-describe('setSpreadsPayload', () => {
-  test('true when the payload spreads an object', () => {
-    expect(setSpreadsPayload('.set({ ...fields, updatedAt: now }).where(x)')).toBe(true)
+describe('hasUnsealedDrizzleSpread', () => {
+  test('false for a sealed spread', () => {
+    const src =
+      'async update() { const { operatorId: _operatorId, ...fields } = data; this.db.update(t).set({ ...fields, updatedAt: now }).where(x) }'
+    expect(hasUnsealedDrizzleSpread(src)).toBe(false)
   })
 
-  test('false for an explicit-key payload (status transition)', () => {
-    expect(setSpreadsPayload(".set({ status: 'CANCELLED', updatedAt: now }).where(x)")).toBe(false)
+  test('false when the spread is transitively derived from a stripped binding', () => {
+    const src =
+      'async update() { const { operatorId: _operatorId, ...fields } = data; const set = { ...fields, photos: enc(fields.photos) }; this.db.update(t).set({ ...set, updatedAt: now }).where(x) }'
+    expect(hasUnsealedDrizzleSpread(src)).toBe(false)
   })
 
-  test('false for a sql template with interpolation but no spread', () => {
-    expect(setSpreadsPayload('.set({ status: sql`${t.attempts} + 1` }).where(x)')).toBe(false)
+  test('true for a spread whose method does not strip operatorId', () => {
+    const src = 'async update() { this.db.update(t).set({ ...data, updatedAt: now }).where(x) }'
+    expect(hasUnsealedDrizzleSpread(src)).toBe(true)
+  })
+
+  test('false for an explicit-key payload (status transition, no spread)', () => {
+    expect(hasUnsealedDrizzleSpread(".set({ status: 'CANCELLED', updatedAt: now }).where(x)")).toBe(
+      false,
+    )
+  })
+
+  test('false for a sql template with interpolation but no top-level spread', () => {
+    expect(hasUnsealedDrizzleSpread('.set({ status: sql`${t.attempts} + 1` }).where(x)')).toBe(
+      false,
+    )
+  })
+
+  test('ignores array/member spreads inside a .set() property', () => {
+    expect(
+      hasUnsealedDrizzleSpread('.set({ photos: [...existing.photos, ...urls] }).where(x)'),
+    ).toBe(false)
+  })
+
+  // The core code-review catch (PR #1323): a file with ONE sealed method must still
+  // flag a SECOND, unsealed spreading update — a file-global seal check would pass it.
+  test('flags a second unsealed spreading method even when an earlier one is sealed', () => {
+    const src = [
+      'async update() { const { operatorId: _operatorId, ...fields } = data;',
+      'this.db.update(vehicles).set({ ...fields, updatedAt: now }).where(x) }',
+      'async updatePricing() { this.db.update(vehicles).set({ ...pricingInput, updatedAt: now }).where(x) }',
+    ].join('\n')
+    expect(hasUnsealedDrizzleSpread(src)).toBe(true)
   })
 })
 
@@ -61,18 +101,6 @@ describe('setWritesOperatorId', () => {
 
   test('ignores a Map.set(k, v) that is not a Drizzle inline .set({})', () => {
     expect(setWritesOperatorId('byOperator.set(m.operatorId, [...existing, m])')).toBe(false)
-  })
-})
-
-describe('hasDrizzleSeal', () => {
-  test('true when operatorId is destructured to a discard binding', () => {
-    expect(hasDrizzleSeal('const { id: _id, operatorId: _operatorId, ...fields } = data')).toBe(
-      true,
-    )
-  })
-
-  test('false when operatorId is not stripped', () => {
-    expect(hasDrizzleSeal('const { id: _id, ...fields } = data')).toBe(false)
   })
 })
 
@@ -190,6 +218,18 @@ describe('EXEMPTIONS', () => {
     for (const [name, reason] of EXEMPTIONS) {
       expect(reason.length, `${name} exemption needs a reason`).toBeGreaterThan(0)
     }
+  })
+
+  // The `review` exemption's premise is that ReviewEdit structurally cannot carry
+  // operatorId. If that type ever gains the field, the exemption would silently
+  // suppress a real IDOR — so pin the premise to the actual type definition.
+  test('the review exemption premise holds: ReviewEdit cannot carry operatorId', () => {
+    const typesReview = new URL('../packages/api/src/repositories/types-review.ts', import.meta.url)
+      .pathname
+    const src = readFileSync(typesReview, 'utf8')
+    const reviewEdit = src.match(/export type ReviewEdit\s*=\s*[^\n]+/)?.[0]
+    expect(reviewEdit, 'ReviewEdit definition not found — update the review exemption').toBeTruthy()
+    expect(reviewEdit).not.toContain('operatorId')
   })
 })
 

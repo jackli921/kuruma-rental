@@ -14,19 +14,28 @@
  * DI style, and a shared helper is as forgettable as the destructure. So we guard it,
  * like scripts/lint-fk-indexes.ts and check-import-boundaries.ts do for their invariants.
  *
- * How we check (fail-closed on anything we cannot prove safe):
+ * How we check:
  *  - Introspect schema.ts at runtime for the tables carrying a NON-NULL operatorId
  *    column. Their drizzle-export names are the operator-scoped tables.
  *  - A drizzle repo is operator-scoped if it calls `.update(<that export>)`.
  *    - If its `.set(...)` writes operatorId as an explicit key -> violation.
- *    - If its `.set(...)` SPREADS a payload (`...x`) it must also strip operatorId
- *      via a destructure discard (`operatorId: _operatorId`) — else violation.
- *      An explicit-key `.set({ status, ... })` (no spread) is inherently safe.
+ *    - If its `.set(...)` SPREADS a top-level payload (`...fields`) that source is not
+ *      stripped of operatorId by a destructure discard (`operatorId: _operatorId`, tied
+ *      to that specific rest binding) -> violation. An explicit-key `.set({ status })`
+ *      (no spread) is inherently safe.
  *  - The paired in-memory repo (same basename) must PIN operatorId
  *    (`operatorId: existing.operatorId`) whenever its update reconstructs the row by
  *    spreading caller data into `{ ...existing, ...patch }` — else violation.
  *  - EXEMPTIONS carry a documented reason for a spread that is provably safe by type
  *    (e.g. a `Pick<>` DTO that structurally cannot contain operatorId).
+ *
+ * This is a lexical heuristic, not a type-checker. It is deliberately strict on the
+ * common shapes but has documented blind spots where an unusual shape passes
+ * unchecked (fail-open), NOT flagged: an in-memory row bound to a name other than
+ * `existing`/`current`; a reconstruction/destructure containing a nested `{}` object;
+ * a `.set(variableName)` that is not an inline object literal; and an upsert write via
+ * `.insert().onConflictDoUpdate({ set })`. The service-layer `findById(ctx, id)` guard
+ * and the #1288 WHERE-scoping remain the primary defenses; this is defense-in-depth.
  */
 
 import { readFileSync, readdirSync } from 'node:fs'
@@ -65,14 +74,17 @@ export const EXEMPTIONS: ReadonlyMap<string, string> = new Map([
   ],
 ])
 
-const UPDATE_CALL_RE = /\.update\(\s*(\w+)\s*\)/g
-const DRIZZLE_SEAL_RE = /operatorId:\s*_\w+/
+const UPDATE_CALL_RE = /\.update\(\s*([\w.]+)\s*\)/g
 const IN_MEMORY_PIN_RE = /operatorId:\s*(?:existing|current)\.operatorId\b/
 const OPERATOR_ID_KEY_RE = /\boperatorId\s*[:,]/
 
-// Export names of the drizzle tables a repo file calls `.update(<export>)` on.
+// Export names of the drizzle tables a repo file calls `.update(<export>)` on. The
+// last dotted segment is the table export, so `db.update(schema.feeSchedules)` and a
+// bare `db.update(feeSchedules)` both resolve to `feeSchedules`.
 export function updatedTableExports(source: string): string[] {
-  return [...source.matchAll(UPDATE_CALL_RE)].map((m) => m[1]).filter((n): n is string => !!n)
+  return [...source.matchAll(UPDATE_CALL_RE)]
+    .map((m) => m[1]?.split('.').pop())
+    .filter((n): n is string => !!n)
 }
 
 // The text of each `.set(...)` payload: from `.set(` up to the next chained
@@ -95,16 +107,33 @@ export function setPayloads(source: string): string[] {
   return payloads
 }
 
-export function setSpreadsPayload(source: string): boolean {
-  return setPayloads(source).some((p) => p.includes('...'))
-}
-
 export function setWritesOperatorId(source: string): boolean {
   return setPayloads(source).some((p) => OPERATOR_ID_KEY_RE.test(p))
 }
 
-export function hasDrizzleSeal(source: string): boolean {
-  return DRIZZLE_SEAL_RE.test(source)
+// A method strips operatorId if it destructures it into a discard binding
+// (`operatorId: _operatorId`), the seal idiom the six repos use.
+const OPERATOR_ID_STRIP_RE = /operatorId:\s*_\w+/
+
+// Split a repo source into per-method segments at each `async` method boundary. Seal
+// detection is scoped to the method so an already-sealed file cannot vouch for a
+// SECOND, unsealed spreading update() added later (a file-global seal check would fail
+// open there — the most probable regression, code-review PR #1323). Approximate: an
+// inline `async` arrow inside a method also splits, which at worst over-flags.
+export function drizzleMethodChunks(source: string): string[] {
+  return source.split(/(?=\basync\s)/)
+}
+
+// A drizzle repo has an unsealed spread if any method spreads a top-level object
+// payload (`.set({ ...fields })`) but does not strip operatorId within that method.
+// Array/member spreads (`[...a]`, `...existing.photos`) are excluded — they cannot
+// inject an operatorId key at the payload's top level. Transitively-derived bindings
+// (`const set = { ...fields }`) are safe as long as the method strips operatorId.
+export function hasUnsealedDrizzleSpread(source: string): boolean {
+  return drizzleMethodChunks(source).some((chunk) => {
+    const spreads = setPayloads(chunk).some((p) => topLevelSpreadNames(p).length > 0)
+    return spreads && !OPERATOR_ID_STRIP_RE.test(chunk)
+  })
 }
 
 // Object literals (single brace depth) that spread `existing`/`current`. The row
@@ -124,7 +153,9 @@ function topLevelSpreadNames(object: string): string[] {
   // Trailing delimiter is a lookahead so a comma shared by two adjacent spreads
   // (`...existing, ...data`) is not consumed by the first match and can still open
   // the second.
-  return [...object.matchAll(/[{,]\s*\.\.\.(\w+)\s*(?=[,}])/g)].map((m) => m[1] as string)
+  return [...object.matchAll(/[{,]\s*\.\.\.(\w+)\s*(?=[,}])/g)]
+    .map((m) => m[1])
+    .filter((n): n is string => !!n)
 }
 
 // An in-memory update is unpinned if it spreads a CALLER payload (any top-level
@@ -158,7 +189,7 @@ export function findViolations(
         basename: file.basename,
         kind: 'drizzle-writes-operatorId',
       })
-    } else if (setSpreadsPayload(file.source) && !hasDrizzleSeal(file.source)) {
+    } else if (hasUnsealedDrizzleSpread(file.source)) {
       violations.push({ path: file.path, basename: file.basename, kind: 'drizzle-spread-unsealed' })
     }
   }
@@ -248,7 +279,7 @@ async function main() {
     process.exit(1)
   }
   console.log(
-    '[lint-tenant-anchor-immutability] all operator-scoped repos keep operatorId immutable',
+    '[lint-tenant-anchor-immutability] no operator-scoped repo update() leaves operatorId mutable',
   )
 }
 
