@@ -1689,6 +1689,11 @@
       "pending": "提交中…",
       "error": "出现错误，请重试。",
       "reviewed": "您已评价该租客。"
+    },
+    "aggregate": {
+      "rating": "★ {avg}（{count}条）",
+      "noReviews": "暂无评价",
+      "ratingAria": "{avg}星，{count}条评价"
     }
   },
   "currency": {
