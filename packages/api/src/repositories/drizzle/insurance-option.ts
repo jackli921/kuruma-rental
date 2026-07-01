@@ -111,7 +111,9 @@ export class DrizzleInsuranceOptionRepository implements InsuranceOptionReposito
     id: string,
     data: Partial<InsuranceOption>,
   ): Promise<InsuranceOption | undefined> {
-    const { id: _id, createdAt: _createdAt, ...fields } = data
+    // operatorId is an immutable tenant anchor (#1271): strip it like id so an
+    // update payload can never migrate the row to another operator.
+    const { id: _id, createdAt: _createdAt, operatorId: _operatorId, ...fields } = data
     const [updated] = await this.db
       .update(insuranceOptions)
       .set({ ...fields, updatedAt: sql`now()` })

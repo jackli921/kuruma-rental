@@ -107,6 +107,10 @@ export class InMemoryFeeScheduleRepository implements FeeScheduleRepository {
       ...existing,
       ...data,
       id: existing.id,
+      // operatorId is an immutable tenant anchor (#1271): pin it like id so an
+      // update payload can never migrate the row to another operator (which the
+      // composite FK to vehicleClasses also depends on).
+      operatorId: existing.operatorId,
       createdAt: existing.createdAt,
       updatedAt: new Date(),
     }
