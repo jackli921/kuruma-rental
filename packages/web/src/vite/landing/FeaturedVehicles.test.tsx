@@ -64,4 +64,14 @@ describe('FeaturedVehicles', () => {
     expect(screen.getByText(en.acriss.SUVR)).not.toBeNull()
     expect(screen.getByText(en.acriss.IVAR)).not.toBeNull()
   })
+
+  it('gives every tile image explicit 4:3 dimensions so the box reserves space before load (#846)', () => {
+    renderSection()
+    const images = screen.getAllByRole('img')
+    expect(images.length).toBe(4)
+    for (const img of images) {
+      expect(img.getAttribute('width')).toBe('400')
+      expect(img.getAttribute('height')).toBe('300')
+    }
+  })
 })

@@ -21,6 +21,7 @@ describe('CallToAction', () => {
         <CallToAction />
       </IntlProvider>,
     )
+    expect(screen.getByText(en.landing.cta.heading)).not.toBeNull()
     const cta = screen.getByText(en.landing.cta.button).closest('a')
     expect(cta?.getAttribute('data-to')).toBe('/$locale/search')
   })

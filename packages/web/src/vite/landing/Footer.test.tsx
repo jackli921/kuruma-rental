@@ -33,9 +33,10 @@ describe('Footer', () => {
     expect(byLabel(T.signIn)?.getAttribute('data-to')).toBe('/$locale/login')
   })
 
-  it('still shows the copyright and tagline', () => {
+  it('still shows the copyright with the current year and the tagline', () => {
     renderFooter()
-    expect(screen.getByText(new RegExp(T.copyright))).not.toBeNull()
+    const year = new Date().getFullYear()
+    expect(screen.getByText(new RegExp(`${year} ${T.copyright}`))).not.toBeNull()
     expect(screen.getByText(T.tagline)).not.toBeNull()
   })
 })
