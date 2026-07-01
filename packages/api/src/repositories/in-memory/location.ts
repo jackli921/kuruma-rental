@@ -1,5 +1,5 @@
 import type { CoordinateSource } from '@kuruma/shared/db/schema'
-import type { CallerContext } from '../../middleware/auth'
+import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Location } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
@@ -98,8 +98,11 @@ export class InMemoryLocationRepository implements LocationRepository {
     id: string,
     data: Partial<Location>,
   ): Promise<Location | undefined> {
+    // #1288: reject non-fleet-write roles + fail closed on a tenant-less operator
+    // (mirrors vehicle.ts) — else a bypassing RENTER/PARTNER maps to {kind:'all'}
+    // and could write any operator's catalog.
+    requireFleetWriteScope(ctx)
     const scope = operatorReadScope(ctx)
-    if (scope.kind === 'none') return undefined
     const existing = this.store.get(id)
     if (!existing) return undefined
     // #1288: tenant-scope the write so a caller reaching the repo without the
@@ -125,8 +128,8 @@ export class InMemoryLocationRepository implements LocationRepository {
   }
 
   async archive(ctx: CallerContext, id: string): Promise<Location | undefined> {
+    requireFleetWriteScope(ctx)
     const scope = operatorReadScope(ctx)
-    if (scope.kind === 'none') return undefined
     const existing = this.store.get(id)
     if (!existing) return undefined
     // #1288: tenant-scope the archive (see update()).

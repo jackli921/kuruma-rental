@@ -1,6 +1,6 @@
 import { vehicleClasses } from '@kuruma/shared/db/schema'
 import { type SQL, and, asc, eq, ne, sql } from 'drizzle-orm'
-import type { CallerContext } from '../../middleware/auth'
+import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import type { VehicleClass } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
 import type { VehicleClassFilters, VehicleClassRepository } from '../types'
@@ -105,8 +105,11 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
     id: string,
     data: Partial<VehicleClass>,
   ): Promise<VehicleClass | undefined> {
+    // #1288: reject non-fleet-write roles + fail closed on a tenant-less operator
+    // (mirrors vehicle.ts) — else a bypassing RENTER/PARTNER maps to {kind:'all'}
+    // and could write any operator's catalog.
+    requireFleetWriteScope(ctx)
     const scope = operatorReadScope(ctx)
-    if (scope.kind === 'none') return undefined
     // operatorId is an immutable tenant anchor (#1279): strip it like id so an
     // update payload can never migrate the row to another operator.
     const { id: _id, operatorId: _operatorId, createdAt: _createdAt, ...fields } = data
@@ -129,8 +132,8 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
   }
 
   async archive(ctx: CallerContext, id: string): Promise<VehicleClass | undefined> {
+    requireFleetWriteScope(ctx)
     const scope = operatorReadScope(ctx)
-    if (scope.kind === 'none') return undefined
     // #1288: tenant-scope the archive WHERE (see update()).
     const conditions = [eq(vehicleClasses.id, id)]
     if (scope.kind === 'operator') conditions.push(eq(vehicleClasses.operatorId, scope.operatorId))

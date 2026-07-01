@@ -677,6 +677,17 @@ describe('class repo writes stay tenant-scoped when the service is bypassed (#12
     const updated = await classRepo.update(ctxFor(opAId), classA.id, { name: 'ClsWS Class A v2' })
     expect(updated).toMatchObject({ id: classA.id, name: 'ClsWS Class A v2' })
   })
+
+  it('a RENTER write is Forbidden at the repo (fleet-write guard, mirrors vehicle.ts)', async () => {
+    const renter: CallerContext = { userId: 'r', role: 'RENTER', bypassScope: false }
+    await expect(classRepo.update(renter, classA.id, { name: 'x' })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
+    await expect(classRepo.archive(renter, classA.id)).rejects.toBeInstanceOf(ForbiddenError)
+    expect(await classRepo.findById(SYSTEM_CONTEXT, classA.id)).toMatchObject({
+      name: 'ClsWS Class A v2',
+    })
+  })
 })
 
 // #1288: fee schedules are PRIVATE config, so the repo write path both

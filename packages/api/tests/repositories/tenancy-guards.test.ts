@@ -207,13 +207,13 @@ describe('VehicleRepository operator-scopes writes', () => {
   })
 })
 
-// LocationRepository scopes writes too (#1288): update/archive scope their WHERE
-// by tenant, defense-in-depth behind the service's already-scoped findById. The
-// config repos DELIBERATELY diverge from VehicleRepository above: a config repo
-// is a pure data layer with no write guard, so a tenant-less operator (scope
-// 'none') NO-OPS its writes (→ undefined → service 404) rather than throwing —
-// mirroring its own fail-closed reads. A cross-tenant id is likewise a silent
-// no-op, never a leak.
+// LocationRepository scopes writes too (#1288): update/archive tenant-scope their
+// WHERE AND call requireFleetWriteScope(ctx), mirroring vehicle.ts. location is a
+// public-READ catalog, so the write path uses the WRITE guard (not the read
+// guard): a non-fleet-write role (RENTER/PARTNER) or a tenant-less operator is
+// rejected with ForbiddenError (fail closed). A cross-tenant id is a silent
+// no-op, never a leak. (The private-config repos below differ: they gate reads
+// AND writes with requireManagementRead and no-op for a tenant-less operator.)
 describe('LocationRepository operator-scopes writes (#1288)', () => {
   const opA = 'op_a'
   const opB = 'op_b'
@@ -224,6 +224,8 @@ describe('LocationRepository operator-scopes writes (#1288)', () => {
     bypassScope: false,
   })
   const noTenant: CallerContext = { userId: 'x', role: 'OPERATOR_OWNER', bypassScope: false }
+  const renter: CallerContext = { userId: 'r', role: 'RENTER', bypassScope: false }
+  const partner: CallerContext = { userId: 'p', role: 'PARTNER', bypassScope: true }
 
   const locationInput = (operatorId: string, name: string) => ({
     operatorId,
@@ -265,23 +267,36 @@ describe('LocationRepository operator-scopes writes (#1288)', () => {
     expect(await repo.archive(ctxFor(opA), a.id)).toMatchObject({ id: a.id, status: 'ARCHIVED' })
   })
 
-  it('a tenant-less operator no-ops writes (config repo has no write guard)', async () => {
+  it('a tenant-less operator is Forbidden (fail closed via requireFleetWriteScope)', async () => {
     const { repo, a } = await seed()
-    expect(await repo.update(noTenant, a.id, { name: 'x' })).toBeUndefined()
-    expect(await repo.archive(noTenant, a.id)).toBeUndefined()
+    await expect(repo.update(noTenant, a.id, { name: 'x' })).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(repo.archive(noTenant, a.id)).rejects.toBeInstanceOf(ForbiddenError)
     // Row untouched: no rename, still ACTIVE.
     expect(await repo.findById(SYSTEM_CONTEXT, a.id)).toMatchObject({
       name: 'A-Namba',
       status: 'ACTIVE',
     })
   })
+
+  it('RENTER writes are Forbidden (fleet-write guard, mirrors vehicle.ts)', async () => {
+    const { repo, a } = await seed()
+    await expect(repo.update(renter, a.id, { name: 'x' })).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(repo.archive(renter, a.id)).rejects.toBeInstanceOf(ForbiddenError)
+  })
+
+  it('PARTNER writes are Forbidden (fleet-write guard, mirrors vehicle.ts)', async () => {
+    const { repo, a } = await seed()
+    await expect(repo.update(partner, a.id, { name: 'x' })).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(repo.archive(partner, a.id)).rejects.toBeInstanceOf(ForbiddenError)
+  })
 })
 
-// VehicleClassRepository scopes writes too (#1288), same config-repo shape as
-// LocationRepository above: cross-tenant update/archive is a silent no-op and a
-// tenant-less operator (scope 'none') no-ops rather than throwing. vehicle_class
-// is the FK parent of the fee-schedule composite FK, so its tenant is doubly
-// load-bearing — the #1279 operatorId strip and this #1288 WHERE-scope stack.
+// VehicleClassRepository scopes writes too (#1288), same public-catalog shape as
+// LocationRepository above: cross-tenant update/archive is a silent no-op, and
+// the write path calls requireFleetWriteScope (RENTER/PARTNER + tenant-less
+// operator rejected with ForbiddenError). vehicle_class is the FK parent of the
+// fee-schedule composite FK, so its tenant is doubly load-bearing — the #1279
+// operatorId strip and this #1288 WHERE-scope + fleet-write guard stack.
 describe('VehicleClassRepository operator-scopes writes (#1288)', () => {
   const opA = 'op_a'
   const opB = 'op_b'
@@ -292,6 +307,8 @@ describe('VehicleClassRepository operator-scopes writes (#1288)', () => {
     bypassScope: false,
   })
   const noTenant: CallerContext = { userId: 'x', role: 'OPERATOR_OWNER', bypassScope: false }
+  const renter: CallerContext = { userId: 'r', role: 'RENTER', bypassScope: false }
+  const partner: CallerContext = { userId: 'p', role: 'PARTNER', bypassScope: true }
 
   const classInput = (operatorId: string, slug: string) => ({
     operatorId,
@@ -339,14 +356,26 @@ describe('VehicleClassRepository operator-scopes writes (#1288)', () => {
     expect(await repo.archive(ctxFor(opA), a.id)).toMatchObject({ id: a.id, status: 'ARCHIVED' })
   })
 
-  it('a tenant-less operator no-ops writes (config repo has no write guard)', async () => {
+  it('a tenant-less operator is Forbidden (fail closed via requireFleetWriteScope)', async () => {
     const { repo, a } = await seed()
-    expect(await repo.update(noTenant, a.id, { name: 'x' })).toBeUndefined()
-    expect(await repo.archive(noTenant, a.id)).toBeUndefined()
+    await expect(repo.update(noTenant, a.id, { name: 'x' })).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(repo.archive(noTenant, a.id)).rejects.toBeInstanceOf(ForbiddenError)
     expect(await repo.findById(SYSTEM_CONTEXT, a.id)).toMatchObject({
       name: 'Compact',
       status: 'ACTIVE',
     })
+  })
+
+  it('RENTER writes are Forbidden (fleet-write guard, mirrors vehicle.ts)', async () => {
+    const { repo, a } = await seed()
+    await expect(repo.update(renter, a.id, { name: 'x' })).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(repo.archive(renter, a.id)).rejects.toBeInstanceOf(ForbiddenError)
+  })
+
+  it('PARTNER writes are Forbidden (fleet-write guard, mirrors vehicle.ts)', async () => {
+    const { repo, a } = await seed()
+    await expect(repo.update(partner, a.id, { name: 'x' })).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(repo.archive(partner, a.id)).rejects.toBeInstanceOf(ForbiddenError)
   })
 })
 

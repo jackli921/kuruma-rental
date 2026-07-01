@@ -1,7 +1,7 @@
 import { locations, operators, regions } from '@kuruma/shared/db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
+import { type CallerContext, ForbiddenError, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { pgErrorCode } from '../../src/pg-errors'
 import { DrizzleLocationRepository, DrizzleRegionRepository } from '../../src/repositories/drizzle'
 import { DrizzleBookingRepository } from '../../src/repositories/drizzle/booking'
@@ -317,5 +317,17 @@ describe('location repo writes stay tenant-scoped when the service is bypassed (
       defaultTurnaroundMinutes: 120,
     })
     expect(updated).toMatchObject({ id: locationA.id, defaultTurnaroundMinutes: 120 })
+  })
+
+  it('a RENTER write is Forbidden at the repo (fleet-write guard, mirrors vehicle.ts)', async () => {
+    const renter: CallerContext = { userId: 'r', role: 'RENTER', bypassScope: false }
+    await expect(repo.update(renter, locationA.id, { name: 'x' })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
+    await expect(repo.archive(renter, locationA.id)).rejects.toBeInstanceOf(ForbiddenError)
+    // Row untouched by the rejected renter write (still the own-tenant value).
+    expect(await repo.findById(SYSTEM_CONTEXT, locationA.id)).toMatchObject({
+      defaultTurnaroundMinutes: 120,
+    })
   })
 })

@@ -1,7 +1,7 @@
 import type { CoordinateSource } from '@kuruma/shared/db/schema'
 import { locations } from '@kuruma/shared/db/schema'
 import { type SQL, and, asc, eq, ne, sql } from 'drizzle-orm'
-import type { CallerContext } from '../../middleware/auth'
+import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import type { Location } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
 import type { LocationFilters, LocationRepository } from '../types'
@@ -109,8 +109,11 @@ export class DrizzleLocationRepository implements LocationRepository {
     id: string,
     data: Partial<Location>,
   ): Promise<Location | undefined> {
+    // #1288: reject non-fleet-write roles + fail closed on a tenant-less operator
+    // at the repo, mirroring vehicle.ts — else a bypassing RENTER/PARTNER maps to
+    // operatorReadScope {kind:'all'} and could write any operator's catalog.
+    requireFleetWriteScope(ctx)
     const scope = operatorReadScope(ctx)
-    if (scope.kind === 'none') return undefined
     // operatorId is an immutable tenant anchor (#1279): strip it like id so an
     // update payload can never migrate the row to another operator.
     const { id: _id, operatorId: _operatorId, createdAt: _createdAt, ...fields } = data
@@ -128,8 +131,8 @@ export class DrizzleLocationRepository implements LocationRepository {
   }
 
   async archive(ctx: CallerContext, id: string): Promise<Location | undefined> {
+    requireFleetWriteScope(ctx)
     const scope = operatorReadScope(ctx)
-    if (scope.kind === 'none') return undefined
     // #1288: tenant-scope the archive WHERE (see update()).
     const conditions = [eq(locations.id, id)]
     if (scope.kind === 'operator') conditions.push(eq(locations.operatorId, scope.operatorId))
