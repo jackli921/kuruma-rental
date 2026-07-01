@@ -30,7 +30,9 @@ describe('feature flag registry', () => {
     // so a dashboard toggle actually takes effect. Flip this to true in the same
     // slice that migrates the flag (#1322) — the admin page badges the difference.
     const controlled = FEATURE_FLAG_KEYS.filter((k) => FEATURE_FLAGS[k].runtimeControlled)
-    expect(new Set(controlled)).toEqual(new Set(['MULTI_CURRENCY', 'REVIEWS', 'CANCELLATION']))
+    expect(new Set(controlled)).toEqual(
+      new Set(['MULTI_CURRENCY', 'REVIEWS', 'CANCELLATION', 'FLEET_TIMELINE']),
+    )
   })
 
   it('gives every flag an explicit boolean runtimeControlled (no accidental undefined)', () => {

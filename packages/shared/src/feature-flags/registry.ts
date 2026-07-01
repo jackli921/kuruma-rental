@@ -54,7 +54,7 @@ export const FEATURE_FLAGS = {
   FLEET_TIMELINE: {
     env: 'VITE_FEATURE_FLEET_TIMELINE',
     label: 'Fleet timeline board',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   MULTI_CURRENCY: {
     env: 'VITE_FEATURE_MULTI_CURRENCY',

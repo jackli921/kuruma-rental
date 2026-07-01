@@ -1,4 +1,5 @@
 import { localizer } from '@/lib/rbc-localizer'
+import { useFeatureFlag } from '@/vite/config'
 import { CalendarEventChip } from '@/vite/operator-bookings/CalendarEventChip'
 import { CalendarToolbar } from '@/vite/operator-bookings/CalendarToolbar'
 import {
@@ -58,6 +59,9 @@ export function BookingsCalendar({
 }: BookingsCalendarProps) {
   const t = useTranslations('business.bookings.calendar')
   const culture = locale === 'zh' ? 'zh-CN' : locale
+  // The Timeline option in the switcher follows the runtime-toggleable flag (#1322):
+  // a dashboard override flips it live, falling back to the build-time default.
+  const timelineEnabled = useFeatureFlag('FLEET_TIMELINE')
 
   const toolbarLabel = useMemo(() => {
     const fmt = (opts: Intl.DateTimeFormatOptions) =>
@@ -165,7 +169,7 @@ export function BookingsCalendar({
         view={view}
         onNavigate={handleToolbarNavigate}
         onView={onViewChange}
-        views={operatorViews()}
+        views={operatorViews(timelineEnabled)}
       />
       <Calendar
         localizer={localizer}
