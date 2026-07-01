@@ -249,13 +249,16 @@ describe('OperatorBookingsRoute quick-view enrichment (#1099)', () => {
 })
 
 describe('OperatorBookingsRoute default view (#1100)', () => {
-  it('lands on the fleet timeline board when no view param is present', () => {
+  it('lands on the fleet timeline board when no view param is present', async () => {
     searchState.value = { date: ANCHOR } // view omitted -> DEFAULT_VIEW = 'timeline'
     renderRoute(operatorSession)
-    // FleetTimeline owns its toolbar (rendered outside the mocked rbc Calendar); its
-    // active "Timeline" button is proof the timeline board mounted, not the week grid.
+    // FleetTimeline is lazy-loaded (code-split, #1099), so it resolves through a
+    // Suspense fallback — await its toolbar. That toolbar (rendered outside the mocked
+    // rbc Calendar) proves the timeline board mounted, not the week grid.
     expect(
-      screen.getByRole('button', { name: enMessages.business.bookings.calendar.views.timeline }),
+      await screen.findByRole('button', {
+        name: enMessages.business.bookings.calendar.views.timeline,
+      }),
     ).toBeInTheDocument()
     // The rbc <Calendar> (day/week/month) never mounted, so it captured no props.
     expect(calendarProps).toEqual({})
