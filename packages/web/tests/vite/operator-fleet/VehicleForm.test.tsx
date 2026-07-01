@@ -400,6 +400,32 @@ describe('VehicleForm', () => {
     )
   })
 
+  it('edit mode: labels a preserved pickup location generically when it is absent from the fetched list (#1262)', async () => {
+    const user = userEvent.setup()
+    mockedUpdate.mockResolvedValue(existingVehicle())
+    // The assigned location is missing from the returned options entirely (a
+    // partial fetch or a stale link), so there is no name to show. The form
+    // still preserves the id and labels it with the generic "current" fallback
+    // rather than silently clearing the link on save.
+    const missingLocationId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+    renderForm({ vehicle: existingVehicle({ pickupLocationId: missingLocationId }) })
+
+    const select = screen.getByLabelText(en.pickupLocation) as HTMLSelectElement
+    expect(select.value).toBe(missingLocationId)
+    expect(screen.getByRole('option', { name: en.pickupLocationCurrent })).toBeInTheDocument()
+
+    const nameInput = screen.getByLabelText(en.name)
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Toyota Aqua G')
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1))
+    expect(mockedUpdate).toHaveBeenCalledWith(
+      'veh_1',
+      expect.objectContaining({ pickupLocationId: missingLocationId }),
+    )
+  })
+
   it('shows a hint instead of the picker when the operator has no locations (#1262)', () => {
     // Zero locations is the exact state that leaves a UI-created car invisible to
     // renters; surface a hint rather than silently hiding the field.
