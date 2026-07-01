@@ -9,7 +9,7 @@ import {
   unique,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
-import { users } from './auth'
+import { operators, users } from './auth'
 import { bookings } from './booking'
 
 // FK-covering and partial idempotency indexes — declared inline so the module
@@ -23,12 +23,26 @@ export const threads = pgTable(
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
     bookingId: text('bookingId').references(() => bookings.id),
+    // Tenant owner — denormalized from the booking's operator so the operator
+    // portal can read-scope threads by operatorId without a thread->booking
+    // join (#1205, mirrors notification_log.operatorId). Nullable because
+    // bookingId is nullable (a bookingless thread has no operator and is
+    // invisible to operators). Set by ensureThread; backfilled in this migration.
+    operatorId: text('operatorId').references(() => operators.id, { onDelete: 'restrict' }),
+    // Operator-side unread counter (#1205, slice 3). Tenant-level, not per-user:
+    // the operator inbox is one shared surface, so unread lives on the thread, not
+    // on a thread_participants row (a single DEFAULT_STAFF_ID participant is shared
+    // across all tenants and can't carry per-operator unread). Bumped on a renter
+    // send, zeroed when the operator reads. The renter side keeps its own
+    // per-participant unreadCount.
+    operatorUnreadCount: integer('operatorUnreadCount').notNull().default(0),
     idempotencyKey: text('idempotencyKey'),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('idx_threads_bookingId').on(t.bookingId),
+    index('idx_threads_operatorId').on(t.operatorId),
     uniqueIndex('threads_idempotency_key')
       .on(t.idempotencyKey)
       .where(sql`"idempotencyKey" is not null`),

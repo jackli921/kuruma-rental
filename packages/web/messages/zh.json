@@ -898,6 +898,7 @@
       "emptyDescription": "开始对话或等待回复。",
       "unread": "{count} 条未读",
       "host": "房东",
+      "guest": "客人",
       "loadError": "无法加载您的消息",
       "retry": "重试"
     },
@@ -1689,6 +1690,11 @@
       "pending": "提交中…",
       "error": "出现错误，请重试。",
       "reviewed": "您已评价该租客。"
+    },
+    "aggregate": {
+      "rating": "★ {avg}（{count}条）",
+      "noReviews": "暂无评价",
+      "ratingAria": "{avg}星，{count}条评价"
     }
   },
   "currency": {

@@ -11,9 +11,10 @@
  *  - Introspect schema.ts at runtime via drizzle-orm's getTableConfig.
  *    This gives authoritative FK columns per table.
  *  - Parse every drizzle/*.sql migration for CREATE [UNIQUE] INDEX and
- *    collect (table, leading-column) pairs. Indexes declared in schema.ts
- *    via `.index()` are also caught because drizzle-kit emits them as
- *    CREATE INDEX in the generated SQL.
+ *    DROP INDEX, then fold them in migration order — a dropped index stops
+ *    counting as cover, so the check reflects the index set that SURVIVES
+ *    (not every index ever created). Indexes declared in schema.ts via
+ *    `.index()` are caught because drizzle-kit emits them as CREATE INDEX.
  *  - A FK is "indexed" if the column is a primary key OR the leading column
  *    of any index. Trailing columns of a composite index don't count —
  *    matches Postgres's actual query-planning behavior.
@@ -38,22 +39,60 @@ export interface IndexedColumns {
   columns: string[]
 }
 
-export function parseMigrationIndexes(sql: string): IndexedColumns[] {
+// An ordered index mutation parsed from a migration. `create` records the index
+// name so a later `drop` (by the same name) can retract it — this is what makes
+// the linter DROP-aware. `DROP CONSTRAINT` is intentionally NOT an event: the
+// implicit index a UNIQUE/ADD CONSTRAINT creates was never tracked (we only read
+// CREATE INDEX), so dropping the constraint can't retract anything we counted.
+export type MigrationEvent =
+  | { kind: 'create'; name: string; table: string; columns: string[] }
+  | { kind: 'drop'; name: string }
+
+const CREATE_INDEX_RE =
+  /create\s+(?:unique\s+)?index(?:\s+if\s+not\s+exists)?\s+(?:"([^"]+)"|(\w+))\s+on\s+(?:"([^"]+)"|(\w+))\s*(?:using\s+\w+\s*)?\(([^)]+)\)/gi
+const DROP_INDEX_RE = /drop\s+index(?:\s+concurrently)?(?:\s+if\s+exists)?\s+(?:"([^"]+)"|(\w+))/gi
+
+// Parse a migration's CREATE INDEX / DROP INDEX statements into source-ordered
+// events. Order matters: a migration may drop then re-create the same name
+// (#1225), and cross-file order is preserved by the caller iterating sorted files.
+export function parseMigrationEvents(sql: string): MigrationEvent[] {
   // Strip line comments so "-- CREATE INDEX ..." doesn't count.
   const cleaned = sql.replace(/--[^\n]*/g, '')
-  const re =
-    /create\s+(?:unique\s+)?index(?:\s+if\s+not\s+exists)?\s+(?:"[^"]+"|\w+)\s+on\s+(?:"([^"]+)"|(\w+))\s*(?:using\s+\w+\s*)?\(([^)]+)\)/gi
-  const out: IndexedColumns[] = []
-  for (const m of cleaned.matchAll(re)) {
-    const table = m[1] ?? m[2]
-    if (!table) continue
-    const columns = (m[3] ?? '')
+  const at: Array<{ offset: number; event: MigrationEvent }> = []
+  for (const m of cleaned.matchAll(CREATE_INDEX_RE)) {
+    const name = m[1] ?? m[2]
+    const table = m[3] ?? m[4]
+    if (!name || !table) continue
+    const columns = (m[5] ?? '')
       .split(',')
       .map((c) => c.trim().replace(/^"|"$/g, ''))
       .filter((c) => c.length > 0)
-    if (columns.length > 0) out.push({ table, columns })
+    if (columns.length > 0)
+      at.push({ offset: m.index, event: { kind: 'create', name, table, columns } })
   }
-  return out
+  for (const m of cleaned.matchAll(DROP_INDEX_RE)) {
+    const name = m[1] ?? m[2]
+    if (name) at.push({ offset: m.index, event: { kind: 'drop', name } })
+  }
+  return at.sort((a, b) => a.offset - b.offset).map((e) => e.event)
+}
+
+// Fold ordered events into the set of indexes that still exist, keyed by their
+// (globally-unique) name — a create sets, a drop deletes. A drop of a name we
+// never created (e.g. a constraint-backed index, or IF EXISTS on nothing) no-ops.
+export function foldIndexEvents(events: MigrationEvent[]): IndexedColumns[] {
+  const byName = new Map<string, IndexedColumns>()
+  for (const ev of events) {
+    if (ev.kind === 'create') byName.set(ev.name, { table: ev.table, columns: ev.columns })
+    else byName.delete(ev.name)
+  }
+  return [...byName.values()]
+}
+
+export function parseMigrationIndexes(sql: string): IndexedColumns[] {
+  return parseMigrationEvents(sql)
+    .filter((e): e is Extract<MigrationEvent, { kind: 'create' }> => e.kind === 'create')
+    .map(({ table, columns }) => ({ table, columns }))
 }
 
 export function findUnindexedFks(
@@ -112,11 +151,12 @@ export function readMigrationIndexes(drizzleDir: string): IndexedColumns[] {
   const entries = readdirSync(drizzleDir)
     .filter((f) => f.endsWith('.sql'))
     .sort()
-  const all: IndexedColumns[] = []
-  for (const f of entries) {
-    all.push(...parseMigrationIndexes(readFileSync(join(drizzleDir, f), 'utf8')))
-  }
-  return all
+  // Fold create/drop events in migration order so a dropped index stops counting
+  // as FK cover — the linter checks the index set that actually SURVIVES.
+  const events = entries.flatMap((f) =>
+    parseMigrationEvents(readFileSync(join(drizzleDir, f), 'utf8')),
+  )
+  return foldIndexEvents(events)
 }
 
 export async function runLint(opts: {

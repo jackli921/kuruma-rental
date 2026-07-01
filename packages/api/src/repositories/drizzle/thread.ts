@@ -1,12 +1,9 @@
 import type { RunTx } from '@kuruma/shared/db'
 import { messages, threadParticipants, threads } from '@kuruma/shared/db/schema'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
-import {
-  type CallerContext,
-  PRIVILEGED_ROLES,
-  rejectOperatorContextUntilScoped,
-} from '../../middleware/auth'
+import { type CallerContext, requireOperatorScope } from '../../middleware/auth'
 import type { Message, Thread, ThreadParticipant } from '../../stores'
+import { threadReadScope } from '../../tenancy'
 import type { ThreadRepository } from '../types'
 import {
   type Db,
@@ -32,18 +29,25 @@ export class DrizzleThreadRepository implements ThreadRepository {
   async findAll(
     ctx: CallerContext,
   ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>> {
-    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
+    const scope = threadReadScope(ctx)
+    if (scope.kind === 'none') return []
     let threadRows: Thread[]
 
-    if (PRIVILEGED_ROLES.has(ctx.role)) {
-      // Staff/admin see all threads
+    if (scope.kind === 'all') {
+      // PLATFORM_ADMIN sees every tenant's threads
       threadRows = (await this.db.select(threadColumns).from(threads)).map(toThread)
+    } else if (scope.kind === 'operator') {
+      // OPERATOR_*: only threads owned by this tenant (#1205)
+      threadRows = (await this.db
+        .select(threadColumns)
+        .from(threads)
+        .where(eq(threads.operatorId, scope.operatorId))).map(toThread)
     } else {
-      // Non-privileged: only threads where the user is a participant
+      // participant: only threads where the user is a participant
       const myParticipations = await this.db
         .select({ threadId: threadParticipants.threadId })
         .from(threadParticipants)
-        .where(eq(threadParticipants.userId, ctx.userId))
+        .where(eq(threadParticipants.userId, scope.userId))
 
       const threadIds = [...new Set(myParticipations.map((p) => p.threadId))]
       if (threadIds.length === 0) return []
@@ -97,7 +101,9 @@ export class DrizzleThreadRepository implements ThreadRepository {
     ctx: CallerContext,
     id: string,
   ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
+    const scope = threadReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+
     const [thread] = (await this.db
       .select(threadColumns)
       .from(threads)
@@ -119,9 +125,13 @@ export class DrizzleThreadRepository implements ThreadRepository {
 
     const participants = participantRows.map(toThreadParticipant)
 
-    // CallerContext scoping: non-privileged non-participants get undefined
-    const isParticipant = participants.some((p) => p.userId === ctx.userId)
-    if (!isParticipant && !PRIVILEGED_ROLES.has(ctx.role)) return undefined
+    // Read-scope visibility (#1205): admin sees all, an operator only its own
+    // tenant, a renter only threads it participates in.
+    const visible =
+      scope.kind === 'all' ||
+      (scope.kind === 'operator' && thread.operatorId === scope.operatorId) ||
+      (scope.kind === 'participant' && participants.some((p) => p.userId === scope.userId))
+    if (!visible) return undefined
 
     return {
       ...thread,
@@ -133,15 +143,28 @@ export class DrizzleThreadRepository implements ThreadRepository {
   }
 
   async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Thread | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
-    // CallerContext scoping (issue #328): non-privileged callers only match
-    // threads where they are a participant. Join the single thread row
-    // against thread_participants so filtering happens server-side.
-    if (PRIVILEGED_ROLES.has(ctx.role)) {
+    // Read-scope the lookup (issue #328 + #1205) so a replayed key can't leak
+    // another tenant's thread: admin matches any, an operator only within its
+    // tenant, a renter only threads it participates in. Filtering runs
+    // server-side.
+    const scope = threadReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+
+    if (scope.kind === 'all') {
       const [row] = (await this.db
         .select(threadColumns)
         .from(threads)
         .where(eq(threads.idempotencyKey, key))).map(toThread)
+      return row
+    }
+
+    if (scope.kind === 'operator') {
+      const [row] = (await this.db
+        .select(threadColumns)
+        .from(threads)
+        .where(
+          and(eq(threads.idempotencyKey, key), eq(threads.operatorId, scope.operatorId)),
+        )).map(toThread)
       return row
     }
 
@@ -150,7 +173,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
       .from(threads)
       .innerJoin(threadParticipants, eq(threadParticipants.threadId, threads.id))
       .where(
-        and(eq(threads.idempotencyKey, key), eq(threadParticipants.userId, ctx.userId)),
+        and(eq(threads.idempotencyKey, key), eq(threadParticipants.userId, scope.userId)),
       )) as Array<Parameters<typeof toThread>[0]>
     return row ? toThread(row) : undefined
   }
@@ -160,12 +183,13 @@ export class DrizzleThreadRepository implements ThreadRepository {
     bookingId: string | null,
     participantIds: string[],
     idempotencyKey?: string | null,
+    operatorId?: string | null,
   ): Promise<Thread> {
-    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
+    requireOperatorScope(ctx)
     return this.runTransaction(async (tx) => {
       const [insertedThread] = (await tx
         .insert(threads)
-        .values({ bookingId, idempotencyKey: idempotencyKey ?? null })
+        .values({ bookingId, operatorId: operatorId ?? null, idempotencyKey: idempotencyKey ?? null })
         .returning(threadColumns)).map(toThread)
 
       if (!insertedThread) {
@@ -187,11 +211,22 @@ export class DrizzleThreadRepository implements ThreadRepository {
   }
 
   async markAsRead(ctx: CallerContext, threadId: string): Promise<void> {
-    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
-    // CallerContext: only mark the caller's own participation as read
-    await this.db
-      .update(threadParticipants)
-      .set({ unreadCount: 0 })
-      .where(and(eq(threadParticipants.threadId, threadId), eq(threadParticipants.userId, ctx.userId)))
+    requireOperatorScope(ctx)
+    const scope = threadReadScope(ctx)
+    if (scope.kind === 'participant') {
+      // Renter side: only mark the caller's own participation as read.
+      await this.db
+        .update(threadParticipants)
+        .set({ unreadCount: 0 })
+        .where(
+          and(eq(threadParticipants.threadId, threadId), eq(threadParticipants.userId, ctx.userId)),
+        )
+      return
+    }
+    // Operator/admin side: zero the thread's tenant-level unread (#1205 slice 3).
+    // An operator may only clear its own tenant's thread; admin (`all`) any.
+    const conditions = [eq(threads.id, threadId)]
+    if (scope.kind === 'operator') conditions.push(eq(threads.operatorId, scope.operatorId))
+    await this.db.update(threads).set({ operatorUnreadCount: 0 }).where(and(...conditions))
   }
 }

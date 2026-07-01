@@ -4,6 +4,7 @@ import { SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
 import { InMemoryComplianceAlertLogRepository } from '../repositories/in-memory/compliance-alert-log'
+import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
 import { InMemoryOperatorMembershipRepository } from '../repositories/in-memory/operator-membership'
 import { InMemoryUserRepository } from '../repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
@@ -85,6 +86,7 @@ describe('buildComplianceDigestService (composition seam)', () => {
         vehicleRepo,
         bookingRepo,
         new InMemoryVehicleBlockRepository(),
+        new InMemoryOperatorRepository(),
       ),
       userRepo: new InMemoryUserRepository(new Map([[owner.id, owner]])),
       operatorMembershipRepo: new InMemoryOperatorMembershipRepository(

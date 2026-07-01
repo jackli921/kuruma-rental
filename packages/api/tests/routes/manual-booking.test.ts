@@ -121,6 +121,7 @@ describe('Manual booking (platform-admin renterId override + advance rule skip)'
       vehicleRepo,
       bookingRepo,
       new InMemoryVehicleBlockRepository(),
+      new InMemoryOperatorRepository(),
     )
 
     // #1206: the booking guard loads the vehicle's operator; seed OPERATOR active

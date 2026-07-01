@@ -44,13 +44,10 @@ import type {
   InsuranceOption,
   Location,
   MaintenanceLog,
-  Message,
   Operator,
   OperatorMembership,
   ProviderInvite,
   Region,
-  Thread,
-  ThreadParticipant,
   User,
   Vehicle,
 } from '../stores'
@@ -673,64 +670,15 @@ export interface VehicleDetailRepository {
   ): Promise<VehicleDetail | undefined>
 }
 
-export interface ThreadRepository {
-  findAll(
-    ctx: CallerContext,
-  ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>>
-  findById(
-    ctx: CallerContext,
-    id: string,
-  ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined>
-  /**
-   * Look up a thread by idempotency key scoped to the caller. Non-privileged
-   * callers only match threads where they are a participant. Prevents
-   * cross-tenant leakage when a client replays a key observed from another
-   * tenant (issue #328).
-   */
-  findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Thread | undefined>
-  create(
-    ctx: CallerContext,
-    bookingId: string | null,
-    participantIds: string[],
-    idempotencyKey?: string | null,
-  ): Promise<Thread>
-  markAsRead(ctx: CallerContext, threadId: string): Promise<void>
-}
-
-export interface MessageRepository {
-  /**
-   * Find a message by id, scoped to the caller. Non-privileged callers
-   * only see messages in threads they participate in; others get
-   * `undefined`. Privileged roles (STAFF/ADMIN) bypass the scope.
-   */
-  findById(ctx: CallerContext, id: string): Promise<Message | undefined>
-  /**
-   * Look up a message by idempotency key scoped to the caller. The key is
-   * sender-owned: the lookup matches only messages where `senderId = ctx.userId`
-   * for non-privileged callers. Prevents cross-tenant leakage when a client
-   * replays a key observed from another sender (issue #328).
-   */
-  findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Message | undefined>
-  create(
-    ctx: CallerContext,
-    threadId: string,
-    content: string,
-    idempotencyKey?: string | null,
-  ): Promise<Message>
-  findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]>
-  /**
-   * Merge a single language translation into the message's `translations`
-   * JSON map. If `detectedSourceLanguage` is provided, also update the
-   * message's `sourceLanguage` column (used when the original language
-   * was unknown at send time and the provider auto-detected it).
-   */
-  updateTranslation(
-    messageId: string,
-    language: string,
-    translatedText: string,
-    detectedSourceLanguage: string | null,
-  ): Promise<Message | undefined>
-}
+// Messaging bounded-context data access (#1032/#1205) lives in its own module to
+// keep this barrel under the file-size cap; re-exported for callers (mirrors the
+// notification / review / consent splits above).
+export type {
+  MessageCreateResult,
+  MessageRepository,
+  OperatorUnreadTransition,
+  ThreadRepository,
+} from './types-messaging'
 
 // Transaction-runner ports (#392 booking bundle + #521 operator-grant bundle)
 // live in ./types-transactions to keep this barrel under the file-size cap

@@ -4,6 +4,7 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorRepository,
   InMemoryStatsRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
@@ -23,6 +24,7 @@ async function createTestApp() {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
   )
   const statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
   const vehicleClassRepo = new InMemoryVehicleClassRepository()

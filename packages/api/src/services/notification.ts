@@ -47,6 +47,14 @@ export class NotificationService {
     const booking = await this.bookingRepo.findById(SYSTEM_CONTEXT, row.bookingId)
     if (!booking) return { ok: false, status: 404, error: 'Booking not found' }
 
+    // #1205 slice 4: the operator new-message alert is keyed by msg:<messageId> and
+    // its render args (thread/message/sender) live on no log column, so it cannot be
+    // rebuilt from a booking. Refuse the resend (it re-arms on the next message)
+    // rather than route a non-booking kind through the exhaustive booking switch.
+    if (row.kind === 'OPERATOR_NEW_MESSAGE') {
+      return { ok: false, status: 422, error: 'Notification is not resendable' }
+    }
+
     const outcome = await this.dispatcher.processOne(booking, row.kind)
     switch (outcome.result) {
       case 'no_recipient':

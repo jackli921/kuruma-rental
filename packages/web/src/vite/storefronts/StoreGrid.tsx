@@ -1,5 +1,6 @@
 import { resolveRegionAnchor } from '@/vite/regions/region-lookup'
 import { regionsQueryOptions } from '@/vite/regions/regions-api'
+import { reviewAggregatesQueryOptions } from '@/vite/reviews'
 import { StorefrontCard } from '@/vite/storefronts/StorefrontCard'
 import type { StorefrontSearchResultData } from '@/vite/storefronts/api'
 import { rankStorefronts } from '@/vite/storefronts/rank'
@@ -38,6 +39,16 @@ export function StoreGrid({
   const { data: regions } = useQuery(regionsQueryOptions())
   const anchor = resolveRegionAnchor(regions, region)
 
+  // #1085 slice 5: one batched fetch for every visible operator's review
+  // aggregate. Computed + the useQuery call MUST sit above the early returns
+  // below — React identifies hooks by call position, not name, so flipping
+  // from null/empty → populated would otherwise produce "Rendered more hooks
+  // than during the previous render." `reviewAggregatesQueryOptions` is
+  // disabled for an empty id list, so the null/empty path costs nothing.
+  const ranked = result === null ? [] : rankStorefronts(result.storefronts, anchor)
+  const operatorIds = ranked.map((s) => s.operatorId)
+  const { data: operatorRatings } = useQuery(reviewAggregatesQueryOptions('operators', operatorIds))
+
   if (result === null) {
     return <p className="py-12 text-center text-muted-foreground">{t('needDates')}</p>
   }
@@ -51,7 +62,6 @@ export function StoreGrid({
     )
   }
 
-  const ranked = rankStorefronts(result.storefronts, anchor)
   return (
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {ranked.map((storefront) => (
@@ -64,6 +74,7 @@ export function StoreGrid({
           pickupLocationId={pickupLocationId}
           region={region}
           distanceKm={storefront.distanceKm}
+          operatorRating={operatorRatings?.[storefront.operatorId]}
         />
       ))}
     </div>

@@ -1,4 +1,6 @@
+import { isMessagingEnabled, isVisibleToViewer } from '@/vite/config'
 import { isOperatorSettingsEnabled, isOperatorTeamEnabled } from '@/vite/config/features'
+import type { UserRole } from '@kuruma/shared/auth/roles'
 
 // Single source of truth for the business-view (operator) nav (#603). Both
 // Navbar (which builds the desktop list and passes it to MobileMenu) and
@@ -19,6 +21,7 @@ export const businessNavItems = [
   { to: '/$locale/manage/insurance', labelKey: 'insurance' },
   { to: '/$locale/manage/fees', labelKey: 'fees' },
   { to: '/$locale/manage/add-ons', labelKey: 'addOns' },
+  { to: '/$locale/manage/messages', labelKey: 'messages' },
   { to: '/$locale/manage/team', labelKey: 'team' },
   { to: '/$locale/manage/settings', labelKey: 'settings' },
 ] as const
@@ -30,11 +33,17 @@ export type BusinessNavTo = (typeof businessNavItems)[number]['to']
 // The array above stays the full source of truth so the `BusinessNavTo` union and
 // the nav-count test never drift; only the RENDERED list is filtered. The routes
 // themselves also redirect when their flag is OFF, so a direct URL can't reach them.
-const navItemGates: Partial<Record<BusinessNavTo, () => boolean>> = {
-  '/$locale/manage/team': isOperatorTeamEnabled,
-  '/$locale/manage/settings': isOperatorSettingsEnabled,
+// Messages is the post-MVP messaging feature: hidden in beta but shown to the
+// platform admin (owner preview via admin bypass), mirroring the renter side — so
+// its gate is role-aware (isVisibleToViewer), unlike the flag-only team/settings.
+const navItemGates: Partial<Record<BusinessNavTo, (role: UserRole | undefined) => boolean>> = {
+  '/$locale/manage/messages': (role) => isVisibleToViewer(isMessagingEnabled(), role),
+  '/$locale/manage/team': () => isOperatorTeamEnabled(),
+  '/$locale/manage/settings': () => isOperatorSettingsEnabled(),
 }
 
-export function visibleBusinessNavItems(): readonly (typeof businessNavItems)[number][] {
-  return businessNavItems.filter((item) => navItemGates[item.to]?.() ?? true)
+export function visibleBusinessNavItems(
+  role: UserRole | undefined,
+): readonly (typeof businessNavItems)[number][] {
+  return businessNavItems.filter((item) => navItemGates[item.to]?.(role) ?? true)
 }

@@ -13,6 +13,7 @@ import {
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
+  InMemoryOperatorRepository,
   InMemoryUserRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
@@ -47,7 +48,12 @@ async function setup() {
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
   const userRepo = new InMemoryUserRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
+  )
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
 
   const vehicleClass = await vehicleClassRepo.create({
@@ -186,7 +192,12 @@ async function setupSpecific() {
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
   const userRepo = new InMemoryUserRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
+  )
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const vehicleBlockRepo = new InMemoryVehicleBlockRepository()
 

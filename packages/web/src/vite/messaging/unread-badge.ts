@@ -36,3 +36,31 @@ export function useUnreadBadge({
 
   return { count }
 }
+
+// #1205 slice 3: the operator-side twin. Operator unread is tenant-level (one
+// shared inbox), so it lives on the thread (operatorUnreadCount) rather than on a
+// per-user participant row — the operator viewing isn't a thread participant.
+
+/** Pure: total operator-side unread across the tenant's threads (the `/threads`
+ *  list is already operator-scoped server-side, so this is just a sum). */
+export function countOperatorUnread(threads: readonly ThreadSummaryDto[]): number {
+  return threads.reduce((sum, thread) => sum + thread.operatorUnreadCount, 0)
+}
+
+/**
+ * The count behind the operator's Messages nav badge. Reuses the same threads
+ * cache as the operator inbox (the `/threads` endpoint scopes to the caller's
+ * tenant), so opening a thread — which marks it read and invalidates the cache —
+ * re-derives the badge with no extra request. `enabled` is false outside business
+ * view so the query never fires there.
+ */
+export function useOperatorUnreadBadge({ enabled }: { enabled: boolean }): { count: number } {
+  const { data: threads } = useQuery({ ...threadsQueryOptions(), enabled })
+
+  const count = useMemo(
+    () => (enabled ? countOperatorUnread(threads ?? []) : 0),
+    [enabled, threads],
+  )
+
+  return { count }
+}

@@ -42,6 +42,7 @@ function buildApp(googleAuthRuntime: GoogleAuthRuntime) {
       new InMemoryVehicleRepository(),
       new InMemoryBookingRepository(),
       new InMemoryVehicleBlockRepository(),
+      new InMemoryOperatorRepository(),
     ),
     googleAuthRuntime,
   })
@@ -138,6 +139,7 @@ describe('createApp wires a googleAuthRuntime override into /auth/google/callbac
         new InMemoryVehicleRepository(),
         new InMemoryBookingRepository(),
         new InMemoryVehicleBlockRepository(),
+        operatorRepo,
       ),
       operatorRepo,
       providerInviteRepo,

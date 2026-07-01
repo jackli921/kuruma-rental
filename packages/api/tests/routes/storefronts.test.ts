@@ -27,6 +27,7 @@ function setup() {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    operatorRepo,
   )
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
   const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()

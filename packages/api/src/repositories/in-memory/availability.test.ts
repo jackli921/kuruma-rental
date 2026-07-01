@@ -3,6 +3,7 @@ import { SYSTEM_CONTEXT } from '../../middleware/auth'
 import type { Booking, Vehicle } from '../../stores'
 import { InMemoryAvailabilityRepository } from './availability'
 import { InMemoryBookingRepository } from './booking'
+import { InMemoryOperatorRepository } from './operator'
 import { InMemoryVehicleRepository } from './vehicle'
 import { InMemoryVehicleBlockRepository } from './vehicle-block'
 
@@ -12,13 +13,20 @@ const TO = new Date('2026-08-01T14:00:00Z')
 let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
 let vehicleBlockRepo: InMemoryVehicleBlockRepository
+let operatorRepo: InMemoryOperatorRepository
 let availabilityRepo: InMemoryAvailabilityRepository
 
 beforeEach(() => {
   vehicleRepo = new InMemoryVehicleRepository()
   bookingRepo = new InMemoryBookingRepository()
   vehicleBlockRepo = new InMemoryVehicleBlockRepository()
-  availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo, vehicleBlockRepo)
+  operatorRepo = new InMemoryOperatorRepository()
+  availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    vehicleBlockRepo,
+    operatorRepo,
+  )
 })
 
 function makeVehicle(
@@ -55,6 +63,53 @@ function makeVehicle(
     ...overrides,
   })
 }
+
+describe('InMemoryAvailabilityRepository.findAvailableVehicles — operator deactivation (#1224)', () => {
+  async function seedVehicleForOperator(deactivated: boolean): Promise<{ vehicleId: string }> {
+    const operator = await operatorRepo.create({
+      name: 'Osaka Cars',
+      slug: 'osaka-cars',
+      preAuthHandoffUrl: null,
+    })
+    const vehicle = await makeVehicle({ operatorId: operator.id })
+    if (deactivated) {
+      await operatorRepo.update(operator.id, { deactivatedAt: new Date(), updatedAt: new Date() })
+    }
+    return { vehicleId: vehicle.id }
+  }
+
+  it('excludes vehicles whose operator is deactivated', async () => {
+    const { vehicleId } = await seedVehicleForOperator(true)
+    const available = await availabilityRepo.findAvailableVehicles(FROM, TO)
+    expect(available.map((v) => v.id)).not.toContain(vehicleId)
+  })
+
+  it('keeps vehicles whose operator is active', async () => {
+    const { vehicleId } = await seedVehicleForOperator(false)
+    const available = await availabilityRepo.findAvailableVehicles(FROM, TO)
+    expect(available.map((v) => v.id)).toContain(vehicleId)
+  })
+
+  it('restores a vehicle when its operator is reactivated (deactivatedAt -> null)', async () => {
+    const operator = await operatorRepo.create({
+      name: 'Kyoto Cars',
+      slug: 'kyoto-cars',
+      preAuthHandoffUrl: null,
+    })
+    const vehicle = await makeVehicle({ operatorId: operator.id })
+    await operatorRepo.update(operator.id, { deactivatedAt: new Date(), updatedAt: new Date() })
+    await operatorRepo.update(operator.id, { deactivatedAt: null, updatedAt: new Date() })
+
+    const available = await availabilityRepo.findAvailableVehicles(FROM, TO)
+    expect(available.map((v) => v.id)).toContain(vehicle.id)
+  })
+
+  it('keeps a vehicle whose operator record is absent (orphan — parity with drizzle NOT EXISTS)', async () => {
+    const vehicle = await makeVehicle({ operatorId: 'op_ghost' })
+    const available = await availabilityRepo.findAvailableVehicles(FROM, TO)
+    expect(available.map((v) => v.id)).toContain(vehicle.id)
+  })
+})
 
 describe('InMemoryAvailabilityRepository.findAvailableVehicles — storefront filters (#391)', () => {
   it('with { locationId } returns only vehicles at that storefront', async () => {
@@ -442,10 +497,12 @@ describe('InMemoryAvailabilityRepository.lockComboCapacity (#464 slice 2d.4)', (
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
     vehicleBlockRepo = new InMemoryVehicleBlockRepository()
+    operatorRepo = new InMemoryOperatorRepository()
     availabilityRepo = new InMemoryAvailabilityRepository(
       vehicleRepo,
       bookingRepo,
       vehicleBlockRepo,
+      operatorRepo,
     )
   })
 
