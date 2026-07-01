@@ -3,7 +3,7 @@ import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import { reviewAggregatesQueryOptions } from '@/vite/reviews'
 import { StorefrontCard } from '@/vite/storefronts/StorefrontCard'
 import type { StorefrontSearchResultData } from '@/vite/storefronts/api'
-import { rankStorefronts } from '@/vite/storefronts/rank'
+import { type SortOption, sortStorefronts } from '@/vite/storefronts/sort'
 import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { useTranslations } from 'use-intl'
@@ -16,6 +16,9 @@ interface StoreGridProps {
   readonly pickupLocationId?: string | undefined
   /** The chosen region slug (#840): resolves the nearest-first anchor + distance labels. */
   readonly region?: string | undefined
+  /** Result ordering + daily-price cap, applied client-side per page (#1291). */
+  readonly sort?: SortOption | undefined
+  readonly priceMax?: number | undefined
 }
 
 /**
@@ -32,6 +35,8 @@ export function StoreGrid({
   classFilter,
   pickupLocationId,
   region,
+  sort,
+  priceMax,
 }: StoreGridProps) {
   const t = useTranslations('search')
   // Edge-cached and already ensured by the loader, so this resolves synchronously
@@ -45,14 +50,17 @@ export function StoreGrid({
   // from null/empty → populated would otherwise produce "Rendered more hooks
   // than during the previous render." `reviewAggregatesQueryOptions` is
   // disabled for an empty id list, so the null/empty path costs nothing.
-  const ranked = result === null ? [] : rankStorefronts(result.storefronts, anchor)
+  const ranked =
+    result === null ? [] : sortStorefronts(result.storefronts, { anchor, sort, priceMax })
   const operatorIds = ranked.map((s) => s.operatorId)
   const { data: operatorRatings } = useQuery(reviewAggregatesQueryOptions('operators', operatorIds))
 
   if (result === null) {
     return <p className="py-12 text-center text-muted-foreground">{t('needDates')}</p>
   }
-  if (result.storefronts.length === 0) {
+  // Empty covers both "no stores for these dates" and "the price cap filtered the
+  // page to nothing" — the ranked set is what the renter actually sees.
+  if (ranked.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <Search className="mb-4 size-12 text-muted-foreground/30" />

@@ -1234,6 +1234,16 @@
     "toLabel": "Return date & time",
     "submit": "Search",
     "classFilterLabel": "Vehicle class",
+    "results": {
+      "sortLabel": "Sort by",
+      "sort": {
+        "nearest": "Recommended",
+        "priceAsc": "Price: low to high",
+        "priceDesc": "Price: high to low"
+      },
+      "priceMaxLabel": "Max price / day",
+      "priceMaxPlaceholder": "Any"
+    },
     "picker": {
       "label": "Pickup & return",
       "placeholder": "Add dates & times",

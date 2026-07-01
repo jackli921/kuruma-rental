@@ -1234,6 +1234,16 @@
     "toLabel": "还车日期与时间",
     "submit": "搜索",
     "classFilterLabel": "车型类别",
+    "results": {
+      "sortLabel": "排序方式",
+      "sort": {
+        "nearest": "推荐",
+        "priceAsc": "价格：从低到高",
+        "priceDesc": "价格：从高到低"
+      },
+      "priceMaxLabel": "每日最高价",
+      "priceMaxPlaceholder": "不限"
+    },
     "picker": {
       "label": "取车与还车",
       "placeholder": "添加日期和时间",

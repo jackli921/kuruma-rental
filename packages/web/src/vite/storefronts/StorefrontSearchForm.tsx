@@ -9,6 +9,7 @@ import {
   defaultSearchRange,
   normalizeClassFilter,
 } from '@/vite/storefronts/params'
+import type { SortOption } from '@/vite/storefronts/sort'
 import { persistSearchRange } from '@/vite/storefronts/storage'
 import { ACRISS_CODES } from '@kuruma/shared'
 import { useQuery } from '@tanstack/react-query'
@@ -34,6 +35,9 @@ interface StorefrontSearchFormProps {
   readonly pickupLocationId?: string | undefined
   /** Current region anchor as a slug (#651 Slice 3), prefilled into the picker. */
   readonly region?: string | undefined
+  /** Result ordering + price cap, re-emitted so a date/class refinement keeps them (#1291). */
+  readonly sort?: SortOption | undefined
+  readonly priceMax?: number | undefined
 }
 
 /**
@@ -49,6 +53,8 @@ export function StorefrontSearchForm({
   classFilter,
   pickupLocationId,
   region,
+  sort,
+  priceMax,
 }: StorefrontSearchFormProps) {
   const t = useTranslations('search')
   const tAcriss = useTranslations('acriss')
@@ -89,6 +95,9 @@ export function StorefrontSearchForm({
           pickupLocationId,
           region: selectedRegion ?? undefined,
         }),
+        // Preserve the current ordering + price cap across a date/class refinement.
+        ...(sort ? { sort } : {}),
+        ...(priceMax != null ? { priceMax } : {}),
       },
     })
   }

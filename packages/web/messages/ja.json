@@ -1234,6 +1234,16 @@
     "toLabel": "返却日時",
     "submit": "検索",
     "classFilterLabel": "車種クラス",
+    "results": {
+      "sortLabel": "並び替え",
+      "sort": {
+        "nearest": "おすすめ",
+        "priceAsc": "料金が安い順",
+        "priceDesc": "料金が高い順"
+      },
+      "priceMaxLabel": "1日の上限料金",
+      "priceMaxPlaceholder": "指定なし"
+    },
     "picker": {
       "label": "貸出・返却",
       "placeholder": "日時を追加",
