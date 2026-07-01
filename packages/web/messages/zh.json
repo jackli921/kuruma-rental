@@ -904,6 +904,35 @@
       "label": "运营商",
       "all": "所有运营商",
       "badge": "运营商：{name}"
+    },
+    "register": {
+      "title": "在Kuruma上登记您的业务",
+      "subtitle": "告诉我们您的租车业务情况。我们会审核每一份申请。",
+      "form": {
+        "businessName": "企业名称",
+        "contactName": "联系人姓名",
+        "contactEmail": "电子邮箱",
+        "contactPhone": "联系电话",
+        "serviceArea": "服务区域（城市/都道府县）",
+        "fleetSize": "预估车队规模",
+        "website": "网站（选填）",
+        "licenseNumber": "营业执照号码（选填）",
+        "businessType": "业务类型（选填）",
+        "message": "其他说明（选填）",
+        "consent": "我同意接受有关申请的联系",
+        "submit": "提交申请",
+        "submitting": "提交中...",
+        "individual": "个人",
+        "company": "公司"
+      },
+      "errors": {
+        "generic": "无法提交您的申请，请重试。",
+        "duplicate": "该邮箱已存在申请或账户。"
+      },
+      "success": {
+        "title": "申请已收到",
+        "body": "感谢您 - 我们将发邮件至 {email} 与您联系。"
+      }
     }
   },
   "messaging": {

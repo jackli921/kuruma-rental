@@ -904,6 +904,35 @@
       "label": "Operator",
       "all": "All operators",
       "badge": "Operator: {name}"
+    },
+    "register": {
+      "title": "List your business on Kuruma",
+      "subtitle": "Tell us about your rental business. We review every application.",
+      "form": {
+        "businessName": "Business name",
+        "contactName": "Contact name",
+        "contactEmail": "Email",
+        "contactPhone": "Phone",
+        "serviceArea": "Service area (city/prefecture)",
+        "fleetSize": "Estimated fleet size",
+        "website": "Website (optional)",
+        "licenseNumber": "Business license number (optional)",
+        "businessType": "Business type (optional)",
+        "message": "Anything else? (optional)",
+        "consent": "I agree to be contacted about my application",
+        "submit": "Submit application",
+        "submitting": "Submitting...",
+        "individual": "Individual",
+        "company": "Company"
+      },
+      "errors": {
+        "generic": "Couldn't submit your application. Please try again.",
+        "duplicate": "An application or account already exists for this email."
+      },
+      "success": {
+        "title": "Application received",
+        "body": "Thanks - we'll reach out at {email}."
+      }
     }
   },
   "messaging": {
