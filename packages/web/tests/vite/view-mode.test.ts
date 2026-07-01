@@ -1,4 +1,4 @@
-import { getViewMode, isBusiness, resolveViewMode, setViewMode } from '@/vite/view-mode'
+import { isBusiness, readViewCookie, resolveViewMode, setViewMode } from '@/vite/view-mode'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 const OWNER = 'OPERATOR_OWNER'
@@ -43,18 +43,18 @@ describe('resolveViewMode (pure)', () => {
   })
 })
 
-describe('getViewMode / setViewMode round-trip', () => {
+describe('setViewMode + readViewCookie round-trip', () => {
   beforeEach(clearCookies)
 
   it('persists a business user opting into the renter view', () => {
     setViewMode('renter')
-    expect(getViewMode(OWNER)).toBe('renter')
+    expect(resolveViewMode(OWNER, readViewCookie())).toBe('renter')
   })
 
   it('persists a business user switching back to the business view', () => {
     setViewMode('renter')
     setViewMode('business')
-    expect(getViewMode(OWNER)).toBe('business')
+    expect(resolveViewMode(OWNER, readViewCookie())).toBe('business')
   })
 
   it('writes a JS-readable (non-httpOnly) cookie so the SPA can read it back', () => {
@@ -64,6 +64,6 @@ describe('getViewMode / setViewMode round-trip', () => {
 
   it('never lets a renter be forced into the business view by a stale cookie', () => {
     setViewMode('business')
-    expect(getViewMode(RENTER)).toBe('renter')
+    expect(resolveViewMode(RENTER, readViewCookie())).toBe('renter')
   })
 })

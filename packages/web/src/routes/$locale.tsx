@@ -1,4 +1,5 @@
 import { LayoutPreferenceProvider } from '@/vite/LayoutPreferenceProvider'
+import { ViewModeProvider } from '@/vite/ViewModeProvider'
 import { CurrencyProvider } from '@/vite/currency'
 import { isLocale } from '@/vite/i18n/locale'
 import { messagesQueryOptions } from '@/vite/i18n/messages'
@@ -29,10 +30,12 @@ function LocaleLayout() {
   return (
     <IntlProvider locale={locale} messages={messages}>
       <CurrencyProvider>
-        <LayoutPreferenceProvider>
-          <Navbar />
-          <Outlet />
-        </LayoutPreferenceProvider>
+        <ViewModeProvider>
+          <LayoutPreferenceProvider>
+            <Navbar />
+            <Outlet />
+          </LayoutPreferenceProvider>
+        </ViewModeProvider>
       </CurrencyProvider>
     </IntlProvider>
   )
