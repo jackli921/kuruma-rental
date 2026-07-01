@@ -527,6 +527,34 @@ describe('DrizzleAvailabilityRepository', () => {
       expect(count).toBe(2)
     })
 
+    it('drops a soft-deactivated operator’s bookings from class demand — guarantee in the data (#1268)', async () => {
+      const { operatorId, classId, locationId } = await seedFreshOperatorWithVehicle()
+      // A car-less CLASS_COMBO float on the fresh operator's (class, location).
+      const float = await bookingRepo.create(
+        SYSTEM_CONTEXT,
+        bookingInput({
+          operatorId,
+          renterId: testUser.id,
+          classId,
+          requestedVehicleId: null,
+          assignedVehicleId: null,
+          fulfillmentMode: 'CLASS_COMBO',
+          pickupLocationId: locationId,
+          dropoffLocationId: locationId,
+          status: 'CONFIRMED',
+          ...window,
+        }),
+      )
+      createdBookingIds.push(float.id)
+      const forOp = () =>
+        availabilityRepo.countClassDemand(operatorId, classId, locationId, FROM, TO)
+      // Active: the booking counts as blocking demand for the class.
+      expect(await forOp()).toBe(1)
+      await deactivateOperator(operatorId)
+      // Deactivated: the demand seam counts zero, symmetric with the capacity seam.
+      expect(await forOp()).toBe(0)
+    })
+
     it('excludes CANCELLED bookings and windows that do not overlap', async () => {
       const car = await createTestVehicle({ name: 'Excluded Car' })
       createdVehicleIds.push(car.id)
