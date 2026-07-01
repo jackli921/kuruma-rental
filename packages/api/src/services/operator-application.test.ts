@@ -246,6 +246,16 @@ describe('OperatorApplicationService.approve', () => {
     expect((await repos.operators.list()).length).toBe(1)
   })
 
+  it('maps a concurrent unique-violation inside the tx to a 409 ConflictError', async () => {
+    const { service, repos } = setupApprove()
+    const { id } = await repos.applications.create(base)
+    // Simulate a concurrent approval winning the operators.slug unique index.
+    repos.operators.create = () =>
+      Promise.reject(Object.assign(new Error('dup'), { code: '23505' }))
+    await expect(service.approve(id, 'admin-1')).rejects.toThrow(ConflictError)
+    await expect(service.approve(id, 'admin-1')).rejects.toThrow('already reviewed')
+  })
+
   it('C1 — blocks approval when contactEmail already has a live pending invite', async () => {
     const { service, repos } = setupApprove()
     const { id } = await repos.applications.create(base)

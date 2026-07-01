@@ -96,59 +96,71 @@ export class OperatorApplicationService {
     const minted = mintInvite({ webBaseUrl: this.webBaseUrl })
     // Collected inside the tx, emitted only after commit (fire-and-forget convention).
     const events: OperatorApplicationAuditEvent[] = []
-    const result = await this.runApproval(async (repos) => {
-      // C1 cross-aggregate guard — the applications' unique-email index cannot see
-      // an existing membership or a live invite for this email elsewhere.
-      const existingUser = await repos.users.findByEmail(email)
-      if (existingUser && (await repos.memberships.findActiveByUserId(existingUser.id))) {
-        throw new ConflictError('this email already has an operator')
-      }
-      if (await repos.invites.findPendingByEmail(email)) {
-        throw new ConflictError('this email is already invited to an operator')
-      }
-      const slug = await resolveUniqueSlug(slugify(application.businessName), (s) =>
-        repos.operators.existsBySlug(s),
-      )
-      const operator = await repos.operators.create({
-        name: application.businessName,
-        slug,
-        preAuthHandoffUrl: null,
-      })
-      await repos.invites.create({
-        email,
-        operatorId: operator.id,
-        role: 'OPERATOR_OWNER',
-        tokenHash: minted.tokenHash,
-        status: 'PENDING',
-        expiresAt: minted.expiresAt,
-        invitedByUserId: reviewerUserId,
-        acceptedByUserId: null,
-      })
-      // Atomic claim+link + race fence: undefined => another approval won; the throw
-      // rolls back the operator + invite created above (no orphan).
-      const claimed = await repos.applications.markApprovedIfPending(
-        id,
-        operator.id,
-        reviewerUserId,
-        new Date(),
-      )
-      if (!claimed) throw new ConflictError('application already reviewed')
-      events.push(
-        {
-          type: 'PROVIDER_INVITE_CREATED',
-          invitedByUserId: reviewerUserId,
-          operatorId: operator.id,
+    let result: { operatorId: string; operatorSlug: string }
+    try {
+      result = await this.runApproval(async (repos) => {
+        // C1 cross-aggregate guard — the applications' unique-email index cannot see
+        // an existing membership or a live invite for this email elsewhere.
+        const existingUser = await repos.users.findByEmail(email)
+        if (existingUser && (await repos.memberships.findActiveByUserId(existingUser.id))) {
+          throw new ConflictError('this email already has an operator')
+        }
+        if (await repos.invites.findPendingByEmail(email)) {
+          throw new ConflictError('this email is already invited to an operator')
+        }
+        const slug = await resolveUniqueSlug(slugify(application.businessName), (s) =>
+          repos.operators.existsBySlug(s),
+        )
+        const operator = await repos.operators.create({
+          name: application.businessName,
+          slug,
+          preAuthHandoffUrl: null,
+        })
+        await repos.invites.create({
           email,
-        },
-        {
-          type: 'OPERATOR_APPLICATION_APPROVED',
-          actorUserId: reviewerUserId,
           operatorId: operator.id,
-          applicationId: id,
-        },
-      )
-      return { operatorId: operator.id, operatorSlug: slug }
-    })
+          role: 'OPERATOR_OWNER',
+          tokenHash: minted.tokenHash,
+          status: 'PENDING',
+          expiresAt: minted.expiresAt,
+          invitedByUserId: reviewerUserId,
+          acceptedByUserId: null,
+        })
+        // Atomic claim+link + race fence: undefined => another approval won; the throw
+        // rolls back the operator + invite created above (no orphan).
+        const claimed = await repos.applications.markApprovedIfPending(
+          id,
+          operator.id,
+          reviewerUserId,
+          new Date(),
+        )
+        if (!claimed) throw new ConflictError('application already reviewed')
+        events.push(
+          {
+            type: 'PROVIDER_INVITE_CREATED',
+            invitedByUserId: reviewerUserId,
+            operatorId: operator.id,
+            email,
+          },
+          {
+            type: 'OPERATOR_APPLICATION_APPROVED',
+            actorUserId: reviewerUserId,
+            operatorId: operator.id,
+            applicationId: id,
+          },
+        )
+        return { operatorId: operator.id, operatorSlug: slug }
+      })
+    } catch (err) {
+      // A concurrent approval claimed the slug / invite-email / application first:
+      // any unique-violation inside the approval tx means "someone else won this race".
+      // The ConflictError guards thrown inside the tx (C1 + the markApprovedIfPending
+      // fence) are ConflictError instances, not PG errors, so they fall through and rethrow as-is.
+      if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION) {
+        throw new ConflictError('application already reviewed')
+      }
+      throw err
+    }
     for (const e of events) this.recordAudit(e)
     return { ...result, inviteUrl: minted.inviteUrl, expiresAt: minted.expiresAt }
   }

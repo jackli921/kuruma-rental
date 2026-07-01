@@ -1,7 +1,10 @@
 import { SignJWT } from 'jose'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { createApp } from '../../src/index'
-import { InMemoryOperatorApplicationRepository } from '../../src/repositories/in-memory'
+import {
+  InMemoryOperatorApplicationRepository,
+  InMemoryProviderInviteRepository,
+} from '../../src/repositories/in-memory'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 
 async function bearer(payload: Record<string, unknown>): Promise<Record<string, string>> {
@@ -29,10 +32,10 @@ const validApplication = {
   consent: true,
 }
 
-function makeApp() {
+function makeApp(extra: Parameters<typeof createApp>[0] = {}) {
   setupAuthEnv()
   const operatorApplicationRepo = new InMemoryOperatorApplicationRepository()
-  const app = createApp({ operatorApplicationRepo })
+  const app = createApp({ operatorApplicationRepo, ...extra })
   return { app, operatorApplicationRepo }
 }
 
@@ -226,5 +229,79 @@ describe('POST /admin/operator-applications/:id/reject', () => {
       body: JSON.stringify({ rejectionReason: '' }),
     })
     expect(res.status).toBe(400)
+  })
+})
+
+describe('POST /admin/operator-applications/:id/approve', () => {
+  test('PLATFORM_ADMIN approves a PENDING application (200) and gets {operatorId, inviteUrl, expiresAt}', async () => {
+    const harness = makeApp()
+    const { id } = await seedApplication(harness.app)
+
+    const res = await harness.app.request(`/admin/operator-applications/${id}/approve`, {
+      method: 'POST',
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      success: boolean
+      data: { operatorId: string; inviteUrl: string; expiresAt: string }
+    }
+    expect(body.success).toBe(true)
+    const { data } = body
+    expect(typeof data.operatorId).toBe('string')
+    expect(data.operatorId.length).toBeGreaterThan(0)
+    // WEB_ORIGIN is unset in tests so the base is '' → path-only URL
+    expect(data.inviteUrl).toMatch(/\/provider\/invite\//)
+    expect(typeof data.expiresAt).toBe('string')
+    // The route projects to exactly 3 fields — the internal operatorSlug is not leaked.
+    expect(data).not.toHaveProperty('operatorSlug')
+  })
+
+  test('second approve on the same id → 409 (already reviewed)', async () => {
+    const harness = makeApp()
+    const { id } = await seedApplication(harness.app)
+    const headers = await bearer(ADMIN)
+
+    const approve = () =>
+      harness.app.request(`/admin/operator-applications/${id}/approve`, {
+        method: 'POST',
+        headers,
+      })
+
+    expect((await approve()).status).toBe(200)
+    expect((await approve()).status).toBe(409)
+  })
+
+  test('non-admin (RENTER) cannot approve (403)', async () => {
+    const harness = makeApp()
+    const { id } = await seedApplication(harness.app)
+
+    const res = await harness.app.request(`/admin/operator-applications/${id}/approve`, {
+      method: 'POST',
+      headers: await bearer({ sub: 'u1', role: 'RENTER' }),
+    })
+    expect(res.status).toBe(403)
+  })
+
+  test('C1 — approving an email that already has a live pending invite → 409', async () => {
+    const providerInviteRepo = new InMemoryProviderInviteRepository()
+    await providerInviteRepo.create({
+      email: validApplication.contactEmail,
+      operatorId: 'op-existing',
+      role: 'OPERATOR_OWNER',
+      tokenHash: 'deadbeef'.repeat(8),
+      status: 'PENDING',
+      expiresAt: new Date(Date.now() + 86_400_000),
+      invitedByUserId: 'seed-admin',
+      acceptedByUserId: null,
+    })
+    const harness = makeApp({ providerInviteRepo })
+    const { id } = await seedApplication(harness.app)
+
+    const res = await harness.app.request(`/admin/operator-applications/${id}/approve`, {
+      method: 'POST',
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(409)
   })
 })

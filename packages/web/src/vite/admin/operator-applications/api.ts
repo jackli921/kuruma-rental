@@ -58,6 +58,35 @@ export function pendingOperatorApplicationsQueryOptions() {
   })
 }
 
+// The approve result DTO (#1277): operator provisioned + the one-time OWNER invite
+// link to hand to the applicant. Non-strict — strips any server-only fields.
+const approveResultDtoSchema = z.object({
+  operatorId: z.string(),
+  inviteUrl: z.string(),
+  expiresAt: z.string(),
+})
+export type ApproveResultDto = z.infer<typeof approveResultDtoSchema>
+
+// Approve a pending application (#1277). Cookie-authed + CSRF-gated (token in the
+// header, never the body). No request body — approval takes no reviewer input.
+// A 409 (already reviewed / email already an operator) surfaces as an ApiError
+// with status 409 from unwrap, which the caller maps to an inline message.
+export async function approveApplication(params: {
+  id: string
+  csrfToken: string
+}): Promise<ApproveResultDto> {
+  const { id, csrfToken } = params
+  const res = await fetch(
+    `${getApiBaseUrl()}/admin/operator-applications/${encodeURIComponent(id)}/approve`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    },
+  )
+  return unwrap(res, approveResultDtoSchema)
+}
+
 // Record a rejection verdict (#1277). Cookie-authed + CSRF-gated, so the caller
 // echoes the session CSRF token in the header — NEVER the body. The REJECT
 // endpoint returns { success: true, data: {row} } — data is the row directly.

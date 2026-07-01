@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ADMIN_OPERATOR_APPLICATIONS_QUERY_KEY,
   type OperatorApplicationDto,
+  approveApplication,
   fetchPendingOperatorApplications,
   pendingOperatorApplicationsQueryOptions,
   rejectOperatorApplication,
@@ -100,5 +101,30 @@ describe('rejectOperatorApplication', () => {
     const body = JSON.parse(opts.body) as Record<string, unknown>
     expect(body).toEqual({ rejectionReason: 'incomplete info' })
     expect(body).not.toHaveProperty('csrfToken')
+  })
+})
+
+describe('approveApplication', () => {
+  it('POSTs to the id-encoded URL with X-CSRF-Token header and no body, returns unwrapped DTO', async () => {
+    const approveResult = {
+      operatorId: 'op_abc',
+      inviteUrl: '/provider/invite/tok_xyz',
+      expiresAt: '2026-08-01T00:00:00.000Z',
+    }
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: approveResult }))
+
+    const result = await approveApplication({ id: 'app_1', csrfToken: 'csrf-1' })
+
+    const [url, opts] = fetchMock.mock.calls[0]!
+    expect(url).toBe('/api/admin/operator-applications/app_1/approve')
+    expect(opts.method).toBe('POST')
+    expect(opts.credentials).toBe('include')
+    expect(opts.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': 'csrf-1',
+    })
+    // No request body: approval takes no reviewer input
+    expect(opts.body).toBeUndefined()
+    expect(result).toEqual(approveResult)
   })
 })

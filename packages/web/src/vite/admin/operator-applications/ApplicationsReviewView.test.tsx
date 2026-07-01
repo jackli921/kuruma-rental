@@ -25,10 +25,18 @@ const app = (id: string, businessName: string): OperatorApplicationDto => ({
   updatedAt: '2026-06-01T00:00:00.000Z',
 })
 
-function renderView(applications: OperatorApplicationDto[]) {
+function renderView(
+  applications: OperatorApplicationDto[],
+  props: Partial<Parameters<typeof ApplicationsReviewView>[0]> = {},
+) {
   return render(
     <IntlProvider locale="en" messages={en}>
-      <ApplicationsReviewView applications={applications} onReject={vi.fn()} />
+      <ApplicationsReviewView
+        applications={applications}
+        onReject={vi.fn()}
+        onApprove={vi.fn()}
+        {...props}
+      />
     </IntlProvider>,
   )
 }
@@ -45,5 +53,19 @@ describe('ApplicationsReviewView', () => {
     expect(screen.getAllByRole('article')).toHaveLength(2)
     expect(screen.queryByText('Osaka Cars')).not.toBeNull()
     expect(screen.queryByText('Kyoto Wheels')).not.toBeNull()
+  })
+
+  it('shows the already-reviewed message on the matching card for a 409 approval error', () => {
+    renderView([app('a1', 'Osaka Cars')], {
+      approveError: { id: 'a1', alreadyReviewed: true },
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent(en.admin.applications.alreadyReviewed)
+  })
+
+  it('shows the generic retry message on the matching card for a non-409 approval error', () => {
+    renderView([app('a1', 'Osaka Cars')], {
+      approveError: { id: 'a1', alreadyReviewed: false },
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent(en.admin.applications.approveFailed)
   })
 })

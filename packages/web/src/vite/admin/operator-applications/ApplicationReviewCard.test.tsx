@@ -29,7 +29,12 @@ const application: OperatorApplicationDto = {
 function renderCard(props: Partial<Parameters<typeof ApplicationReviewCard>[0]> = {}) {
   return render(
     <IntlProvider locale="en" messages={en}>
-      <ApplicationReviewCard application={application} onReject={vi.fn()} {...props} />
+      <ApplicationReviewCard
+        application={application}
+        onReject={vi.fn()}
+        onApprove={vi.fn()}
+        {...props}
+      />
     </IntlProvider>,
   )
 }
@@ -88,5 +93,34 @@ describe('ApplicationReviewCard', () => {
   it('announces the reject error to assistive tech via role=alert', () => {
     renderCard({ error: en.admin.applications.error })
     expect(screen.getByRole('alert')).toHaveTextContent(en.admin.applications.error)
+  })
+
+  it('renders an Approve button and calls onApprove when clicked', async () => {
+    const onApprove = vi.fn()
+    renderCard({ onApprove })
+    const approveBtn = screen.getByRole('button', { name: en.admin.applications.approve })
+    expect(approveBtn).not.toBeDisabled()
+    await userEvent.click(approveBtn)
+    expect(onApprove).toHaveBeenCalledTimes(1)
+  })
+
+  it('when inviteUrl is set, renders the readonly invite input and copy button, hides Approve/Reject', () => {
+    renderCard({ inviteUrl: '/provider/invite/tok_abc' })
+    // Readonly invite input is visible
+    const input = screen.getByRole('textbox')
+    expect(input).toHaveAttribute('readonly')
+    expect(input).toHaveValue('/provider/invite/tok_abc')
+    // Copy button present
+    expect(screen.getByRole('button', { name: en.admin.applications.copy })).not.toBeNull()
+    // Approve and Reject buttons must not be rendered in the terminal state
+    expect(screen.queryByRole('button', { name: en.admin.applications.approve })).toBeNull()
+    expect(screen.queryByRole('button', { name: en.admin.applications.reject })).toBeNull()
+  })
+
+  it('when approveError is set, shows it via role=alert', () => {
+    renderCard({ approveError: en.admin.applications.alreadyReviewed })
+    const alerts = screen.getAllByRole('alert')
+    const texts = alerts.map((el) => el.textContent)
+    expect(texts.some((t) => t?.includes(en.admin.applications.alreadyReviewed))).toBe(true)
   })
 })

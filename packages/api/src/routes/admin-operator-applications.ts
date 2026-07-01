@@ -16,14 +16,18 @@ function isOperatorApplicationStatus(value: string): value is OperatorApplicatio
  * Platform-admin governance surface for operator onboarding applications (#1277).
  *
  * A dedicated `/admin/operator-applications` surface — deliberately separate from
- * the public `/operator-applications` submission endpoint. Cross-tenant by nature:
- * the app-level `/admin/*` requireAuth 401s anon callers, `requirePlatformAdmin`
- * narrows to PLATFORM_ADMIN (OPERATOR_* / RENTER / PARTNER → 403), and the service
- * re-asserts the gate as defence-in-depth.
+ * the public `/operator-applications` submission endpoint. Cross-tenant by nature,
+ * gated by two layers: the app-level `/admin/*` requireAuth 401s anon callers, and
+ * each handler's `requirePlatformAdmin` narrows to PLATFORM_ADMIN (OPERATOR_* /
+ * RENTER / PARTNER → 403).
  *
  * Rejection records the reviewerUserId + rejectionReason on the application row and
  * emits an audit event; the service throws NotFoundError for a missing or
  * non-PENDING id which the global onError maps to 404.
+ *
+ * Approval provisions the operator + OPERATOR_OWNER invite and returns the one-time
+ * invite link for the admin to forward to the applicant. Returns 409 when the
+ * application is already reviewed or the contact email is already in use.
  */
 export function createAdminOperatorApplicationRoutes(service: OperatorApplicationService) {
   const app = new Hono()
@@ -56,5 +60,17 @@ export function createAdminOperatorApplicationRoutes(service: OperatorApplicatio
         parsed.data.rejectionReason,
       )
       return ok(c, row)
+    })
+    .post('/admin/operator-applications/:id/approve', async (c) => {
+      const ctx = toCallerContext(requireUser(c))
+      requirePlatformAdmin(ctx)
+      // ConflictError (already reviewed / C1 email-in-use / concurrent race) propagates
+      // to the global onError → 409. No request body: approval takes no reviewer input.
+      const result = await service.approve(c.req.param('id'), requireUser(c).id)
+      return ok(c, {
+        operatorId: result.operatorId,
+        inviteUrl: result.inviteUrl,
+        expiresAt: result.expiresAt,
+      })
     })
 }
