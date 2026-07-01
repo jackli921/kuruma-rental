@@ -38,6 +38,8 @@
     "db:seed-bookings": "bun run scripts/seed-bookings.ts",
     "db:seed:tcp": "bun run scripts/seed-tcp.ts",
     "db:backfill-regions": "bun run scripts/backfill-location-regions.ts",
+    "db:backfill-catalog-templates": "bun run scripts/backfill-catalog-templates.ts",
+    "db:audit-catalog-templates": "bun run scripts/audit-catalog-templates.ts",
     "db:backfill-photo-refs": "bun run scripts/backfill-photo-refs.ts",
     "db:backfill-vehicle-expiry": "bun run scripts/backfill-vehicle-expiry.ts",
     "db:backfill-consent-snapshot": "bun run scripts/backfill-consent-snapshot.ts",

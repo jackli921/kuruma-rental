@@ -4,14 +4,23 @@ import { drizzle as drizzleServerless } from 'drizzle-orm/neon-serverless'
 
 import * as schema from './schema'
 
-type NeonHttpDb = ReturnType<typeof drizzle>
+export type NeonHttpDb = ReturnType<typeof drizzle>
 
 // The transaction handle the neon-http db hands its callback. Repos are typed
 // against `ReturnType<typeof getDb>` (= NeonHttpDb), so this is exactly the
 // `tx` type every interactive-transaction call site already uses. Typing
 // `runTx` against it keeps those call sites byte-identical (only the function
 // name changes) and confines the driver swap to this file.
-type TxHandle = Parameters<Parameters<NeonHttpDb['transaction']>[0]>[0]
+export type TxHandle = Parameters<Parameters<NeonHttpDb['transaction']>[0]>[0]
+
+// The union a data-access helper accepts when it may run either on the neon-http
+// root handle (non-transactional reads/writes) or inside an interactive
+// transaction (`runTx(tx => ...)`). Both expose the identical Drizzle
+// query-builder surface, so a single parameter type spares every call site a
+// cast. The catalog backfill (`backfill-catalog-templates.ts`) is typed on it:
+// its production CLI wraps it in `runTx` (P2-b atomicity) and passes a TxHandle,
+// while a read-only audit can run on the plain `getDb()` handle.
+export type DbOrTx = NeonHttpDb | TxHandle
 
 let db: NeonHttpDb | undefined
 let cachedUrl: string | undefined
