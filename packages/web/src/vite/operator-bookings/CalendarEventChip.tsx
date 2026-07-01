@@ -1,13 +1,20 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { BookingQuickView } from '@/vite/operator-bookings/BookingQuickView'
 import type { CalendarEvent } from '@/vite/operator-bookings/calendar-events'
+import type { Popover as PopoverPrimitive } from '@base-ui/react/popover'
 import { Link } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 const HOVER_OPEN_DELAY_MS = 120
-// base-ui v1.3.0 onOpenChange reasons that mean "the user dismissed the card".
-// A `trigger-press` close (toggle) is deliberately NOT here: a chip click only pins.
-const DISMISS_REASONS = new Set(['outside-press', 'escape-key', 'focus-out'])
+// base-ui onOpenChange reasons that mean "the user dismissed the card". A
+// `trigger-press` close (toggle) is deliberately NOT here: a chip click only pins.
+// Typed off base-ui's reason union so a typo (which would silently fail *open* —
+// the card would just never dismiss on that reason) is a compile error.
+const DISMISS_REASONS = new Set<PopoverPrimitive.Root.ChangeEventReason>([
+  'outside-press',
+  'escape-key',
+  'focus-out',
+])
 
 interface ChipProps {
   // Only bookings get a chip (the calendar wiring renders blocks plainly), so this
@@ -44,12 +51,15 @@ export function CalendarEventChip({ event, locale }: ChipProps) {
 
   useEffect(() => clearTimer, [clearTimer])
 
-  const handleOpenChange = useCallback((next: boolean, details: { reason: string }) => {
-    if (!next && DISMISS_REASONS.has(details.reason)) {
-      setPinned(false)
-      setHovering(false)
-    }
-  }, [])
+  const handleOpenChange = useCallback(
+    (next: boolean, details: PopoverPrimitive.Root.ChangeEventDetails) => {
+      if (!next && DISMISS_REASONS.has(details.reason)) {
+        setPinned(false)
+        setHovering(false)
+      }
+    },
+    [],
+  )
 
   return (
     <Popover open={hovering || pinned} onOpenChange={handleOpenChange}>

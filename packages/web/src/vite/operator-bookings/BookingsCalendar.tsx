@@ -120,6 +120,10 @@ export function BookingsCalendar({
   // interactive quick-view chip (hover-peek / click-pin); a block stays a plain band
   // so its existing click -> block-detail-dialog path (onSelectEvent) is untouched.
   // The toolbar is suppressed here — the route renders CalendarToolbar itself.
+  // Scale note: this mounts one base-ui Popover per booking band. Fine at this fleet
+  // size (day/week are sparse; the default timeline view uses no chips). If a dense
+  // month view ever regresses, hoist a single calendar-level Popover keyed to the
+  // hovered/pinned event id instead of one-per-event.
   const components = useMemo(
     () => ({
       toolbar: () => null,
