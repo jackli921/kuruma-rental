@@ -103,6 +103,7 @@ import {
   makeResolveOperatorRecipients,
   makeResolveOperatorRecipientsBatch,
 } from './services/operator-recipients'
+import { OperatorSummaryService } from './services/operator-summary'
 import { OperatorTeamService } from './services/operator-team'
 import { OverviewService } from './services/overview'
 import { PaymentAnomalyService } from './services/payment-anomaly'
@@ -167,6 +168,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     reviewRepo,
     consentRepo,
     classRatePlanRepo,
+    complianceAlertLogRepo,
     runInTransaction,
     runOperatorGrant,
     photosPublicUrl,
@@ -434,6 +436,12 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const paymentAnomalyService = new PaymentAnomalyService(paymentAnomalyRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
   const operatorService = new OperatorService(operatorRepo, recordAudit, vehicleRepo)
+  const operatorSummaryService = new OperatorSummaryService(
+    operatorRepo,
+    vehicleRepo,
+    bookingRepo,
+    complianceAlertLogRepo,
+  )
   // #407: the write-operator resolver is a pure policy function — sole-operator
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
@@ -527,7 +535,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createOverviewRoutes(overviewService))
     .route('/', createAdminRevenueRoutes(adminRevenueService))
     .route('/', createAdminBookingRoutes(adminBookingService))
-    .route('/', createAdminOperatorRoutes(operatorService))
+    .route('/', createAdminOperatorRoutes(operatorService, operatorSummaryService))
     .route('/', createAdminOverviewRoutes(adminOverviewService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
     .route('/', createMessageRoutes(messageService))

@@ -65,6 +65,39 @@ export function operatorsQueryOptions() {
   })
 }
 
+// Per-operator metrics & compliance roll-up (#1120), backing `GET
+// /admin/operators/:id/summary`. The wire shape mirrors the API's
+// `OperatorComplianceSummary` (lives in @kuruma/shared, but validated here at the
+// seam so a renamed/removed figure fails loudly rather than rendering NaN).
+export const operatorSummarySchema = z.object({
+  operatorId: z.string(),
+  name: z.string(),
+  vehicleCount: z.number(),
+  vehiclesNeedingDocs: z.number(),
+  vehiclesExpiringSoon: z.number(),
+  totalBookings: z.number(),
+  upcomingBookings: z.number(),
+  lastComplianceAlertAt: z.string().nullable(),
+})
+
+export type OperatorSummary = z.infer<typeof operatorSummarySchema>
+
+export const operatorSummaryQueryKey = (id: string) => ['admin-operator-summary', id] as const
+
+export async function fetchOperatorSummary(id: string): Promise<OperatorSummary> {
+  const res = await fetch(`${getApiBaseUrl()}/admin/operators/${encodeURIComponent(id)}/summary`, {
+    credentials: 'include',
+  })
+  return unwrap(res, operatorSummarySchema)
+}
+
+export function operatorSummaryQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: operatorSummaryQueryKey(id),
+    queryFn: () => fetchOperatorSummary(id),
+  })
+}
+
 function jsonHeaders(csrfToken: string): HeadersInit {
   return { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken }
 }

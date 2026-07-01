@@ -1,4 +1,7 @@
+import { BLOCK_KIND_CLASS, STATUS_CLASS } from '@/lib/event-colors'
 import type { CalendarBookingRow, OperatorBookingStatus } from '@/vite/operator-bookings/api'
+import type { CalendarBlockRow } from '@/vite/operator-bookings/schema'
+import type { VehicleBlockKind } from '@kuruma/shared/enums'
 import {
   addDays,
   endOfDay,
@@ -45,14 +48,65 @@ export interface CalendarResource {
   resourceTitle: string
 }
 
-export function toCalendarEvents(rows: readonly CalendarBookingRow[]): CalendarEvent[] {
+// #1101 Slice B: the calendar shows two kinds of band on the same vehicle axis —
+// bookings (status-colored) and scheduled blocks (kind-colored). Rather than smuggle
+// "is this a booking" through `status` (blocks have none), the item is a discriminated
+// union on `type`; every consumer (styling, filter, click) switches on it at the
+// boundary. (design P1.2.)
+export type BookingCalendarEvent = CalendarEvent & { type: 'booking' }
+
+/** A scheduled vehicle block as the calendar consumes it. Carries `kind` (never a
+ *  `status`), plus `reason`/`notes` so the click handler hands the detail dialog the
+ *  whole item. `resourceId` is the blocked vehicle's id — the same column axis. */
+export interface BlockCalendarEvent {
+  type: 'block'
+  id: string
+  title: string
+  start: Date
+  end: Date
+  resourceId: string
+  kind: VehicleBlockKind
+  reason: string
+  notes: string | null
+}
+
+/** A single band on the operator calendar: a booking or a scheduled block. */
+export type CalendarItem = BookingCalendarEvent | BlockCalendarEvent
+
+/** The rbc band class for an item — its status color for a booking, its kind band
+ *  for a block. Pure switch on the discriminant, so the calendar shell's
+ *  `eventPropGetter` stays a one-liner. */
+export function calendarItemClassName(item: CalendarItem): string {
+  return item.type === 'booking' ? (STATUS_CLASS[item.status] ?? '') : BLOCK_KIND_CLASS[item.kind]
+}
+
+export function toCalendarEvents(rows: readonly CalendarBookingRow[]): BookingCalendarEvent[] {
   return rows.map((r) => ({
+    type: 'booking',
     id: r.id,
     title: r.renterName ?? r.renterEmail ?? r.bookingCode,
     start: new Date(r.startAt),
     end: new Date(r.effectiveEndAt),
     resourceId: r.vehicleId ?? '',
     status: r.status,
+  }))
+}
+
+/** Map fleet-wide blocks to calendar bands keyed by vehicle. `title` is the
+ *  operator's own `reason` (the kind drives the band color + legend), so this stays
+ *  a pure function of the row — no i18n dependency (the dialog/legend localize the
+ *  kind). */
+export function blocksToCalendarEvents(blocks: readonly CalendarBlockRow[]): BlockCalendarEvent[] {
+  return blocks.map((b) => ({
+    type: 'block',
+    id: b.id,
+    title: b.reason,
+    start: new Date(b.startAt),
+    end: new Date(b.endAt),
+    resourceId: b.vehicleId,
+    kind: b.kind,
+    reason: b.reason,
+    notes: b.notes,
   }))
 }
 

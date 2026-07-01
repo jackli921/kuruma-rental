@@ -219,6 +219,7 @@ describe('ComplianceDigestService.run (#916 §5.4)', () => {
       recordMany: async () => {
         throw new Error('ledger down')
       },
+      latestSentAtForOperator: async () => null,
     }
     const { vehicleRepo, sent, service } = setup({ alertLogRepo: failingLedger })
     await makeVehicle(vehicleRepo, { operatorId: 'op_a', shakenExpiryDate: EXPIRED })

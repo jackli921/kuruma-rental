@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { requirePlatformAdmin, requireUser, toCallerContext } from '../middleware/auth'
 import type { OperatorService } from '../services/operator'
+import type { OperatorSummaryService } from '../services/operator-summary'
 import { fail, ok } from './helpers'
 
 /**
@@ -18,7 +19,10 @@ import { fail, ok } from './helpers'
  * hiding and new-booking blocking are NOT yet wired up — tracked in #1206. Existing
  * bookings + history are untouched.
  */
-export function createAdminOperatorRoutes(service: OperatorService) {
+export function createAdminOperatorRoutes(
+  service: OperatorService,
+  summaryService: OperatorSummaryService,
+) {
   const app = new Hono()
 
   return app
@@ -26,6 +30,13 @@ export function createAdminOperatorRoutes(service: OperatorService) {
       const ctx = toCallerContext(requireUser(c))
       requirePlatformAdmin(ctx)
       return ok(c, await service.listForAdmin(ctx))
+    })
+    .get('/admin/operators/:id/summary', async (c) => {
+      // Per-operator metrics & compliance roll-up (#1120). The service re-asserts
+      // requirePlatformAdmin and throws NotFoundError (→404) for an unknown id.
+      const ctx = toCallerContext(requireUser(c))
+      requirePlatformAdmin(ctx)
+      return ok(c, await summaryService.getSummary(ctx, c.req.param('id')))
     })
     .post('/admin/operators/:id/deactivate', async (c) => {
       const ctx = toCallerContext(requireUser(c))

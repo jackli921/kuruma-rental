@@ -1,3 +1,6 @@
+import { jstDateString } from '@kuruma/shared/lib/compliance'
+import { type ExpiryStatus, computeExpiryStatus } from '@kuruma/shared/lib/expiry'
+import type { VehicleComplianceCounts } from '@kuruma/shared/types/operator-summary'
 import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
@@ -77,6 +80,29 @@ export class InMemoryVehicleRepository implements VehicleRepository {
       if (v.status === 'RETIRED') continue
       if (!wanted.has(v.operatorId)) continue
       counts.set(v.operatorId, (counts.get(v.operatorId) ?? 0) + 1)
+    }
+    return counts
+  }
+
+  // #1120: per-operator compliance roll-up over the live fleet. Classifies each
+  // vehicle through the single compliance seam so the buckets agree with the
+  // dashboard banner / fleet facet / digest, and keeps the two attention buckets
+  // mutually exclusive (a needing-docs car is never also counted as expiring-soon).
+  async countComplianceForOperator(
+    operatorId: string,
+    asOf: Date,
+  ): Promise<VehicleComplianceCounts> {
+    const todayIso = jstDateString(asOf)
+    const counts: VehicleComplianceCounts = { total: 0, needingDocs: 0, expiringSoon: 0 }
+    for (const v of this.store.values()) {
+      if (v.status === 'RETIRED') continue
+      if (v.operatorId !== operatorId) continue
+      counts.total++
+      const shaken = computeExpiryStatus(v.shakenExpiryDate, todayIso)
+      const insurance = computeExpiryStatus(v.insuranceExpiryDate, todayIso)
+      const needsDocs = (s: ExpiryStatus) => s === 'EXPIRED' || s === 'UNKNOWN'
+      if (needsDocs(shaken) || needsDocs(insurance)) counts.needingDocs++
+      else if (shaken === 'EXPIRING_SOON' || insurance === 'EXPIRING_SOON') counts.expiringSoon++
     }
     return counts
   }
