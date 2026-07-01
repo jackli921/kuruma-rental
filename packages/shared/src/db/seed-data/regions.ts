@@ -1,21 +1,30 @@
 import type { RegionType } from '../../enums'
 import type { regions } from '../schema'
+import { EAST_JAPAN_REGIONS } from './regions-east'
+import { WEST_JAPAN_REGIONS } from './regions-west'
 
 /**
  * #394 hierarchical region taxonomy (prefecture -> city -> area), adjacency list.
- * Platform-global reference data — no operatorId. Demo seed scope is **Kansai
- * only**: every region node must own at least one seeded location, so we seed the
- * four prefectures that hold the 9 demo locations (Osaka, Kyoto, Hyogo, Nara) and
- * nothing else. Tokyo / others are appended when an operator with locations there
- * onboards (a region with no locations is a dead dropdown entry). See plan §3.
+ * Platform-global reference data — no operatorId.
  *
- * Each `DEMO_LOCATIONS` row points its `regionId` at the deepest (area) node here.
- * `nameZh` uses simplified Chinese where it diverges from the Japanese kanji.
+ * #1276 — **nationwide** scope: all 47 prefectures (JIS X 0401 order), each
+ * prefecture's capital city, and the 5 non-capital government-designated cities
+ * (Kawasaki, Sagamihara, Hamamatsu, Sakai, Kitakyushu — the other 15 designated
+ * cities ARE their prefecture's capital, seeded once as the capital). The Kansai
+ * demo core (Osaka/Kyoto/Hyogo/Nara + their 9 AREA nodes) is kept verbatim; every
+ * CITY node is now `assignable` so an operator can pick prefecture -> city and stop
+ * there. Extending to the full ~1700 municipalities later is pure additive seed
+ * data (no schema/UI change).
+ *
+ * Each `DEMO_LOCATIONS` row points its `regionId` at a deepest assignable node
+ * here. `nameZh` uses simplified Chinese where it diverges from the Japanese kanji.
  *
  * #651 Slice 1 — every node carries a taxonomy `type`, a URL-stable `slug`, and
  * (on AREA nodes only) the area's WGS84 centre = its anchor location's coords, so
- * `nearestAssignableRegion` can match a pickup point. Only AREA nodes are
- * `assignable`; prefectures/cities are navigation-only and keep null coords.
+ * `nearestAssignableRegion` can match a pickup point. CITY + AREA nodes are
+ * `assignable`; prefectures stay navigation-only. Cities carry null coords so they
+ * are explicit-select-only (a null-coord node is skipped by `nearestAssignableRegion`,
+ * keeping "near me" auto-derivation on the fine-grained AREA nodes as before).
  */
 export type DemoRegion = Pick<
   typeof regions.$inferInsert,
@@ -48,7 +57,10 @@ export type DemoRegion = Pick<
   readonly slug: string
 }
 
-export const DEMO_REGIONS: readonly DemoRegion[] = [
+// Kansai demo core (#394/#651): the 4 original prefectures, their cities, and the
+// 9 AREA nodes anchoring the demo locations. Sakai (a designated city) lives here
+// too so it follows its reg_osaka parent. Nationwide rows are in regions-east/west.
+const KANSAI_REGIONS: readonly DemoRegion[] = [
   // ── Osaka 大阪府 ──────────────────────────────────────────────────────────
   {
     id: 'reg_osaka',
@@ -73,7 +85,7 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     type: 'CITY',
     latitude: null,
     longitude: null,
-    assignable: false,
+    assignable: true,
     slug: 'osaka-city',
   },
   {
@@ -151,7 +163,7 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     type: 'CITY',
     latitude: null,
     longitude: null,
-    assignable: false,
+    assignable: true,
     slug: 'izumisano',
   },
   {
@@ -166,6 +178,20 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     longitude: 135.2441,
     assignable: true,
     slug: 'kix',
+  },
+  {
+    // Government-designated city (non-capital) under Osaka.
+    id: 'reg_sakai_city',
+    parentId: 'reg_osaka',
+    nameEn: 'Sakai',
+    nameJa: '堺市',
+    nameZh: '堺市',
+    sortOrder: 3,
+    type: 'CITY',
+    latitude: null,
+    longitude: null,
+    assignable: true,
+    slug: 'sakai-city',
   },
   // ── Kyoto 京都府 ──────────────────────────────────────────────────────────
   {
@@ -191,7 +217,7 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     type: 'CITY',
     latitude: null,
     longitude: null,
-    assignable: false,
+    assignable: true,
     slug: 'kyoto-city',
   },
   {
@@ -231,7 +257,7 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     type: 'CITY',
     latitude: null,
     longitude: null,
-    assignable: false,
+    assignable: true,
     slug: 'kobe-city',
   },
   {
@@ -271,7 +297,7 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     type: 'CITY',
     latitude: null,
     longitude: null,
-    assignable: false,
+    assignable: true,
     slug: 'nara-city',
   },
   {
@@ -288,3 +314,14 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     slug: 'nara-area',
   },
 ] as const
+
+/**
+ * The full seeded taxonomy: the Kansai demo core first (so reg_osaka precedes its
+ * Sakai child), then the rest of Japan east-to-west. Order matters — seed.ts inserts
+ * in array order and the self-referential parentId FK must resolve on insert.
+ */
+export const DEMO_REGIONS: readonly DemoRegion[] = [
+  ...KANSAI_REGIONS,
+  ...EAST_JAPAN_REGIONS,
+  ...WEST_JAPAN_REGIONS,
+]
