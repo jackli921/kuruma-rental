@@ -5,6 +5,7 @@ import type {
   AvailabilityFilters,
   AvailabilityRepository,
   BookingRepository,
+  OperatorRepository,
   VehicleBlockRepository,
   VehicleRepository,
 } from '../types'
@@ -26,6 +27,11 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     // shared instance is what makes a block created via the blocks route visible
     // to availability. Suites that never schedule a block pass a fresh empty one.
     private readonly vehicleBlockRepo: VehicleBlockRepository,
+    // #1224: source of operator soft-deactivation state. Availability must hide a
+    // deactivated operator's cars (info-disclosure parity with the storefront seam
+    // #1206). Shared instance from the composition root so an operator deactivated
+    // via the admin route is immediately invisible here (mirrors the block store).
+    private readonly operatorRepo: OperatorRepository,
   ) {}
 
   async findAvailableVehicles(
@@ -70,10 +76,17 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     // [from, to) is off the calendar. Resolved per-candidate (mirrors the
     // Drizzle NOT EXISTS subquery); Promise.all keeps it off the await-in-loop
     // path even though the in-memory store is a synchronous Map scan.
-    const blockHits = await Promise.all(
-      candidates.map((v) => this.vehicleBlockRepo.findOverlapping(v.id, from, to)),
+    // #1224: also resolve each candidate's operator so a soft-deactivated operator
+    // (deactivatedAt set) drops off availability — mirrors the Drizzle
+    // NOT EXISTS(operators … deactivatedAt IS NOT NULL). An absent operator record
+    // (orphan) is kept, matching the Drizzle predicate's correlated existence check.
+    const [blockHits, operators] = await Promise.all([
+      Promise.all(candidates.map((v) => this.vehicleBlockRepo.findOverlapping(v.id, from, to))),
+      Promise.all(candidates.map((v) => this.operatorRepo.findById(v.operatorId))),
+    ])
+    return candidates.filter(
+      (_, i) => blockHits[i]!.length === 0 && operators[i]?.deactivatedAt == null,
     )
-    return candidates.filter((_, i) => blockHits[i]!.length === 0)
   }
 
   async checkVehicleAvailability(

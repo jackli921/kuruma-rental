@@ -4,6 +4,7 @@ import { createApp } from '../../src/index'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -49,6 +50,7 @@ describe('fail-closed rate limiting (#580)', () => {
       vehicleRepo,
       bookingRepo,
       new InMemoryVehicleBlockRepository(),
+      new InMemoryOperatorRepository(),
     )
     return createApp({ vehicleRepo, bookingRepo, availabilityRepo, publicCatalogLimiter: limiter })
   }

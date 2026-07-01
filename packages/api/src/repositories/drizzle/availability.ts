@@ -1,4 +1,4 @@
-import { bookings, vehicleBlocks, vehicles } from '@kuruma/shared/db/schema'
+import { bookings, operators, vehicleBlocks, vehicles } from '@kuruma/shared/db/schema'
 import { jstDateString } from '@kuruma/shared/lib/compliance'
 import { type SQL, and, eq, inArray, sql } from 'drizzle-orm'
 import type { Booking, Vehicle } from '../../stores'
@@ -59,6 +59,17 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
       // requested window is off the calendar (maintenance / out-of-service /
       // manual hold); mirrored by the in-memory path.
       blockOverlapNotExists(fromIso, toIso),
+      // #1224: hide a soft-deactivated operator's cars — correlated existence on
+      // operatorId. A deactivated operator (operators.deactivatedAt set) removes all
+      // its vehicles from availability, closing the /availability + class-availability
+      // info-disclosure gap left by #1206. NOT EXISTS keeps orphan vehicles (no
+      // operators row) available, matching the in-memory path; mirrors the storefront
+      // seam that already drops deactivated operators from the public catalog.
+      sql`NOT EXISTS (
+            SELECT 1 FROM ${operators} o
+            WHERE o.id = ${vehicles.operatorId}
+            AND o."deactivatedAt" IS NOT NULL
+          )`,
     ]
     // Storefront scope (#391): INNER match on the nullable pickupLocationId — a
     // vehicle with no assigned location matches no locationId, so it is

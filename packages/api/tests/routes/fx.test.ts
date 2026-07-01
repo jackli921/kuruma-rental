@@ -3,6 +3,7 @@ import { createApp } from '../../src/index'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -17,6 +18,7 @@ function makeApp(fxRateProvider: FxRateProvider) {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
   )
   return createApp({ vehicleRepo, bookingRepo, availabilityRepo, fxRateProvider })
 }
