@@ -391,12 +391,13 @@ describe('fetchCalendarBookings', () => {
 })
 
 describe('operatorCalendarQueryOptions', () => {
-  it('keys by the calendar range (from + to)', () => {
+  it('keys by the calendar range (from + to), with a null picked-operator slot by default', () => {
     expect(operatorCalendarQueryOptions('2026-07-01', '2026-07-31').queryKey).toEqual([
       'operator-bookings',
       'calendar',
       '2026-07-01',
       '2026-07-31',
+      null,
     ])
   })
 })

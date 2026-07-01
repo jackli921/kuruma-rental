@@ -54,12 +54,17 @@ function FloatRow({ float, csrfToken }: { float: RawOperatorBooking; csrfToken: 
 // Sorts ACTIVE ("overdue" — pickup window has started) above CONFIRMED so the
 // most urgent floats surface first. Invalidated automatically on a successful
 // assign via AssignVehicleDialog's onSuccess cache invalidation.
-export function UnassignedFloatsList() {
+// #1230 slice 5a: the picked operator is threaded in as a prop (lifted to the
+// route via useOperatorContext) so this leaf stays router-agnostic and unit-
+// testable. undefined = no pick / operator session -> session-scoped read.
+export function UnassignedFloatsList({
+  pickedOperatorId,
+}: { pickedOperatorId?: string | undefined }) {
   const t = useTranslations('business.bookings.calendar.sidebar.floats')
   const session = useSession()
   const csrfToken = session.data?.csrfToken ?? ''
 
-  const { data: floats = [] } = useQuery(needsAssignmentQueryOptions())
+  const { data: floats = [] } = useQuery(needsAssignmentQueryOptions(pickedOperatorId))
 
   // ACTIVE (pickup window started = overdue) sorts above CONFIRMED.
   const sorted = [...floats].sort((a, b) => {

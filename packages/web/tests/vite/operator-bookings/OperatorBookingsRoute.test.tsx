@@ -14,7 +14,8 @@ const c = enMessages.bookings.operator.newBooking
 const B = enMessages.bookings.operator.blocks
 
 // Render the route component outside a RouterProvider: stub createFileRoute
-// (Route.useParams/useSearch/useNavigate) + useRouter, and seed the suspense
+// (Route.useParams/useSearch/useNavigate), getRouteApi (the `_business` layout's
+// useSearch, read by useOperatorContext) + useRouter, and seed the suspense
 // calendar reads + session from cache. Mirrors TripDetailRoute.test.tsx.
 //
 // The route's search params, mutable so a test can drop `view` to exercise the
@@ -30,6 +31,12 @@ vi.mock('@tanstack/react-router', async () => ({
   createFileRoute: () => () => ({
     useParams: () => ({ locale: 'en' }),
     useSearch: () => searchState.value,
+    useNavigate: () => navigate,
+  }),
+  // useOperatorContext reads the `_business` layout search via getRouteApi. These
+  // route tests predate the picker, so the operator is always unpicked (undefined).
+  getRouteApi: () => ({
+    useSearch: () => ({ operator: undefined }),
     useNavigate: () => navigate,
   }),
   useRouter: () => ({ invalidate: vi.fn() }),
@@ -48,6 +55,16 @@ vi.mock('react-big-calendar', async (importOriginal) => ({
     calendarProps = props
     return null
   },
+}))
+
+// #1331 fallout: FleetTimeline statically imports react-calendar-timeline + interactjs
+// (~460KB) and is lazy()-loaded by the route (#1099 code-split). Loading the real module
+// through Suspense races findByRole's poll on a cold CI runner -> an intermittent timeout.
+// Mock it to a light marker so the lazy import resolves deterministically; the default-view
+// test only needs to prove FleetTimeline (not the rbc week grid) mounted. FleetTimeline's
+// own toolbar/behavior stays covered by FleetTimeline.test.tsx.
+vi.mock('@/vite/operator-bookings/FleetTimeline', () => ({
+  FleetTimeline: () => <div data-testid="fleet-timeline" />,
 }))
 
 const ANCHOR = '2026-07-01'
@@ -242,14 +259,13 @@ describe('OperatorBookingsRoute quick-view enrichment (#1099)', () => {
 })
 
 describe('OperatorBookingsRoute default view (#1100)', () => {
-  it('lands on the fleet timeline board when no view param is present', () => {
+  it('lands on the fleet timeline board when no view param is present', async () => {
     searchState.value = { date: ANCHOR } // view omitted -> DEFAULT_VIEW = 'timeline'
     renderRoute(operatorSession)
-    // FleetTimeline owns its toolbar (rendered outside the mocked rbc Calendar); its
-    // active "Timeline" button is proof the timeline board mounted, not the week grid.
-    expect(
-      screen.getByRole('button', { name: enMessages.business.bookings.calendar.views.timeline }),
-    ).toBeInTheDocument()
+    // FleetTimeline is lazy-loaded (code-split, #1099) and mocked here to a marker
+    // (the real react-calendar-timeline lib makes the dynamic import flaky). Finding the
+    // marker proves the default view resolved to the timeline board, not the week grid.
+    expect(await screen.findByTestId('fleet-timeline')).toBeInTheDocument()
     // The rbc <Calendar> (day/week/month) never mounted, so it captured no props.
     expect(calendarProps).toEqual({})
   })

@@ -8,7 +8,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { isReviewsEnabled } from '@/vite/config'
+import { useFeatureFlag } from '@/vite/config'
 import { StarRating } from '@/vite/reviews/StarRating'
 import {
   OPERATOR_RENTER_DIMENSIONS,
@@ -39,6 +39,7 @@ interface RateRenterPanelProps {
 // operator staff), the panel shows a "reviewed" line instead of the form.
 export function RateRenterPanel({ bookingId, bookingCode, csrfToken }: RateRenterPanelProps) {
   const t = useTranslations('reviews.operatorPanel')
+  const reviewsEnabled = useFeatureFlag('REVIEWS')
   const queryClient = useQueryClient()
   const { data: reviews = [] } = useQuery(reviewsForBookingQueryOptions(bookingId))
   const [open, setOpen] = useState(false)
@@ -81,8 +82,8 @@ export function RateRenterPanel({ bookingId, bookingCode, csrfToken }: RateRente
   if (!mutation.isPending && inFlightRef.current) inFlightRef.current = false
 
   // Reviews gated off (#1083-1086) → operators can't rate renters. After all hooks
-  // so rules-of-hooks stays satisfied.
-  if (!isReviewsEnabled()) return null
+  // so rules-of-hooks stays satisfied. Runtime-toggleable.
+  if (!reviewsEnabled) return null
 
   const ready = overall >= 1
   function handleSubmit() {

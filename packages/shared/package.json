@@ -18,6 +18,7 @@
     "./db/seed-data": "./src/db/seed-data/index.ts",
     "./db/seed-id": "./src/db/seed-id.ts",
     "./db/backfill-regions": "./src/db/backfill-regions.ts",
+    "./db/backfill-catalog-templates": "./src/db/backfill-catalog-templates.ts",
     "./db/backfill-photo-refs": "./src/db/backfill-photo-refs.ts",
     "./db/backfill-vehicle-expiry": "./src/db/backfill-vehicle-expiry.ts",
     "./validators/auth": "./src/validators/auth.ts",

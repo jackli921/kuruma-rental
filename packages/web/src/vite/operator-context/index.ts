@@ -13,5 +13,6 @@ export {
   useIsOperatorContextRoute,
   useOperatorContext,
   useOperatorScope,
+  useOptionalPickedOperatorId,
   type WithOperatorId,
 } from './operator-context'

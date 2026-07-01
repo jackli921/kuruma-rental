@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
+import { slugify } from '../i18n/slugify'
 import type { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
 import {
@@ -271,33 +272,10 @@ export async function seed(db: ReturnType<typeof getDb>) {
       })
   }
 
-  // 6b. Add-on options (#509 demo polish). Operator-owned paid extras the renter
-  // picks in the wizard's "extras" step; only operators are FK-referenced (§3).
-  console.log(`Seeding ${DEMO_ADD_ON_OPTIONS.length} add-on options...`)
-  for (const addOn of DEMO_ADD_ON_OPTIONS) {
-    await db
-      .insert(addOnOptions)
-      .values({
-        id: seedId(addOn.id),
-        operatorId: seedId(addOn.operatorId),
-        name: addOn.name,
-        description: addOn.description,
-        priceJpy: addOn.priceJpy,
-      })
-      .onConflictDoUpdate({
-        target: addOnOptions.id,
-        set: {
-          name: addOn.name,
-          description: addOn.description,
-          priceJpy: addOn.priceJpy,
-          updatedAt: now,
-        },
-      })
-  }
-
-  // 6c. Add-on templates (catalog i18n). Platform-owned, pre-translated names the
+  // 6b. Add-on templates (catalog i18n). Platform-owned, pre-translated names the
   // operator picks from — global (no operatorId). The id is derived from the key
-  // so a re-seed upserts on the natural key (add_on_templates_key_unique).
+  // so a re-seed upserts on the natural key (add_on_templates_key_unique). Seeded
+  // BEFORE the options below, which now FK-reference a template by id.
   console.log(`Seeding ${DEMO_ADD_ON_TEMPLATES.length} add-on templates...`)
   for (const template of DEMO_ADD_ON_TEMPLATES) {
     await db
@@ -313,6 +291,36 @@ export async function seed(db: ReturnType<typeof getDb>) {
         set: {
           name: template.name,
           description: template.description,
+          updatedAt: now,
+        },
+      })
+  }
+
+  // 6c. Add-on options (#509 demo polish). Operator-owned paid extras the renter
+  // picks in the wizard's "extras" step. Catalog i18n (slice 2): each row links to
+  // its template by templateId = seedId('tmpl_' + slugify(name)); slugify(name) is
+  // the template key, so a fresh seed produces template-stamped rows directly
+  // (no backfill needed). `name` stays the resolved en name through PR1.
+  console.log(`Seeding ${DEMO_ADD_ON_OPTIONS.length} add-on options...`)
+  for (const addOn of DEMO_ADD_ON_OPTIONS) {
+    const templateId = seedId(`tmpl_${slugify(addOn.name)}`)
+    await db
+      .insert(addOnOptions)
+      .values({
+        id: seedId(addOn.id),
+        operatorId: seedId(addOn.operatorId),
+        templateId,
+        name: addOn.name,
+        description: addOn.description,
+        priceJpy: addOn.priceJpy,
+      })
+      .onConflictDoUpdate({
+        target: addOnOptions.id,
+        set: {
+          templateId,
+          name: addOn.name,
+          description: addOn.description,
+          priceJpy: addOn.priceJpy,
           updatedAt: now,
         },
       })
