@@ -652,6 +652,13 @@
       "when": 1782589042107,
       "tag": "0092_add_operator_new_message_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1782920844492,
+      "tag": "0093_catalog_add_on_templates",
+      "breakpoints": true
     }
   ]
 }

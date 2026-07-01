@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { addOnStatusEnum } from '../src/db/add-on'
+import { addOnStatusEnum, catalogTemplateStatusEnum } from '../src/db/add-on'
 import {
   operatorMembershipStatusEnum,
   operatorRoleEnum,
@@ -35,6 +35,7 @@ import {
   BOOKING_STATUSES,
   CANCELLATION_FEE_SETTLEMENT_STATES,
   CANCELLATION_REASON_CODES,
+  CATALOG_TEMPLATE_STATUSES,
   COORDINATE_SOURCES,
   DOCUMENT_STATUSES,
   DOCUMENT_TYPES,
@@ -81,6 +82,7 @@ describe('enum SSoT — pgEnum.enumValues === src/enums.ts array (#688)', () => 
     ['payment_event_status', paymentEventStatusEnum.enumValues, PAYMENT_EVENT_STATUSES],
     ['payment_refund_status', paymentRefundStatusEnum.enumValues, PAYMENT_REFUND_STATUSES],
     ['add_on_status', addOnStatusEnum.enumValues, ADD_ON_STATUSES],
+    ['catalog_template_status', catalogTemplateStatusEnum.enumValues, CATALOG_TEMPLATE_STATUSES],
     ['document_type', documentTypeEnum.enumValues, DOCUMENT_TYPES],
     ['document_status', documentStatusEnum.enumValues, DOCUMENT_STATUSES],
     ['operator_role', operatorRoleEnum.enumValues, OPERATOR_ROLES],
