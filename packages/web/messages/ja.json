@@ -1345,6 +1345,9 @@
       "colState": "状態",
       "overridden": "上書き中",
       "default": "デフォルト",
+      "runtimeLive": "即時反映",
+      "runtimeBuildOnly": "ビルド時のみ",
+      "buildOnlyHint": "このフラグはまだランタイム制御に接続されていません。切り替えは保存されますが、移行が完了するまで反映されません。",
       "toggleLabel": "{feature}を切り替え",
       "loadError": "機能フラグを読み込めませんでした。",
       "retry": "再試行"

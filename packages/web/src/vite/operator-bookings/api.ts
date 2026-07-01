@@ -3,7 +3,7 @@ import { getApiBaseUrl } from '@/vite/api-base'
 import { type BookingDto, bookingDtoSchema } from '@/vite/bookings/api'
 import type { BookingStatus } from '@kuruma/shared/enums'
 import type { CreateVehicleBlockInput } from '@kuruma/shared/validators/vehicle-block'
-import { queryOptions } from '@tanstack/react-query'
+import { type QueryClient, queryOptions } from '@tanstack/react-query'
 import {
   type BookingEventDto,
   type CalendarBlockRow,
@@ -377,6 +377,24 @@ export function needsAssignmentQueryOptions(pickedOperatorId?: string) {
 // detail, events and substitution-candidates entries in one call, so no mutation
 // has to enumerate the sub-keys it touched.
 export const OPERATOR_BOOKINGS_KEY = ['operator-bookings'] as const
+
+// #1099 hardening (Theme 4): the dashboard overview (today-buckets + headline
+// counts) is keyed under this prefix, owned by operator-dashboard. It is restated
+// here as a LOCAL literal rather than imported from operator-dashboard: a
+// cross-feature import would add an operator-bookings -> operator-dashboard module
+// edge that trips the reach-in ratchet (lint:modules). The value must stay in sync
+// with operator-dashboard's OPERATOR_OVERVIEW_QUERY_KEY.
+const OPERATOR_OVERVIEW_PREFIX = ['operator-overview'] as const
+
+// #1099 hardening (Theme 4): the single invalidation every booking write calls.
+// A lifecycle mutation (advance/cancel/create/assign/substitute) changes both the
+// booking surfaces AND the dashboard today-buckets/counts, so both prefixes must
+// refresh. Centralising this closes the bug where a write from any surface OTHER
+// than TodayPanel left the dashboard overview stale.
+export function invalidateBookingCaches(queryClient: QueryClient): void {
+  queryClient.invalidateQueries({ queryKey: OPERATOR_BOOKINGS_KEY })
+  queryClient.invalidateQueries({ queryKey: OPERATOR_OVERVIEW_PREFIX })
+}
 
 // --- Substitution candidates (#616, closes #621) ----------------------------
 // The operator-only GET returns the same-store, same-ACRISS AVAILABLE vehicles

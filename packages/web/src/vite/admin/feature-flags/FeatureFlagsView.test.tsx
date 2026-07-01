@@ -6,8 +6,20 @@ import { type FeatureFlagRow, FeatureFlagsView } from './FeatureFlagsView'
 
 function sampleRows(): FeatureFlagRow[] {
   return [
-    { key: 'MULTI_CURRENCY', label: 'Multi-currency display', effective: true, overridden: true },
-    { key: 'REVIEWS', label: 'Reviews & ratings', effective: false, overridden: false },
+    {
+      key: 'MULTI_CURRENCY',
+      label: 'Multi-currency display',
+      effective: true,
+      overridden: true,
+      runtimeControlled: true,
+    },
+    {
+      key: 'REVIEWS',
+      label: 'Reviews & ratings',
+      effective: false,
+      overridden: false,
+      runtimeControlled: true,
+    },
   ]
 }
 
@@ -39,6 +51,29 @@ describe('FeatureFlagsView', () => {
     renderView()
     expect(screen.getByText('Overridden')).toBeInTheDocument()
     expect(screen.getByText('Default')).toBeInTheDocument()
+  })
+
+  it('badges a runtime-controlled flag as live and a not-yet-migrated one as build-time only', () => {
+    renderView({
+      rows: [
+        {
+          key: 'MULTI_CURRENCY',
+          label: 'Multi-currency display',
+          effective: true,
+          overridden: true,
+          runtimeControlled: true,
+        },
+        {
+          key: 'OPERATOR_TEAM',
+          label: 'Operator team management',
+          effective: false,
+          overridden: false,
+          runtimeControlled: false,
+        },
+      ],
+    })
+    expect(screen.getByText('Live')).toBeInTheDocument()
+    expect(screen.getByText('Build-time only')).toBeInTheDocument()
   })
 
   it('toggling a flag calls onToggle with the negated value', () => {
