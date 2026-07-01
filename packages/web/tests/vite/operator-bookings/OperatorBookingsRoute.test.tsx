@@ -164,6 +164,10 @@ function renderRoute(
 // asserts the affordance disappears entirely.
 beforeEach(() => {
   vi.stubEnv('VITE_FEATURE_OPERATOR_MANUAL_BOOKING', 'true')
+  // The fleet timeline (#1100) is the default landing view only while its flag is on;
+  // enable it so the existing view/blocks cases behave as the full product. The OFF
+  // case in the default-view describe asserts the fallback to the week grid.
+  vi.stubEnv('VITE_FEATURE_FLEET_TIMELINE', 'true')
   searchState.value = { view: 'week', date: '2026-07-01' }
   navigate.mockReset()
 })
@@ -255,6 +259,18 @@ describe('OperatorBookingsRoute default view (#1100)', () => {
     ).toBeInTheDocument()
     // The rbc <Calendar> (day/week/month) never mounted, so it captured no props.
     expect(calendarProps).toEqual({})
+  })
+
+  it('lands on the week grid (not the timeline) when the fleet-timeline feature is gated off', () => {
+    vi.stubEnv('VITE_FEATURE_FLEET_TIMELINE', undefined)
+    searchState.value = { date: ANCHOR } // view omitted -> default, now the week grid
+    renderRoute(operatorSession)
+    // The rbc <Calendar> mounted in week view — the gated-off default is the grid, not the board.
+    expect(calendarProps.view).toBe('week')
+    // The timeline view dropped out of the switcher entirely.
+    expect(
+      screen.queryByRole('button', { name: enMessages.business.bookings.calendar.views.timeline }),
+    ).not.toBeInTheDocument()
   })
 })
 

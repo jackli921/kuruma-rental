@@ -5,8 +5,8 @@ import {
   type CalendarItem,
   type CalendarResource,
   type CalendarView,
-  OPERATOR_VIEWS,
   calendarItemClassName,
+  operatorViews,
 } from '@/vite/operator-bookings/calendar-events'
 import { endOfWeek, startOfWeek } from 'date-fns'
 import { useCallback, useMemo } from 'react'
@@ -165,7 +165,7 @@ export function BookingsCalendar({
         view={view}
         onNavigate={handleToolbarNavigate}
         onView={onViewChange}
-        views={OPERATOR_VIEWS}
+        views={operatorViews()}
       />
       <Calendar
         localizer={localizer}

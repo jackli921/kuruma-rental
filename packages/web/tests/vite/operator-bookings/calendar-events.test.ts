@@ -6,14 +6,16 @@ import {
   blocksToCalendarEvents,
   calendarItemClassName,
   calendarRange,
+  defaultCalendarView,
   fleetToResources,
   formatCalendarDate,
+  operatorViews,
   parseCalendarDate,
   parseCalendarView,
   toCalendarEvents,
 } from '@/vite/operator-bookings/calendar-events'
 import type { CalendarBlockRow } from '@/vite/operator-bookings/schema'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
@@ -137,7 +139,11 @@ describe('calendarRange', () => {
   })
 })
 
-describe('parseCalendarView', () => {
+describe('parseCalendarView (fleet timeline enabled)', () => {
+  // The timeline board (#1100) is the operator default only while its feature flag is on.
+  beforeEach(() => vi.stubEnv('VITE_FEATURE_FLEET_TIMELINE', 'true'))
+  afterEach(() => vi.unstubAllEnvs())
+
   it('keeps a valid view and defaults anything else to the timeline board', () => {
     expect(parseCalendarView('timeline')).toBe('timeline')
     expect(parseCalendarView('day')).toBe('day')
@@ -145,6 +151,31 @@ describe('parseCalendarView', () => {
     expect(parseCalendarView('month')).toBe('month')
     expect(parseCalendarView('agenda')).toBe('timeline') // a real rbc view we do not offer
     expect(parseCalendarView(undefined)).toBe('timeline')
+  })
+})
+
+describe('fleet-timeline view gating (#1100)', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('enabled → timeline leads the switcher and is the landing default', () => {
+    vi.stubEnv('VITE_FEATURE_FLEET_TIMELINE', 'true')
+    expect(operatorViews()).toEqual(['timeline', 'day', 'week', 'month'])
+    expect(defaultCalendarView()).toBe('timeline')
+  })
+
+  it('gated off → the timeline view drops out and week becomes the default', () => {
+    vi.stubEnv('VITE_FEATURE_FLEET_TIMELINE', undefined)
+    expect(operatorViews()).toEqual(['day', 'week', 'month'])
+    expect(defaultCalendarView()).toBe('week')
+  })
+
+  it('gated off → a hand-typed ?view=timeline falls back to the week grid', () => {
+    vi.stubEnv('VITE_FEATURE_FLEET_TIMELINE', undefined)
+    expect(parseCalendarView('timeline')).toBe('week')
+    expect(parseCalendarView(undefined)).toBe('week')
+    // The remaining grids still parse through untouched.
+    expect(parseCalendarView('day')).toBe('day')
+    expect(parseCalendarView('month')).toBe('month')
   })
 })
 

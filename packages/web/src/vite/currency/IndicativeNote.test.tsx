@@ -14,6 +14,9 @@ const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
 beforeEach(() => {
+  // Multi-currency (#1070) ships OFF in beta; the note only renders when ON. The
+  // gated-off path is covered by its own test below.
+  vi.stubEnv('VITE_FEATURE_MULTI_CURRENCY', 'true')
   localStorage.clear()
   fetchMock.mockResolvedValue({
     ok: true,
@@ -21,7 +24,10 @@ beforeEach(() => {
     json: async () => ({ success: true, data: rates }),
   })
 })
-afterEach(() => fetchMock.mockReset())
+afterEach(() => {
+  fetchMock.mockReset()
+  vi.unstubAllEnvs()
+})
 
 function renderInProvider(ui: ReactNode, locale = 'en') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -65,6 +71,15 @@ describe('IndicativeNote', () => {
     localStorage.setItem('kuruma-display-currency', 'JPY')
     const { container } = renderInProvider(<IndicativeNote jpy={27000} />, 'ja')
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(container.textContent).toBe('')
+  })
+
+  it('renders nothing when multi-currency is gated off (#1070), even for USD', async () => {
+    // Distinct from the JPY case: the display currency is USD (a conversion WOULD
+    // resolve), yet the gate suppresses the note so every price shows JPY alone.
+    vi.stubEnv('VITE_FEATURE_MULTI_CURRENCY', undefined)
+    const { container } = renderInProvider(<IndicativeNote jpy={27000} />, 'en')
+    await waitFor(() => expect(screen.queryByText(/≈/)).toBeNull())
     expect(container.textContent).toBe('')
   })
 

@@ -3,7 +3,7 @@ import type { StorefrontCardData } from '@/vite/storefronts/api'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 import { renderWithUsdIndicative } from '../../support/currency'
 
@@ -71,6 +71,10 @@ function renderCard(
 }
 
 describe('StorefrontCard', () => {
+  // Reviews ships OFF for the beta MVP; the operator-rating badge only renders where the flag is on.
+  beforeEach(() => vi.stubEnv('VITE_FEATURE_REVIEWS', 'true'))
+  afterEach(() => vi.unstubAllEnvs())
+
   it('renders the store identity, class summary, and daily from-price', () => {
     renderCard(makeStorefront())
     expect(screen.getByText('Best Car Rental Osaka')).toBeInTheDocument()
@@ -154,6 +158,15 @@ describe('StorefrontCard', () => {
   it('renders the "no reviews yet" badge when the batch returns null for this operator (#1085)', () => {
     renderCard(makeStorefront(), { operatorRating: null })
     expect(screen.getByLabelText('No reviews yet')).toBeInTheDocument()
+    expect(screen.queryByTestId('rating-badge-skeleton')).toBeNull()
+  })
+
+  it('renders no rating badge at all when the reviews feature is gated off (#1083-1086)', () => {
+    vi.stubEnv('VITE_FEATURE_REVIEWS', undefined)
+    renderCard(makeStorefront(), { operatorRating: { avg: 4.7, count: 23 } })
+    // The rest of the card still renders; only the badge is suppressed.
+    expect(screen.getByText('Best Car Rental Osaka')).toBeInTheDocument()
+    expect(screen.queryByText('★ 4.7 (23)')).toBeNull()
     expect(screen.queryByTestId('rating-badge-skeleton')).toBeNull()
   })
 })

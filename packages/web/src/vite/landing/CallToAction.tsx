@@ -28,7 +28,7 @@ export function CallToAction() {
           <p className="mt-4 text-lg text-white/80">{t('description')}</p>
           <div className="mt-8">
             <Link
-              to="/$locale/vehicles"
+              to="/$locale/search"
               params={{ locale }}
               className={cn(
                 buttonVariants({ size: 'lg' }),

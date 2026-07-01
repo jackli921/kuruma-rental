@@ -1,5 +1,9 @@
 import { VehicleForm } from '@/vite/operator-fleet/VehicleForm'
-import type { OperatorFleetVehicle, VehicleClassOption } from '@/vite/operator-fleet/api'
+import type {
+  OperatorFleetVehicle,
+  PickupLocationOption,
+  VehicleClassOption,
+} from '@/vite/operator-fleet/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -25,6 +29,13 @@ const en = enMessages.business.vehicles.form
 const classOptions: VehicleClassOption[] = [
   { id: '11111111-1111-4111-8111-111111111111', name: 'Compact' },
   { id: '22222222-2222-4222-8222-222222222222', name: 'SUV' },
+]
+
+const OSAKA_LOCATION_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const KYOTO_LOCATION_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const locationOptions: PickupLocationOption[] = [
+  { id: OSAKA_LOCATION_ID, name: 'Osaka Namba', status: 'ACTIVE' },
+  { id: KYOTO_LOCATION_ID, name: 'Kyoto Station', status: 'ACTIVE' },
 ]
 
 function existingVehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVehicle {
@@ -67,11 +78,17 @@ function existingVehicle(overrides: Partial<OperatorFleetVehicle> = {}): Operato
 
 interface RenderOptions {
   vehicle?: OperatorFleetVehicle | null
+  locations?: readonly PickupLocationOption[]
   onSaved?: () => void
   onCancel?: () => void
 }
 
-function renderForm({ vehicle = null, onSaved = vi.fn(), onCancel = vi.fn() }: RenderOptions = {}) {
+function renderForm({
+  vehicle = null,
+  locations = locationOptions,
+  onSaved = vi.fn(),
+  onCancel = vi.fn(),
+}: RenderOptions = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
   })
@@ -82,6 +99,7 @@ function renderForm({ vehicle = null, onSaved = vi.fn(), onCancel = vi.fn() }: R
         <VehicleForm
           vehicle={vehicle}
           classOptions={classOptions}
+          locationOptions={locations}
           onSaved={onSaved}
           onCancel={onCancel}
         />
@@ -295,5 +313,125 @@ describe('VehicleForm', () => {
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1))
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: FLEET_QUERY_KEY })
+  })
+
+  it('create mode: submits the chosen pickup location (#1262)', async () => {
+    const user = userEvent.setup()
+    mockedCreate.mockResolvedValue(existingVehicle())
+    renderForm()
+
+    await user.type(screen.getByLabelText(en.name), 'Honda Fit')
+    await user.type(screen.getByLabelText(en.dailyRate), '7500')
+    await user.selectOptions(screen.getByLabelText(en.pickupLocation), OSAKA_LOCATION_ID)
+    await fillRequiredDocs(user)
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
+    expect(mockedCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ pickupLocationId: OSAKA_LOCATION_ID }),
+    )
+  })
+
+  it('create mode: an unselected pickup location submits null (#1262)', async () => {
+    const user = userEvent.setup()
+    mockedCreate.mockResolvedValue(existingVehicle())
+    renderForm()
+
+    await user.type(screen.getByLabelText(en.name), 'Honda Fit')
+    await user.type(screen.getByLabelText(en.dailyRate), '7500')
+    await fillRequiredDocs(user)
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
+    expect(mockedCreate).toHaveBeenCalledWith(expect.objectContaining({ pickupLocationId: null }))
+  })
+
+  it('offers only ACTIVE locations as selectable options (#1262)', () => {
+    renderForm({
+      locations: [
+        ...locationOptions,
+        { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: 'Kobe (retired)', status: 'ARCHIVED' },
+      ],
+    })
+
+    const select = screen.getByLabelText(en.pickupLocation) as HTMLSelectElement
+    const optionNames = Array.from(select.options).map((o) => o.textContent)
+    expect(optionNames).toEqual([en.pickupLocationNone, 'Osaka Namba', 'Kyoto Station'])
+    expect(optionNames).not.toContain('Kobe (retired)')
+  })
+
+  it('edit mode: pre-fills the pickup location from the vehicle (#1262)', () => {
+    renderForm({ vehicle: existingVehicle({ pickupLocationId: KYOTO_LOCATION_ID }) })
+
+    expect((screen.getByLabelText(en.pickupLocation) as HTMLSelectElement).value).toBe(
+      KYOTO_LOCATION_ID,
+    )
+  })
+
+  it('edit mode: preserves a since-archived pickup location missing from active options (#1262)', async () => {
+    const user = userEvent.setup()
+    mockedUpdate.mockResolvedValue(existingVehicle())
+    const archivedLocationId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+    // The assigned location was archived: it is filtered out of the selectable
+    // ACTIVE list but still arrives (includeArchived=true) so the form can label
+    // and preserve it rather than silently clearing the link on save.
+    renderForm({
+      vehicle: existingVehicle({ pickupLocationId: archivedLocationId }),
+      locations: [
+        ...locationOptions,
+        { id: archivedLocationId, name: 'Sakai Depot', status: 'ARCHIVED' },
+      ],
+    })
+
+    const select = screen.getByLabelText(en.pickupLocation) as HTMLSelectElement
+    expect(select.value).toBe(archivedLocationId)
+    // The preserved option shows the real archived name, not a generic label.
+    expect(screen.getByRole('option', { name: 'Sakai Depot' })).toBeInTheDocument()
+
+    const nameInput = screen.getByLabelText(en.name)
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Toyota Aqua G')
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1))
+    expect(mockedUpdate).toHaveBeenCalledWith(
+      'veh_1',
+      expect.objectContaining({ pickupLocationId: archivedLocationId }),
+    )
+  })
+
+  it('edit mode: labels a preserved pickup location generically when it is absent from the fetched list (#1262)', async () => {
+    const user = userEvent.setup()
+    mockedUpdate.mockResolvedValue(existingVehicle())
+    // The assigned location is missing from the returned options entirely (a
+    // partial fetch or a stale link), so there is no name to show. The form
+    // still preserves the id and labels it with the generic "current" fallback
+    // rather than silently clearing the link on save.
+    const missingLocationId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+    renderForm({ vehicle: existingVehicle({ pickupLocationId: missingLocationId }) })
+
+    const select = screen.getByLabelText(en.pickupLocation) as HTMLSelectElement
+    expect(select.value).toBe(missingLocationId)
+    expect(screen.getByRole('option', { name: en.pickupLocationCurrent })).toBeInTheDocument()
+
+    const nameInput = screen.getByLabelText(en.name)
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Toyota Aqua G')
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1))
+    expect(mockedUpdate).toHaveBeenCalledWith(
+      'veh_1',
+      expect.objectContaining({ pickupLocationId: missingLocationId }),
+    )
+  })
+
+  it('shows a hint instead of the picker when the operator has no locations (#1262)', () => {
+    // Zero locations is the exact state that leaves a UI-created car invisible to
+    // renters; surface a hint rather than silently hiding the field.
+    renderForm({ locations: [] })
+
+    expect(screen.queryByLabelText(en.pickupLocation)).not.toBeInTheDocument()
+    expect(screen.getByText(en.pickupLocationEmptyHint)).toBeInTheDocument()
   })
 })
