@@ -886,7 +886,8 @@
     },
     "operatorContext": {
       "label": "Operator",
-      "all": "All operators"
+      "all": "All operators",
+      "badge": "Operator: {name}"
     }
   },
   "messaging": {
