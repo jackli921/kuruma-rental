@@ -93,13 +93,14 @@ Files: `packages/web/src/routes/$locale/_business/manage/bookings/index.tsx` and
   - `operatorCalendarBlocksQueryOptions(from, to, pickedOperatorId?)` (and its fetch) -> `GET /vehicle-blocks?...&operatorId=<picked>`; the pick joins the query key.
 - `index.tsx`: thread `pickedOperatorId` (already in scope via `useOperatorContext()`) into the vehicles query, the blocks query, and the locations query.
   Because both dialogs receive `vehicles={vehicles}` from this component, the calendar columns **and** the New-Booking / Schedule-Block vehicle pickers all narrow to X in one change; block bands narrow via the blocks query.
+  The route loader already threads the pick (`loaderDeps` carries `operator: search.operator`, inherited from `_business`) and warms the picked bookings query; 5b additionally warms the picked vehicles query — `operatorCalendarVehiclesQueryOptions(deps.operator)` — so the columns share the component's cache key and never flash all-operator. Blocks are a component-level non-suspense query (not loader-warmed), so they narrow only via the component's `operatorCalendarBlocksQueryOptions(from, to, pickedOperatorId)`.
 - Gate flip: `canManualBook` and `canManageBlocks` change from `isOperatorSession(session)` to `canWriteAsOperator(session, pickedOperatorId)` (helper already exists, `packages/web/src/vite/guards.ts:59`).
 - Locations: `operatorLocationsQueryOptions(pickedOperatorId)` — the query already accepts the pick (`operatorId=<picked>` via `buildScopeParam`); the route just needs to pass it.
   Its `enabled` already follows `canManualBook`, so a picker-admin's location list turns on with the flipped gate.
 - `csrfToken` is already passed to both dialogs.
 
-Loader note: 5a threads the pick into the component query but not the route loader (`loaderDeps` omits `operator`), so the loader pre-warms the un-picked query and the component fetches the narrowed one on mount.
-5b mirrors this; whether to also thread the pick into the loader (to avoid a brief all-operator flash) is a plan-level refinement, not a design change.
+Loader note: 5a already threads the pick into the route loader — `loaderDeps` carries `operator` (inherited from the `_business` parent search) and the loader warms `operatorCalendarQueryOptions(from, to, deps.operator)` (the picked bookings query), sharing the component's cache key.
+The vehicles warm (`operatorCalendarVehiclesQueryOptions()`) is still un-picked, so 5b passes `deps.operator` there too.
 
 ## File change map (grounded against develop `be6def1f`)
 
@@ -132,7 +133,8 @@ Vehicles:
 
 Blocks (the P1 fix):
 - In-memory repo + service unit: admin narrows blocks to X; admin with no pick sees all; a scoped operator is clamped to its own; the narrow rides `vehicleBlockReadScope` so PARTNER/renter never reach it.
-- Route test (`tests/routes/vehicle-blocks.test.ts`): `?operatorId=` narrows the fleet-wide read for an admin.
+- Route test (`tests/routes/vehicle-blocks.test.ts`): `?operatorId=` narrows the fleet-wide read for an admin; a scoped operator ignores it.
+  Include **legacy STAFF/ADMIN**: the route admits them (`MANAGEMENT_READ_ROLES`) but `vehicleBlockReadScope` intentionally returns `none` for them, so they read nothing and `?operatorId=` cannot widen or redirect that — the id is dropped (`kind !== 'all'`) and the result stays empty.
 - Real-pg integration: 2 operators' blocks in range; admin narrows to one.
 
 Web unit:
