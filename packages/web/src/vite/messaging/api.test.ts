@@ -41,6 +41,7 @@ const participant = { id: 'tp_1', threadId: 'th_1', userId: 'user_renter', unrea
 const summary: ThreadSummaryDto = {
   id: 'th_1',
   bookingId: 'bk_1',
+  operatorUnreadCount: 0,
   createdAt: '2026-06-22T00:00:00.000Z',
   updatedAt: '2026-06-23T00:00:00.000Z',
   participants: [participant, { ...participant, id: 'tp_2', userId: 'user_op', unreadCount: 0 }],
@@ -50,6 +51,7 @@ const summary: ThreadSummaryDto = {
 const detail: ThreadDetailDto = {
   id: 'th_1',
   bookingId: 'bk_1',
+  operatorUnreadCount: 0,
   createdAt: '2026-06-22T00:00:00.000Z',
   updatedAt: '2026-06-23T00:00:00.000Z',
   participants: summary.participants,

@@ -1,6 +1,5 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
-import { ThreadListView } from '@/vite/messaging/ThreadListView'
-import { threadsQueryOptions, usersByIdsQueryOptions } from '@/vite/messaging/api'
+import { ThreadListView, threadsQueryOptions, usersByIdsQueryOptions } from '@/vite/messaging'
 import { sessionQueryOptions } from '@/vite/session'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import {

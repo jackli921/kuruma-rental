@@ -1,5 +1,6 @@
 import { StorefrontDetailView } from '@/vite/storefronts/StorefrontDetailView'
 import type { AvailableVehicleData, StorefrontDetailData } from '@/vite/storefronts/api'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
@@ -42,11 +43,14 @@ vi.mock('@tanstack/react-router', () => ({
 function makeVehicle(overrides: Partial<AvailableVehicleData> = {}): AvailableVehicleData {
   return {
     id: 'v1',
+    classId: 'cls-compact',
     name: 'Toyota Aqua',
     make: 'Toyota',
     model: 'Aqua',
     year: 2024,
     seats: 5,
+    luggageCapacity: null,
+    luggageSize: null,
     transmission: 'AUTO',
     acrissCode: null,
     classLabel: 'Compact',
@@ -61,6 +65,7 @@ function makeDetail(vehicles: AvailableVehicleData[]): StorefrontDetailData {
   return {
     storefront: {
       locationId: 'loc-1',
+      operatorId: 'op-best',
       name: 'Best Car Rental Osaka',
       address: '1-2-3 Namba, Osaka',
       operatorName: 'Best Car Rental',
@@ -73,15 +78,23 @@ function makeDetail(vehicles: AvailableVehicleData[]): StorefrontDetailData {
 }
 
 function renderDetail(detail: StorefrontDetailData, extra: { region?: string } = {}) {
+  // #1085 slice 5: the view now batches operator + class review aggregates via
+  // useQuery, so the test wraps in a fresh QueryClient that never retries (a
+  // missing handler would otherwise spin forever).
+  const qc = new QueryClient({
+    defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
+  })
   return render(
-    <IntlProvider locale="en" messages={en}>
-      <StorefrontDetailView
-        detail={detail}
-        from="2026-07-01T10:00"
-        to="2026-07-03T10:00"
-        {...extra}
-      />
-    </IntlProvider>,
+    <QueryClientProvider client={qc}>
+      <IntlProvider locale="en" messages={en}>
+        <StorefrontDetailView
+          detail={detail}
+          from="2026-07-01T10:00"
+          to="2026-07-03T10:00"
+          {...extra}
+        />
+      </IntlProvider>
+    </QueryClientProvider>,
   )
 }
 
@@ -136,5 +149,21 @@ describe('StorefrontDetailView', () => {
     expect(book).toHaveAttribute('data-location', 'loc-1')
     expect(book).toHaveAttribute('data-from', '2026-07-01T10:00')
     expect(book).toHaveAttribute('data-rangeto', '2026-07-03T10:00')
+  })
+
+  it('mounts a rating badge in the header and one per non-null-classId vehicle (#1085 slice 5)', () => {
+    renderDetail(
+      makeDetail([
+        makeVehicle({ id: 'v-classed', classId: 'cls-compact' }),
+        // A classless vehicle (classId null) must render NO class badge at all —
+        // the parent suppresses the line, distinct from a rated-zero class.
+        makeVehicle({ id: 'v-classless', classId: null, name: 'Mystery Wagon' }),
+      ]),
+    )
+    // While the aggregate fetch is in flight (no mock wired) every badge is a
+    // skeleton. Exactly 2: header + the classed vehicle. The classless vehicle
+    // contributes nothing — that's the null-classId carve-out the plan calls out.
+    const skeletons = screen.getAllByTestId('rating-badge-skeleton')
+    expect(skeletons.length).toBe(2)
   })
 })

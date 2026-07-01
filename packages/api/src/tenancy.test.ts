@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { CallerContext } from './middleware/auth'
-import { bookingReadScope, narrowReadToOperator, vehicleBlockReadScope } from './tenancy'
+import {
+  bookingReadScope,
+  narrowReadToOperator,
+  threadReadScope,
+  vehicleBlockReadScope,
+} from './tenancy'
 
 describe('bookingReadScope', () => {
   it('scopes a PARTNER to its own channel (source=TRIP_COM), not all bookings', () => {
@@ -93,5 +98,41 @@ describe('narrowReadToOperator', () => {
     // this helper without re-clamping (the #1272 trap) fails loudly, not silently.
     const renter: CallerContext = { userId: 'r1', role: 'RENTER' }
     expect(narrowReadToOperator(renter, 'op-target')).toBe('op-target')
+  })
+})
+
+describe('threadReadScope', () => {
+  it('keeps PLATFORM_ADMIN unscoped (sees all threads)', () => {
+    const admin: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+    expect(threadReadScope(admin)).toEqual({ kind: 'all' })
+  })
+
+  it('scopes an OPERATOR_OWNER to its tenant', () => {
+    const op: CallerContext = { userId: 'u1', role: 'OPERATOR_OWNER', operatorId: 'op-1' }
+    expect(threadReadScope(op)).toEqual({ kind: 'operator', operatorId: 'op-1' })
+  })
+
+  it('scopes an OPERATOR_STAFF to its tenant', () => {
+    const op: CallerContext = { userId: 'u2', role: 'OPERATOR_STAFF', operatorId: 'op-2' }
+    expect(threadReadScope(op)).toEqual({ kind: 'operator', operatorId: 'op-2' })
+  })
+
+  it('fails closed for an operator missing its operatorId', () => {
+    const op: CallerContext = { userId: 'u1', role: 'OPERATOR_STAFF' }
+    expect(threadReadScope(op)).toEqual({ kind: 'none' })
+  })
+
+  it('scopes a RENTER to threads they participate in', () => {
+    const renter: CallerContext = { userId: 'r1', role: 'RENTER' }
+    expect(threadReadScope(renter)).toEqual({ kind: 'participant', userId: 'r1' })
+  })
+
+  it('scopes a PARTNER to participant-membership, NOT all threads (#1168 regression)', () => {
+    // PARTNER carries bypassScope=true for bookings/user-search, but threads are
+    // private: gating `all` on bypassScope (not PRIVILEGED_ROLES) would re-open
+    // the cross-tenant thread leak #1168 closed. A PARTNER participates in no
+    // threads, so membership-scoping yields nothing.
+    const partner: CallerContext = { userId: 'trip-com', role: 'PARTNER', bypassScope: true }
+    expect(threadReadScope(partner)).toEqual({ kind: 'participant', userId: 'trip-com' })
   })
 })

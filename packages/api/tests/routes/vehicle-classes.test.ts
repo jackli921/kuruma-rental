@@ -5,6 +5,7 @@ import { SYSTEM_CONTEXT, type UserRole } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
@@ -19,12 +20,14 @@ import { TEST_OPERATOR_ID, testResolveWriteOperatorId } from '../helpers/operato
 function buildAvailabilityService(classRepo: InMemoryVehicleClassRepository) {
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
+  const operatorRepo = new InMemoryOperatorRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    operatorRepo,
   )
-  return new VehicleClassAvailabilityService(classRepo, vehicleRepo, availabilityRepo)
+  return new VehicleClassAvailabilityService(classRepo, vehicleRepo, availabilityRepo, operatorRepo)
 }
 
 let app: Hono

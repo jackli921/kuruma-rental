@@ -158,6 +158,7 @@ describe('Booking Routes', () => {
       vehicleRepo,
       bookingRepo,
       vehicleBlockRepo,
+      new InMemoryOperatorRepository(),
     )
     classRatePlanRepo = new InMemoryClassRatePlanRepository()
 

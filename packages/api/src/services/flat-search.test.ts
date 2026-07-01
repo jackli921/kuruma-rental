@@ -62,6 +62,7 @@ beforeEach(() => {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    operatorRepo,
   )
   const regionRepo = new InMemoryRegionRepository(REGIONS)
   service = new FlatSearchService(
@@ -399,6 +400,7 @@ describe('FlatSearchService.search region filter (#394)', () => {
         vehicleRepo,
         bookingRepo,
         new InMemoryVehicleBlockRepository(),
+        operatorRepo,
       ),
     )
     const scoped = new FlatSearchService(
@@ -491,6 +493,7 @@ describe('FlatSearchService.search CLASS_COMBO producer (#464)', () => {
         vehicleRepo,
         bookingRepo,
         new InMemoryVehicleBlockRepository(),
+        operatorRepo,
       ),
       byClass,
     )
