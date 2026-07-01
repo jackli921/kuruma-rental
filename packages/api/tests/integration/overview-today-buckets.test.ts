@@ -8,7 +8,13 @@ import {
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
 import { bookingInput } from '../helpers/booking'
-import { DEFAULT_DAILY_RATE_JPY, cleanupLocations, db, seedLocation, seedVehicleClass } from './setup'
+import {
+  DEFAULT_DAILY_RATE_JPY,
+  cleanupLocations,
+  db,
+  seedLocation,
+  seedVehicleClass,
+} from './setup'
 
 // The #1102 today buckets against real Postgres so a wrong SQL predicate (JST
 // window bound, endAt-vs-effectiveEndAt, disjoint returns/overdue, the renter
@@ -37,6 +43,7 @@ describe('DrizzleOverviewRepository today buckets (real Postgres)', () => {
     const v = await vehicleRepo.create(SYSTEM_CONTEXT, {
       operatorId,
       classId,
+      pickupLocationId: locId,
       name: `TB Car ${crypto.randomUUID().slice(0, 6)}`,
       description: null,
       photos: [],
@@ -171,7 +178,9 @@ describe('DrizzleOverviewRepository today buckets (real Postgres)', () => {
 
   it('scopes to the caller — operator A never sees operator B’s pickup', async () => {
     const { today } = await overviewRepo.getOperatorOverview(ctxFor(opAId), NOW)
-    const allCodes = [...today.pickups, ...today.returns, ...today.overdue].map((r) => r.bookingCode)
+    const allCodes = [...today.pickups, ...today.returns, ...today.overdue].map(
+      (r) => r.bookingCode,
+    )
     expect(allCodes).not.toContain(code('OPB'))
   })
 
