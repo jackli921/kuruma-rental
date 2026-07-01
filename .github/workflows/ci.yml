@@ -40,6 +40,9 @@ jobs:
       - name: Check FK indexes
         run: bun run lint:fk-indexes
 
+      - name: Check operatorId tenant-anchor immutability
+        run: bun run lint:tenant-anchors
+
       - name: Check snapshot/index parity (hand-SQL drift)
         run: bun run lint:snapshot-index-parity
 

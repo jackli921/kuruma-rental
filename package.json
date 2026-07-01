@@ -20,6 +20,7 @@
     "lint:size": "bun run scripts/lint-file-size.ts",
     "lint:modules": "bun run scripts/lint-module-boundaries.ts",
     "lint:fk-indexes": "bun run scripts/lint-fk-indexes.ts",
+    "lint:tenant-anchors": "bun run scripts/lint-tenant-anchor-immutability.ts",
     "lint:snapshot-index-parity": "bun run scripts/lint-snapshot-index-parity.ts",
     "lint:i18n-parity": "bun run scripts/lint-i18n-parity.ts",
     "lint:unwrap-schema": "bun run scripts/lint-unwrap-schema.ts",
