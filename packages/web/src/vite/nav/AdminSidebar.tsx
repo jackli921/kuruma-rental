@@ -6,6 +6,7 @@ import {
   Building2,
   CalendarCheck,
   FileCheck,
+  Flag,
   LayoutDashboard,
   ShieldCheck,
   Users,
@@ -23,6 +24,7 @@ export const SIDEBAR_ITEMS = [
   { to: '/$locale/admin/documents', icon: FileCheck, labelKey: 'nav.documents' },
   { to: '/$locale/admin/customers', icon: Users, labelKey: 'nav.customers' },
   { to: '/$locale/admin/governance', icon: ShieldCheck, labelKey: 'nav.governance' },
+  { to: '/$locale/admin/feature-flags', icon: Flag, labelKey: 'nav.featureFlags' },
 ] as const
 
 // Single static className; active state is the `aria-current="page"` attribute
