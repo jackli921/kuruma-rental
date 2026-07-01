@@ -137,8 +137,11 @@ export function useCalendarFilters(knownVehicleIds: readonly string[]): Calendar
     <T extends { resourceId: string }>(events: readonly T[]): T[] =>
       events.filter((e) => {
         if (uncheckedVehicles.has(e.resourceId)) return false
-        // Blocks carry no status, so they bypass the status filter entirely (only
-        // bookings have one — `status === undefined` always passes).
+        // The generic `<T extends { resourceId }>` erases the CalendarItem
+        // discriminant (this filter is shared with filterResources), so we probe
+        // `status` structurally rather than switching on `type`. Safe because the
+        // union guarantees only bookings carry a status — a block reads `undefined`
+        // and bypasses the status filter entirely (`status === undefined` passes).
         const status = (e as { status?: OperatorBookingStatus }).status
         return status === undefined || !uncheckedStatuses.has(status)
       }),

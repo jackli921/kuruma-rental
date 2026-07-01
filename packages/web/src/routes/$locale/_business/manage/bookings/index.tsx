@@ -144,9 +144,11 @@ export function OperatorBookingsRoute() {
   // Blocks are an additive layer (not in the suspense loader): a non-suspense query
   // that degrades to empty on error/disabled, so a blocks-read failure never blanks
   // the whole calendar (the coupling that broke the portal when it read fleet-overview).
+  // Skipped on the timeline view — FleetTimeline renders no block bands (#1244), so
+  // fetching them on the default landing view would be a wasted request.
   const { data: blocks } = useQuery({
     ...operatorCalendarBlocksQueryOptions(from, to),
-    enabled: canViewBlocks,
+    enabled: canViewBlocks && view !== 'timeline',
   })
 
   const events = useMemo(() => toCalendarEvents(bookings), [bookings])
@@ -157,7 +159,7 @@ export function OperatorBookingsRoute() {
   // One union list across the vehicle axis: bookings (status-colored) + block bands.
   const items = useMemo<CalendarItem[]>(() => [...events, ...blockEvents], [events, blockEvents])
   const resources = useMemo(() => fleetToResources(vehicles), [vehicles])
-  const vehiclesById = useMemo(() => new Map(vehicles.map((v) => [v.id, v.name])), [vehicles])
+  const vehicleNamesById = useMemo(() => new Map(vehicles.map((v) => [v.id, v.name])), [vehicles])
   const manualBookingLocations = useMemo(
     () => (locationRows ?? []).map((l) => ({ id: l.id, name: l.name })),
     [locationRows],
@@ -335,7 +337,9 @@ export function OperatorBookingsRoute() {
           key={selectedBlock?.id ?? 'closed'}
           block={selectedBlock}
           onClose={() => setSelectedBlock(null)}
-          vehicleName={selectedBlock ? (vehiclesById.get(selectedBlock.resourceId) ?? null) : null}
+          vehicleName={
+            selectedBlock ? (vehicleNamesById.get(selectedBlock.resourceId) ?? null) : null
+          }
           canManage={canManageBlocks}
           csrfToken={session?.csrfToken ?? ''}
           locale={locale}
