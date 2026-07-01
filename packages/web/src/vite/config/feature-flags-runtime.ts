@@ -5,35 +5,29 @@ import {
 } from '@kuruma/shared/feature-flags/registry'
 import { queryOptions } from '@tanstack/react-query'
 import { getApiBaseUrl } from '../api-base'
-import {
-  isCancellationEnabled,
-  isFleetTimelineEnabled,
-  isMessagingEnabled,
-  isMultiCurrencyEnabled,
-  isOperatorBlocksEnabled,
-  isOperatorManualBookingEnabled,
-  isOperatorSettingsEnabled,
-  isOperatorTeamEnabled,
-  isRenterDocumentsEnabled,
-  isReviewsEnabled,
-} from './features'
 
-// Build-time default per flag. Vite statically replaces each literal
-// `import.meta.env.VITE_FEATURE_*` *inside these functions*, so we map each
-// registry key to its existing literal reader — a dynamic `import.meta.env[env]`
-// lookup would NOT be inlined. This is the fallback when the server has no
-// runtime override for a key: effective = override ?? buildDefault ?? false.
+const envOn = (value: string | undefined): boolean => value === 'true'
+
+// Build-time default per flag, read as the fallback when the server has no
+// runtime override: effective = override ?? buildDefault ?? false.
+//
+// Each entry is a LITERAL `import.meta.env.VITE_FEATURE_*` access so Vite inlines
+// it at build (a dynamic `import.meta.env[env]` lookup would not be replaced).
+// Read directly here rather than via features.ts' isXEnabled() so this module has
+// no dependency on `./features` — a consumer that partially mocks that module in
+// tests can't break the barrel that also re-exports this one. The env names are
+// pinned to the registry by the parity test (feature-flags-parity.test.ts).
 const BUILD_TIME_READERS: Record<FeatureFlagKey, () => boolean> = {
-  CANCELLATION: isCancellationEnabled,
-  OPERATOR_MANUAL_BOOKING: isOperatorManualBookingEnabled,
-  OPERATOR_TEAM: isOperatorTeamEnabled,
-  OPERATOR_SETTINGS: isOperatorSettingsEnabled,
-  RENTER_DOCUMENTS: isRenterDocumentsEnabled,
-  MESSAGING: isMessagingEnabled,
-  OPERATOR_BLOCKS: isOperatorBlocksEnabled,
-  REVIEWS: isReviewsEnabled,
-  FLEET_TIMELINE: isFleetTimelineEnabled,
-  MULTI_CURRENCY: isMultiCurrencyEnabled,
+  CANCELLATION: () => envOn(import.meta.env.VITE_FEATURE_CANCELLATION),
+  OPERATOR_MANUAL_BOOKING: () => envOn(import.meta.env.VITE_FEATURE_OPERATOR_MANUAL_BOOKING),
+  OPERATOR_TEAM: () => envOn(import.meta.env.VITE_FEATURE_OPERATOR_TEAM),
+  OPERATOR_SETTINGS: () => envOn(import.meta.env.VITE_FEATURE_OPERATOR_SETTINGS),
+  RENTER_DOCUMENTS: () => envOn(import.meta.env.VITE_FEATURE_RENTER_DOCUMENTS),
+  MESSAGING: () => envOn(import.meta.env.VITE_FEATURE_MESSAGING),
+  OPERATOR_BLOCKS: () => envOn(import.meta.env.VITE_FEATURE_OPERATOR_BLOCKS),
+  REVIEWS: () => envOn(import.meta.env.VITE_FEATURE_REVIEWS),
+  FLEET_TIMELINE: () => envOn(import.meta.env.VITE_FEATURE_FLEET_TIMELINE),
+  MULTI_CURRENCY: () => envOn(import.meta.env.VITE_FEATURE_MULTI_CURRENCY),
 }
 
 export function isBuildTimeEnabled(key: FeatureFlagKey): boolean {
