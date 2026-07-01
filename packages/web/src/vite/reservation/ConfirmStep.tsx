@@ -1,5 +1,5 @@
 import { formatJpy } from '@/lib/format'
-import { isCancellationEnabled } from '@/vite/config/features'
+import { useFeatureFlag } from '@/vite/config'
 import { IndicativeNote, useIndicative } from '@/vite/currency'
 import { useTranslations } from 'use-intl'
 import { CancellationPolicy } from './CancellationPolicy'
@@ -29,6 +29,7 @@ export function ConfirmStep({
 }: ConfirmStepProps) {
   const t = useTranslations('reservation')
   const tCurrency = useTranslations('currency')
+  const cancellationEnabled = useFeatureFlag('CANCELLATION')
   const { format: indicativeOf } = useIndicative()
   // The charge is always JPY; only flag that when a converted figure is on screen.
   const showCurrencyDisclaimer = indicativeOf(estimate.totalJpy) !== null
@@ -74,7 +75,7 @@ export function ConfirmStep({
       {/* #937: self-cancel is gated for the beta demo (#868), so don't advertise the
           tiered policy at checkout when the feature is OFF — it would promise a flow
           the booking confirmation then hides. */}
-      {isCancellationEnabled() && <CancellationPolicy pickupAt={pickupAt} />}
+      {cancellationEnabled && <CancellationPolicy pickupAt={pickupAt} />}
     </section>
   )
 }
