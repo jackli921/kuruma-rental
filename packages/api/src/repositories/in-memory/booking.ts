@@ -109,6 +109,13 @@ export class InMemoryBookingRepository implements BookingRepository {
   async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
     let results = this.scopedValues(ctx)
 
+    // #1230 slice 5a: a picker admin (all-scope) may narrow to one operator.
+    // Gated on the `all` branch (defense in depth) so a tenant/renter/partner
+    // scope ignores a stray operatorId — a foreign id can never widen (H2).
+    if (filters?.operatorId && bookingReadScope(ctx).kind === 'all') {
+      results = results.filter((b) => b.operatorId === filters.operatorId)
+    }
+
     if (filters?.status) {
       results = results.filter((b) => b.status === filters.status)
     }

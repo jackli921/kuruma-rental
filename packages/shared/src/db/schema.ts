@@ -27,3 +27,4 @@ export { documentStatusEnum, documentTypeEnum, renterDocuments } from './renter-
 export { regions, regionTypeEnum, regionStatusEnum } from './regions'
 export * from './consent'
 export * from './review'
+export * from './feature-flags'

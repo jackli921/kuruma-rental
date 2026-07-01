@@ -11,6 +11,12 @@ import enMessages from '../../../messages/en.json'
 // write was invoked with which args, not the network. base-ui's Menu portals
 // its items only when open; passthrough-mock the dropdown so the actions render
 // inline and the test can click them without driving the portal/positioner.
+// The component reads the CSRF token from the session and echoes it on every
+// cookie write (#1304); mock a fixed token so the assertions can pin it.
+vi.mock('@/vite/session', () => ({
+  useSession: () => ({ data: { csrfToken: 'test-csrf' } }),
+}))
+
 const updateVehicleStatus = vi.fn()
 const retireVehicle = vi.fn()
 vi.mock('@/vite/operator-fleet/api', async () => {
@@ -133,7 +139,12 @@ describe('FleetRowActions', () => {
     fireEvent.click(screen.getByRole('button', { name: en.maintenance.submit }))
 
     await waitFor(() => {
-      expect(updateVehicleStatus).toHaveBeenCalledWith('v9', 'MAINTENANCE', 'Brake inspection')
+      expect(updateVehicleStatus).toHaveBeenCalledWith(
+        'v9',
+        'MAINTENANCE',
+        'test-csrf',
+        'Brake inspection',
+      )
     })
   })
 
@@ -143,7 +154,7 @@ describe('FleetRowActions', () => {
     fireEvent.click(screen.getByText(en.actions.setAvailable))
 
     await waitFor(() => {
-      expect(updateVehicleStatus).toHaveBeenCalledWith('v7', 'AVAILABLE')
+      expect(updateVehicleStatus).toHaveBeenCalledWith('v7', 'AVAILABLE', 'test-csrf')
     })
     expect(retireVehicle).not.toHaveBeenCalled()
   })
@@ -160,7 +171,7 @@ describe('FleetRowActions', () => {
     fireEvent.click(confirm)
 
     await waitFor(() => {
-      expect(retireVehicle).toHaveBeenCalledWith('v3')
+      expect(retireVehicle).toHaveBeenCalledWith('v3', 'test-csrf')
     })
     expect(retireVehicle).toHaveBeenCalledTimes(1)
   })

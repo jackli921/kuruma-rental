@@ -51,6 +51,7 @@ import { Route as LocaleBusinessManageMessagesIndexRouteImport } from './routes/
 import { Route as LocaleBusinessManageFleetIndexRouteImport } from './routes/$locale/_business/manage/fleet/index'
 import { Route as LocaleBusinessManageBookingsIndexRouteImport } from './routes/$locale/_business/manage/bookings/index'
 import { Route as LocaleAdminAdminOperatorsIndexRouteImport } from './routes/$locale/_admin/admin/operators/index'
+import { Route as LocaleAdminAdminFeatureFlagsIndexRouteImport } from './routes/$locale/_admin/admin/feature-flags/index'
 import { Route as LocaleBusinessManageMessagesThreadIdRouteImport } from './routes/$locale/_business/manage/messages/$threadId'
 import { Route as LocaleBusinessManageFleetVehicleIdRouteImport } from './routes/$locale/_business/manage/fleet/$vehicleId'
 import { Route as LocaleBusinessManageBookingsBookingIdRouteImport } from './routes/$locale/_business/manage/bookings/$bookingId'
@@ -287,6 +288,12 @@ const LocaleAdminAdminOperatorsIndexRoute =
     path: '/admin/operators/',
     getParentRoute: () => LocaleAdminRoute,
   } as any)
+const LocaleAdminAdminFeatureFlagsIndexRoute =
+  LocaleAdminAdminFeatureFlagsIndexRouteImport.update({
+    id: '/admin/feature-flags/',
+    path: '/admin/feature-flags/',
+    getParentRoute: () => LocaleAdminRoute,
+  } as any)
 const LocaleBusinessManageMessagesThreadIdRoute =
   LocaleBusinessManageMessagesThreadIdRouteImport.update({
     id: '/$threadId',
@@ -352,6 +359,7 @@ export interface FileRoutesByFullPath {
   '/$locale/manage/bookings/$bookingId': typeof LocaleBusinessManageBookingsBookingIdRoute
   '/$locale/manage/fleet/$vehicleId': typeof LocaleBusinessManageFleetVehicleIdRoute
   '/$locale/manage/messages/$threadId': typeof LocaleBusinessManageMessagesThreadIdRoute
+  '/$locale/admin/feature-flags/': typeof LocaleAdminAdminFeatureFlagsIndexRoute
   '/$locale/admin/operators/': typeof LocaleAdminAdminOperatorsIndexRoute
   '/$locale/manage/bookings/': typeof LocaleBusinessManageBookingsIndexRoute
   '/$locale/manage/fleet/': typeof LocaleBusinessManageFleetIndexRoute
@@ -393,6 +401,7 @@ export interface FileRoutesByTo {
   '/$locale/manage/bookings/$bookingId': typeof LocaleBusinessManageBookingsBookingIdRoute
   '/$locale/manage/fleet/$vehicleId': typeof LocaleBusinessManageFleetVehicleIdRoute
   '/$locale/manage/messages/$threadId': typeof LocaleBusinessManageMessagesThreadIdRoute
+  '/$locale/admin/feature-flags': typeof LocaleAdminAdminFeatureFlagsIndexRoute
   '/$locale/admin/operators': typeof LocaleAdminAdminOperatorsIndexRoute
   '/$locale/manage/bookings': typeof LocaleBusinessManageBookingsIndexRoute
   '/$locale/manage/fleet': typeof LocaleBusinessManageFleetIndexRoute
@@ -442,6 +451,7 @@ export interface FileRoutesById {
   '/$locale/_business/manage/bookings/$bookingId': typeof LocaleBusinessManageBookingsBookingIdRoute
   '/$locale/_business/manage/fleet/$vehicleId': typeof LocaleBusinessManageFleetVehicleIdRoute
   '/$locale/_business/manage/messages/$threadId': typeof LocaleBusinessManageMessagesThreadIdRoute
+  '/$locale/_admin/admin/feature-flags/': typeof LocaleAdminAdminFeatureFlagsIndexRoute
   '/$locale/_admin/admin/operators/': typeof LocaleAdminAdminOperatorsIndexRoute
   '/$locale/_business/manage/bookings/': typeof LocaleBusinessManageBookingsIndexRoute
   '/$locale/_business/manage/fleet/': typeof LocaleBusinessManageFleetIndexRoute
@@ -489,6 +499,7 @@ export interface FileRouteTypes {
     | '/$locale/manage/bookings/$bookingId'
     | '/$locale/manage/fleet/$vehicleId'
     | '/$locale/manage/messages/$threadId'
+    | '/$locale/admin/feature-flags/'
     | '/$locale/admin/operators/'
     | '/$locale/manage/bookings/'
     | '/$locale/manage/fleet/'
@@ -530,6 +541,7 @@ export interface FileRouteTypes {
     | '/$locale/manage/bookings/$bookingId'
     | '/$locale/manage/fleet/$vehicleId'
     | '/$locale/manage/messages/$threadId'
+    | '/$locale/admin/feature-flags'
     | '/$locale/admin/operators'
     | '/$locale/manage/bookings'
     | '/$locale/manage/fleet'
@@ -578,6 +590,7 @@ export interface FileRouteTypes {
     | '/$locale/_business/manage/bookings/$bookingId'
     | '/$locale/_business/manage/fleet/$vehicleId'
     | '/$locale/_business/manage/messages/$threadId'
+    | '/$locale/_admin/admin/feature-flags/'
     | '/$locale/_admin/admin/operators/'
     | '/$locale/_business/manage/bookings/'
     | '/$locale/_business/manage/fleet/'
@@ -886,6 +899,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleAdminAdminOperatorsIndexRouteImport
       parentRoute: typeof LocaleAdminRoute
     }
+    '/$locale/_admin/admin/feature-flags/': {
+      id: '/$locale/_admin/admin/feature-flags/'
+      path: '/admin/feature-flags'
+      fullPath: '/$locale/admin/feature-flags/'
+      preLoaderRoute: typeof LocaleAdminAdminFeatureFlagsIndexRouteImport
+      parentRoute: typeof LocaleAdminRoute
+    }
     '/$locale/_business/manage/messages/$threadId': {
       id: '/$locale/_business/manage/messages/$threadId'
       path: '/$threadId'
@@ -926,6 +946,7 @@ interface LocaleAdminRouteChildren {
   LocaleAdminAdminRevenueRoute: typeof LocaleAdminAdminRevenueRoute
   LocaleAdminAdminIndexRoute: typeof LocaleAdminAdminIndexRoute
   LocaleAdminAdminOperatorsOperatorIdRoute: typeof LocaleAdminAdminOperatorsOperatorIdRoute
+  LocaleAdminAdminFeatureFlagsIndexRoute: typeof LocaleAdminAdminFeatureFlagsIndexRoute
   LocaleAdminAdminOperatorsIndexRoute: typeof LocaleAdminAdminOperatorsIndexRoute
 }
 
@@ -939,6 +960,8 @@ const LocaleAdminRouteChildren: LocaleAdminRouteChildren = {
   LocaleAdminAdminIndexRoute: LocaleAdminAdminIndexRoute,
   LocaleAdminAdminOperatorsOperatorIdRoute:
     LocaleAdminAdminOperatorsOperatorIdRoute,
+  LocaleAdminAdminFeatureFlagsIndexRoute:
+    LocaleAdminAdminFeatureFlagsIndexRoute,
   LocaleAdminAdminOperatorsIndexRoute: LocaleAdminAdminOperatorsIndexRoute,
 }
 

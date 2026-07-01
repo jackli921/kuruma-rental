@@ -1,6 +1,5 @@
 import { CancelBookingDialog } from '@/vite/operator-bookings/CancelBookingDialog'
 import * as api from '@/vite/operator-bookings/api'
-import { OPERATOR_BOOKINGS_KEY } from '@/vite/operator-bookings/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -36,7 +35,7 @@ describe('CancelBookingDialog', () => {
     await waitFor(() => expect(spy).toHaveBeenCalledWith('bk-1', 'csrf-tok'))
   })
 
-  it('invalidates the operator-bookings prefix and closes on success', async () => {
+  it('invalidates the booking + overview caches and closes on success', async () => {
     const user = userEvent.setup()
     vi.spyOn(api, 'cancelBooking').mockResolvedValue({} as never)
     const queryClient = new QueryClient()
@@ -46,9 +45,12 @@ describe('CancelBookingDialog', () => {
     await user.click(screen.getByRole('button', { name: c.action }))
     await user.click(screen.getByRole('button', { name: c.confirm }))
 
+    // invalidateBookingCaches refreshes the operator-bookings prefix (detail +
+    // timeline reflect CANCELLED) and the dashboard overview (#1099 Theme 4).
     await waitFor(() =>
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: OPERATOR_BOOKINGS_KEY }),
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['operator-bookings'] }),
     )
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['operator-overview'] })
     // The dialog closes on success (the confirm button only renders while open).
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: c.confirm })).not.toBeInTheDocument(),

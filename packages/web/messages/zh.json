@@ -1333,7 +1333,23 @@
       "governance": "同意治理",
       "customers": "客户",
       "operators": "运营商",
+      "featureFlags": "功能开关",
       "backToSite": "返回网站"
+    },
+    "featureFlags": {
+      "title": "功能开关",
+      "subtitle": "实时切换平台功能。其他用户将在下次加载页面时看到更改。",
+      "colFeature": "功能",
+      "colSource": "来源",
+      "colState": "状态",
+      "overridden": "已覆盖",
+      "default": "默认",
+      "runtimeLive": "实时生效",
+      "runtimeBuildOnly": "仅构建时",
+      "buildOnlyHint": "此开关尚未接入运行时控制层，切换会保存但在其迁移上线前不会生效。",
+      "toggleLabel": "切换{feature}",
+      "loadError": "无法加载功能开关。",
+      "retry": "重试"
     },
     "operators": {
       "title": "运营商",

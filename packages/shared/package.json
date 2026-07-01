@@ -8,6 +8,7 @@
     "./acriss": "./src/acriss.ts",
     "./auth/roles": "./src/auth/roles.ts",
     "./enums": "./src/enums.ts",
+    "./feature-flags/registry": "./src/feature-flags/registry.ts",
     "./i18n/locales": "./src/i18n/locales.ts",
     "./i18n/localized-text": "./src/i18n/localized-text.ts",
     "./i18n/slugify": "./src/i18n/slugify.ts",
@@ -76,7 +77,8 @@
     "./validators/operator": "./src/validators/operator.ts",
     "./validators/translation": "./src/validators/translation.ts",
     "./validators/document": "./src/validators/document.ts",
-    "./validators/provider-invite": "./src/validators/provider-invite.ts"
+    "./validators/provider-invite": "./src/validators/provider-invite.ts",
+    "./validators/feature-flags": "./src/validators/feature-flags.ts"
   },
   "scripts": {
     "test": "vitest run",

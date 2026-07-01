@@ -1,5 +1,5 @@
 import { readLocalStorage, writeLocalStorage } from '@/lib/safe-storage'
-import { isMultiCurrencyEnabled } from '@/vite/config'
+import { useFeatureFlag } from '@/vite/config'
 import { formatIndicativePrice } from '@kuruma/shared/lib/indicative-price'
 import type { FxRates } from '@kuruma/shared/types/fx'
 import { useQuery } from '@tanstack/react-query'
@@ -39,7 +39,8 @@ export function CurrencyProvider({ children }: { readonly children: React.ReactN
   // UI falls back to JPY-only — never a blocking error. Skipped entirely when the
   // multi-currency feature is gated off (#1070): no picker, no notes, so no reason
   // to pay for the FX snapshot.
-  const { data: rates } = useQuery({ ...fxRatesQueryOptions(), enabled: isMultiCurrencyEnabled() })
+  const multiCurrencyEnabled = useFeatureFlag('MULTI_CURRENCY')
+  const { data: rates } = useQuery({ ...fxRatesQueryOptions(), enabled: multiCurrencyEnabled })
   const [stored, setStored] = useState(readStoredCurrency)
   // An explicit choice wins; until then the currency is DERIVED from the locale
   // every render, so switching language updates the indicative default instead of
@@ -71,7 +72,7 @@ export function useIndicative(): { currency: string; format: (jpy: number) => st
   // The single conversion chokepoint. Gated off (#1070) → every `format` returns
   // null, so IndicativeNote and the two direct callers (which already branch on a
   // null result) show the JPY figure alone. One gate covers every price surface.
-  const enabled = isMultiCurrencyEnabled()
+  const enabled = useFeatureFlag('MULTI_CURRENCY')
   const format = useCallback(
     (jpy: number) =>
       enabled ? formatIndicativePrice(jpy, currency, rates?.rates[currency]) : null,

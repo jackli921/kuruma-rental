@@ -1,11 +1,11 @@
 import { ParseError } from '@/lib/api-error'
 import {
   LAST_SEEN_STORAGE_KEY,
-  NEW_ORDER_SCAN_QUERY_KEY,
   countNewBookings,
   fetchNewOrderBookings,
   getStoredLastSeenAt,
   markBookingsSeen,
+  newOrderScanQueryKey,
 } from '@/vite/operator-bookings/new-bookings'
 import { QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -64,7 +64,8 @@ describe('markBookingsSeen', () => {
     window.localStorage.setItem(LAST_SEEN_STORAGE_KEY, '2020-01-01T00:00:00.000Z')
     const qc = new QueryClient()
     // The scan is ordered createdAt DESC, so the head is the newest seen order.
-    qc.setQueryData(NEW_ORDER_SCAN_QUERY_KEY, [
+    // No pick here -> the no-operator scan key (mirrors markBookingsSeen(qc) below).
+    qc.setQueryData(newOrderScanQueryKey(undefined), [
       { createdAt: '2026-06-13T05:00:00.000Z' },
       { createdAt: '2026-06-13T04:00:00.000Z' },
     ])

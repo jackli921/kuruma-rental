@@ -6,8 +6,14 @@ import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
+// The bar reads the CSRF token from the session and echoes it on the bulk write
+// (#1304); mock a fixed token so the assertions can pin it.
+vi.mock('@/vite/session', () => ({
+  useSession: () => ({ data: { csrfToken: 'test-csrf' } }),
+}))
+
 // Mock the api module so the bar never hits the network. We assert the exact
-// (ids, status) tuple the bar forwards to bulkUpdateVehicleStatus.
+// (ids, status, csrf) tuple the bar forwards to bulkUpdateVehicleStatus.
 const bulkUpdateVehicleStatus = vi.fn()
 vi.mock('@/vite/operator-fleet/api', async () => {
   const actual = await vi.importActual<typeof import('@/vite/operator-fleet/api')>(
@@ -73,7 +79,11 @@ describe('BulkActionBar', () => {
     await user.click(screen.getByRole('button', { name: en.business.vehicles.form.confirm }))
 
     await waitFor(() =>
-      expect(bulkUpdateVehicleStatus).toHaveBeenCalledWith(['v1', 'v2'], 'MAINTENANCE'),
+      expect(bulkUpdateVehicleStatus).toHaveBeenCalledWith(
+        ['v1', 'v2'],
+        'MAINTENANCE',
+        'test-csrf',
+      ),
     )
     expect(bulkUpdateVehicleStatus).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1))
@@ -87,7 +97,9 @@ describe('BulkActionBar', () => {
     await user.click(screen.getByRole('button', { name: bulk.setAvailable }))
     await user.click(screen.getByRole('button', { name: en.business.vehicles.form.confirm }))
 
-    await waitFor(() => expect(bulkUpdateVehicleStatus).toHaveBeenCalledWith(['x'], 'AVAILABLE'))
+    await waitFor(() =>
+      expect(bulkUpdateVehicleStatus).toHaveBeenCalledWith(['x'], 'AVAILABLE', 'test-csrf'),
+    )
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1))
   })
 
