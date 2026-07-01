@@ -706,6 +706,10 @@ export type {
 // re-exported for callers (mirrors the payment/consent split above).
 export type { NewReview, ReviewEdit, ReviewRepository } from './types-review'
 
+// Runtime feature-flag override store (platform control plane) lives in its own
+// module; re-exported for callers.
+export type { FeatureFlagRepository } from './types-feature-flags'
+
 // Dashboard overview + fleet-overview aggregate reads (#1265) live in their own
 // module to keep this barrel under the file-size cap; re-exported for callers.
 // The projection DTOs (OperatorOverview / FleetVehicleOverview / FleetBookingSummary)
