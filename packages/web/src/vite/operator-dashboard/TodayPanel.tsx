@@ -1,8 +1,8 @@
 import { Button } from '@/components/ui/button'
 import { isOperatorSession } from '@/vite/guards'
 import {
-  OPERATOR_BOOKINGS_KEY,
   type OperatorBookingStatus,
+  invalidateBookingCaches,
   updateBookingStatus,
 } from '@/vite/operator-bookings/api'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
@@ -13,7 +13,6 @@ import { Link } from '@tanstack/react-router'
 import { AlertTriangle, LogIn, LogOut, type LucideIcon } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslations } from 'use-intl'
-import { OPERATOR_OVERVIEW_QUERY_KEY } from './api'
 
 interface TodayPanelProps {
   readonly today: TodayBuckets
@@ -69,13 +68,11 @@ export function TodayPanel({ today, vehicles, session, locale }: TodayPanelProps
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: OperatorBookingStatus }) =>
       updateBookingStatus(id, status, csrfToken),
-    // The advance changes a booking's lifecycle status, so refresh the today
-    // buckets AND the operator-bookings prefix — whose documented cascade (#616)
-    // covers the calendar, list and detail entries in one call.
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: OPERATOR_OVERVIEW_QUERY_KEY })
-      queryClient.invalidateQueries({ queryKey: OPERATOR_BOOKINGS_KEY })
-    },
+    // The advance changes a booking's lifecycle status, so refresh both the
+    // dashboard overview (today buckets + counts) and the operator-bookings prefix
+    // — whose documented cascade (#616) covers the calendar, list and detail
+    // entries in one call. Both live behind invalidateBookingCaches (#1099 Theme 4).
+    onSuccess: () => invalidateBookingCaches(queryClient),
   })
 
   const vehicleNamesById = useMemo(() => new Map(vehicles.map((v) => [v.id, v.name])), [vehicles])

@@ -16,8 +16,8 @@ import { CustomerPicker } from '@/vite/operator-bookings/CustomerPicker'
 import {
   type CalendarVehicle,
   type CustomerSearchResult,
-  OPERATOR_BOOKINGS_KEY,
   createManualBooking,
+  invalidateBookingCaches,
 } from '@/vite/operator-bookings/api'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
@@ -87,9 +87,9 @@ export function ManualBookingDialog({
         csrfToken,
       ),
     onSuccess: () => {
-      // A write invalidates the whole operator-bookings prefix; the calendar
-      // refetches and the new booking appears (no optimistic UI).
-      queryClient.invalidateQueries({ queryKey: OPERATOR_BOOKINGS_KEY })
+      // A write invalidates the operator-bookings prefix + dashboard overview; the
+      // calendar refetches and the new booking appears (no optimistic UI).
+      invalidateBookingCaches(queryClient)
       onOpenChange(false)
     },
   })
