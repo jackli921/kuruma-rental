@@ -65,6 +65,25 @@ describe('BlockDetailDialog', () => {
     expect(screen.queryByText(T.notesLabel)).toBeNull()
   })
 
+  it('renders the block window at the JST wall clock, not the browser-local one (#1250)', () => {
+    // The block bands elsewhere on the calendar are placed in JST; this detail dialog
+    // must agree, else the window label disagrees with the bar the operator clicked.
+    // 00:00Z = 09:00 JST, 04:00Z = 13:00 JST.
+    const block = {
+      ...BLOCK,
+      start: new Date('2026-07-01T00:00:00.000Z'),
+      end: new Date('2026-07-01T04:00:00.000Z'),
+    }
+    setup({ block })
+    const jstFmt = new Intl.DateTimeFormat('en', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'Asia/Tokyo',
+    })
+    const expected = `${jstFmt.format(block.start)} – ${jstFmt.format(block.end)}`
+    expect(screen.getByText(expected)).not.toBeNull()
+  })
+
   it('shows the notes row when the block carries notes', () => {
     setup({ block: { ...BLOCK, notes: 'Bay 3 lift' } })
     expect(screen.getByText(T.notesLabel)).not.toBeNull()

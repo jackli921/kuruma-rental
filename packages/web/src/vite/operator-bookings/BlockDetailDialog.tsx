@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { JST_TIME_ZONE } from '@/lib/datetime'
 import { OPERATOR_BOOKINGS_KEY, deleteBlock } from '@/vite/operator-bookings/api'
 import type { BlockCalendarEvent } from '@/vite/operator-bookings/calendar-events'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -60,7 +61,13 @@ export function BlockDetailDialog({
   if (!block) return null
 
   const culture = locale === 'zh' ? 'zh-CN' : locale
-  const fmt = new Intl.DateTimeFormat(culture, { dateStyle: 'medium', timeStyle: 'short' })
+  // #1250: pin to JST so the window label matches the JST-placed band on the calendar
+  // (block.start/end are true instants; the shared pin keeps every formatter aligned).
+  const fmt = new Intl.DateTimeFormat(culture, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: JST_TIME_ZONE,
+  })
   const windowLabel = `${fmt.format(block.start)} – ${fmt.format(block.end)}`
 
   return (
