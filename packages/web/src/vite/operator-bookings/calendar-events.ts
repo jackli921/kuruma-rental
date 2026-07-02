@@ -1,3 +1,4 @@
+import { jstWallClockToInstant, todayInJst } from '@/lib/datetime'
 import { BLOCK_KIND_CLASS, STATUS_CLASS } from '@/lib/event-colors'
 import type { CalendarBookingRow, OperatorBookingStatus } from '@/vite/operator-bookings/api'
 import type { CalendarBlockRow } from '@/vite/operator-bookings/schema'
@@ -181,7 +182,14 @@ export function shiftCalendarDate(view: CalendarView, date: Date, dir: -1 | 1): 
 }
 
 function iso(from: Date, to: Date): { from: string; to: string } {
-  return { from: from.toISOString(), to: to.toISOString() }
+  // #1250: the date-fns boundaries above are computed on the anchor's LOCAL calendar
+  // day; reinterpret that wall clock as JST so the fetched window is the Tokyo day/
+  // week/month, not the browser-local one. Off-JST the two diverge, and a browser-local
+  // window straddles two JST days — dropping bookings near JST-midnight from the query.
+  return {
+    from: jstWallClockToInstant(from).toISOString(),
+    to: jstWallClockToInstant(to).toISOString(),
+  }
 }
 
 // --- URL <-> calendar state (the route stores view/date as search params) ------
@@ -223,7 +231,10 @@ export function formatCalendarDate(date: Date): string {
  * values date-fns would silently normalize into a different day.
  */
 export function parseCalendarDate(value?: string | undefined): Date {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date()
+  // #1250: an absent/malformed param falls back to the JST calendar day, not the
+  // browser-local one — off-JST near midnight they differ, and TODAY must land on the
+  // Tokyo day the operator works in. An explicit valid day is used as given.
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return todayInJst()
   const parsed = parse(value, DATE_FMT, new Date())
-  return isValid(parsed) && format(parsed, DATE_FMT) === value ? parsed : new Date()
+  return isValid(parsed) && format(parsed, DATE_FMT) === value ? parsed : todayInJst()
 }
