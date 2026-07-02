@@ -39,7 +39,8 @@ import {
 // read is impossible from here by construction. #407 slice 4: a PLATFORM_ADMIN
 // on the dashboard picker may narrow this aggregate to one operator by appending
 // `?operatorId=X` (sent ONLY when picked; the lenient endpoint ignores no-param =
-// aggregate). The /manage/fleet page is NOT a picker route and always passes none.
+// aggregate). #1264: the /manage/fleet list is itself a picker route now, so it
+// threads the picked operator through here; an operator session still passes none.
 // Canonical write types come from @kuruma/shared so the (#526 follow-up) forms
 // stay in lockstep with the Zod validators rather than drifting a parallel copy.
 
