@@ -662,3 +662,124 @@ describe('POST /bookings via HTTP (real Postgres)', () => {
     expect(body.error).toMatch(/dropoff/i)
   })
 })
+
+// #1260: proven against real Postgres. A PLATFORM_ADMIN's bookingReadScope is
+// `all`, so DrizzleBookingRepository.findById hands it ANY operator's booking by
+// raw id — the "read-only preview" is client-side only. PATCH /:id/status must
+// therefore bind the write to the operator the admin picked via ?operatorId=.
+describe('PATCH /bookings/:id/status acting-operator binding (#1260, Drizzle)', () => {
+  const adminCtx = {
+    userId: 'admin-status-1260',
+    role: 'PLATFORM_ADMIN' as const,
+    bypassScope: true,
+  }
+  let app: ReturnType<typeof createApp>
+  let adminHeaders: Record<string, string>
+
+  beforeAll(async () => {
+    setupAuthEnv()
+    app = createApp({ bookingRepo, vehicleRepo })
+    adminHeaders = await authHeaders({ sub: adminCtx.userId, role: 'PLATFORM_ADMIN' })
+  })
+
+  async function seedConfirmed(): Promise<string> {
+    const booking = await seedBooking({ status: 'CONFIRMED' })
+    createdBookingIds.push(booking.id)
+    return booking.id
+  }
+
+  function patchStatus(id: string, operatorId?: string) {
+    const suffix = operatorId ? `?operatorId=${operatorId}` : ''
+    return app.request(`/bookings/${id}/status${suffix}`, {
+      method: 'PATCH',
+      headers: { ...adminHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'ACTIVE' }),
+    })
+  }
+
+  it('confirms the precondition: an admin resolves the foreign booking by raw id (the hole)', async () => {
+    const id = await seedConfirmed()
+    const resolved = await bookingRepo.findById(adminCtx, id)
+    expect(resolved?.operatorId).toBe(BEST_CAR_RENTAL_OPERATOR_ID)
+  })
+
+  it('rejects an admin that named no acting operator with 422 OPERATOR_REQUIRED', async () => {
+    const id = await seedConfirmed()
+    const res = await patchStatus(id)
+    expect(res.status).toBe(422)
+    const body = await res.json()
+    expect(body.code).toBe('OPERATOR_REQUIRED')
+  })
+
+  it('returns 404 (no oracle) when the admin acts as a NON-owning operator', async () => {
+    const id = await seedConfirmed()
+    const res = await patchStatus(id, SECOND_OPERATOR_ID)
+    expect(res.status).toBe(404)
+    const body = await res.json()
+    expect(body.error).toBe('Booking not found')
+    // The booking was NOT transitioned — still CONFIRMED.
+    expect((await bookingRepo.findById(adminCtx, id))?.status).toBe('CONFIRMED')
+  })
+
+  it('performs the transition when the admin acts as the OWNING operator', async () => {
+    const id = await seedConfirmed()
+    const res = await patchStatus(id, BEST_CAR_RENTAL_OPERATOR_ID)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data.status).toBe('ACTIVE')
+  })
+})
+
+// #1260: the SIBLING lifecycle write. /cancel has NO route gate, so the same
+// bypass admin could otherwise cancel ANY operator's CONFIRMED booking by raw id
+// — a refund-moving cross-tenant write, worse than /status. Bind it identically.
+describe('POST /bookings/:id/cancel acting-operator binding (#1260, Drizzle)', () => {
+  const adminCtx = {
+    userId: 'admin-cancel-1260',
+    role: 'PLATFORM_ADMIN' as const,
+    bypassScope: true,
+  }
+  let app: ReturnType<typeof createApp>
+  let adminHeaders: Record<string, string>
+
+  beforeAll(async () => {
+    setupAuthEnv()
+    app = createApp({ bookingRepo, vehicleRepo })
+    adminHeaders = await authHeaders({ sub: adminCtx.userId, role: 'PLATFORM_ADMIN' })
+  })
+
+  async function seedConfirmed(): Promise<string> {
+    const booking = await seedBooking({ status: 'CONFIRMED' })
+    createdBookingIds.push(booking.id)
+    return booking.id
+  }
+
+  function postCancel(id: string, operatorId?: string) {
+    const suffix = operatorId ? `?operatorId=${operatorId}` : ''
+    return app.request(`/bookings/${id}/cancel${suffix}`, { method: 'POST', headers: adminHeaders })
+  }
+
+  it('rejects an admin that named no acting operator with 422 OPERATOR_REQUIRED', async () => {
+    const id = await seedConfirmed()
+    const res = await postCancel(id)
+    expect(res.status).toBe(422)
+    expect((await res.json()).code).toBe('OPERATOR_REQUIRED')
+    // The booking was NOT cancelled — still CONFIRMED (no cross-tenant refund).
+    expect((await bookingRepo.findById(adminCtx, id))?.status).toBe('CONFIRMED')
+  })
+
+  it('returns 404 (no oracle) when the admin acts as a NON-owning operator', async () => {
+    const id = await seedConfirmed()
+    const res = await postCancel(id, SECOND_OPERATOR_ID)
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toBe('Booking not found')
+    expect((await bookingRepo.findById(adminCtx, id))?.status).toBe('CONFIRMED')
+  })
+
+  it('cancels when the admin acts as the OWNING operator', async () => {
+    const id = await seedConfirmed()
+    const res = await postCancel(id, BEST_CAR_RENTAL_OPERATOR_ID)
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.status).toBe('CANCELLED')
+  })
+})
