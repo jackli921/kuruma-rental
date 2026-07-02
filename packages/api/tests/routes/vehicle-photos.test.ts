@@ -11,12 +11,19 @@ import {
 import { InMemoryPhotoStorage } from '../../src/repositories/in-memory/photo-storage'
 import type { Vehicle } from '../../src/stores'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
+import { TEST_OPERATOR_ID } from '../helpers/operator'
 
 const JPEG_HEADER = [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]
 const PNG_HEADER = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]
 
+// #1260: the default caller is PLATFORM_ADMIN (authHeaders()), which reads every
+// operator's vehicles, so a photo write must name the operator it acts as via
+// ?operatorId=. Every seeded vehicle is owned by TEST_OPERATOR_ID; guard-reaching
+// requests carry ?operatorId=TEST_OPERATOR_ID. Requests that return BEFORE the
+// guard (validation, oversized, 403/401, malformed/nonexistent id) omit it.
 function vehicleInput(overrides?: Partial<Vehicle>) {
   return {
+    operatorId: TEST_OPERATOR_ID,
     name: 'Test Car',
     description: 'A test vehicle',
     photos: [] as string[],
@@ -93,7 +100,7 @@ describe('POST /vehicles/:id/photos', () => {
     const headers = await authHeaders()
     const form = makeFormData('car.jpg', 'image/jpeg', 1024)
 
-    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
+    const res = await app.request(`/vehicles/${vehicleId}/photos?operatorId=${TEST_OPERATOR_ID}`, {
       method: 'POST',
       headers,
       body: form,
@@ -201,7 +208,7 @@ describe('POST /vehicles/:id/photos', () => {
     const headers = await authHeaders()
     const form = makeFormData('extra.jpg', 'image/jpeg', 1024)
 
-    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
+    const res = await app.request(`/vehicles/${vehicleId}/photos?operatorId=${TEST_OPERATOR_ID}`, {
       method: 'POST',
       headers,
       body: form,
@@ -276,7 +283,7 @@ describe('concurrent upload race on photo cap', () => {
     // Exactly one should succeed, two should 400.
     const responses = await Promise.all(
       [0, 1, 2].map(() =>
-        ctx.app.request(`/vehicles/${v.id}/photos`, {
+        ctx.app.request(`/vehicles/${v.id}/photos?operatorId=${TEST_OPERATOR_ID}`, {
           method: 'POST',
           headers,
           body: makeFormData('extra.jpg', 'image/jpeg', 1024),
@@ -299,16 +306,15 @@ describe('upload → delete round-trip', () => {
     const headers = await authHeaders()
 
     const form = makeFormData('car.jpg', 'image/jpeg', 1024)
-    const uploadRes = await ctx.app.request(`/vehicles/${vehicle.id}/photos`, {
-      method: 'POST',
-      headers,
-      body: form,
-    })
+    const uploadRes = await ctx.app.request(
+      `/vehicles/${vehicle.id}/photos?operatorId=${TEST_OPERATOR_ID}`,
+      { method: 'POST', headers, body: form },
+    )
     expect(uploadRes.status).toBe(201)
     const uploaded: string = (await uploadRes.json()).data.uploaded[0]
 
     const deleteRes = await ctx.app.request(
-      `/vehicles/${vehicle.id}/photos?url=${encodeURIComponent(uploaded)}`,
+      `/vehicles/${vehicle.id}/photos?url=${encodeURIComponent(uploaded)}&operatorId=${TEST_OPERATOR_ID}`,
       { method: 'DELETE', headers },
     )
     expect(deleteRes.status).toBe(200)
@@ -338,7 +344,7 @@ describe('DELETE /vehicles/:id/photos?url=', () => {
     const headers = await authHeaders()
 
     const res = await app.request(
-      `/vehicles/${vehicleId}/photos?url=${encodeURIComponent('https://test.com/a.jpg')}`,
+      `/vehicles/${vehicleId}/photos?url=${encodeURIComponent('https://test.com/a.jpg')}&operatorId=${TEST_OPERATOR_ID}`,
       { method: 'DELETE', headers },
     )
 
@@ -367,7 +373,7 @@ describe('DELETE /vehicles/:id/photos?url=', () => {
     const headers = await authHeaders()
 
     const res = await app.request(
-      `/vehicles/${vehicleId}/photos?url=${encodeURIComponent('https://test.com/other.jpg')}`,
+      `/vehicles/${vehicleId}/photos?url=${encodeURIComponent('https://test.com/other.jpg')}&operatorId=${TEST_OPERATOR_ID}`,
       { method: 'DELETE', headers },
     )
 
@@ -394,5 +400,69 @@ describe('DELETE /vehicles/:id/photos?url=', () => {
     )
 
     expect(res.status).toBe(403)
+  })
+})
+
+// #1260: HTTP-level proof that the route threads ?operatorId= into the guard and
+// surfaces the denial `code`. The service-level denials live in
+// vehicle-photo-write-scope.test.ts; these lock the wiring so dropping the
+// query-thread or the code extra can't regress silently. The default caller is a
+// platform admin (all-scope), and the seeded vehicle is owned by TEST_OPERATOR_ID.
+describe('#1260 photo writes are bound to the acting operator (HTTP)', () => {
+  let app: ReturnType<typeof createTestApp>['app']
+  let vehicleId: string
+
+  beforeEach(async () => {
+    const ctx = createTestApp()
+    app = ctx.app
+    const v = await ctx.vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      vehicleInput({ photos: ['https://test.com/a.jpg'] }),
+    )
+    vehicleId = v.id
+  })
+
+  it('POST -> 422 OPERATOR_REQUIRED (code in body) when no operator is named', async () => {
+    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: makeFormData('car.jpg', 'image/jpeg', 1024),
+    })
+
+    expect(res.status).toBe(422)
+    const body = await res.json()
+    expect(body.success).toBe(false)
+    expect(body.code).toBe('OPERATOR_REQUIRED')
+  })
+
+  it('POST -> 404 when the named operator does not own the vehicle', async () => {
+    const res = await app.request(`/vehicles/${vehicleId}/photos?operatorId=op_other`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: makeFormData('car.jpg', 'image/jpeg', 1024),
+    })
+
+    expect(res.status).toBe(404)
+  })
+
+  it('DELETE -> 422 OPERATOR_REQUIRED (code in body) when no operator is named', async () => {
+    const res = await app.request(
+      `/vehicles/${vehicleId}/photos?url=${encodeURIComponent('https://test.com/a.jpg')}`,
+      { method: 'DELETE', headers: await authHeaders() },
+    )
+
+    expect(res.status).toBe(422)
+    const body = await res.json()
+    expect(body.success).toBe(false)
+    expect(body.code).toBe('OPERATOR_REQUIRED')
+  })
+
+  it('DELETE -> 404 when the named operator does not own the vehicle', async () => {
+    const res = await app.request(
+      `/vehicles/${vehicleId}/photos?url=${encodeURIComponent('https://test.com/a.jpg')}&operatorId=op_other`,
+      { method: 'DELETE', headers: await authHeaders() },
+    )
+
+    expect(res.status).toBe(404)
   })
 })
