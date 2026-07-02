@@ -63,7 +63,9 @@ describe('Maintenance Logs', () => {
 
     const vehicleService = new VehicleService(vehicleRepo, testResolveWriteOperatorId(), '')
     app = new Hono()
-    app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
+    // #1260: drive the status route as a tenant OPERATOR_OWNER so the acting-operator
+    // write guard no-ops; admin-picker binding is covered by dedicated tests.
+    app.use('*', testAuthMiddleware('operator-user', 'OPERATOR_OWNER', TEST_OPERATOR_ID))
     app.route('/', createVehicleRoutes(vehicleService, maintenanceService))
     app.route('/', createMaintenanceLogRoutes(maintenanceService))
   })
@@ -233,6 +235,7 @@ describe('Maintenance Logs', () => {
 
       const service = new MaintenanceService(vehicleRepo, maintenanceLogRepo, rollbackTransaction)
       const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
+        operatorId: TEST_OPERATOR_ID,
         name: 'Test Car',
         classId: null,
         description: null,
@@ -262,7 +265,13 @@ describe('Maintenance Logs', () => {
 
       // toggleStatus should propagate the error from the transaction
       await expect(
-        service.toggleStatus(SYSTEM_CONTEXT, vehicle.id, 'MAINTENANCE', 'Oil change'),
+        service.toggleStatus(
+          SYSTEM_CONTEXT,
+          vehicle.id,
+          'MAINTENANCE',
+          'Oil change',
+          TEST_OPERATOR_ID,
+        ),
       ).rejects.toThrow('simulated DB failure')
 
       // Vehicle status must remain AVAILABLE — rolled back

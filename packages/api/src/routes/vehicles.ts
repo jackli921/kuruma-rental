@@ -110,8 +110,13 @@ export function createVehicleRoutes(
         idResult.id,
         parsed.data.status,
         parsed.data.reason,
+        c.req.query('operatorId'),
       )
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) {
+        return fail(c, result.error, result.status, {
+          ...(result.code ? { code: result.code } : {}),
+        })
+      }
       return ok(c, result.vehicle)
     })
     .delete('/vehicles/:id', async (c) => {
