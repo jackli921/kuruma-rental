@@ -59,7 +59,14 @@ export function MobileMenu({ session, navItems }: MobileMenuProps) {
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger
         render={
-          <Button variant="ghost" size="sm" className="md:hidden" data-mobile-menu="">
+          /* #1300: icon-only on touch (label is sr-only) — the base gives the 44px
+             height floor, so pin the width to 44px too for a full WCAG 2.5.5 target. */
+          <Button
+            variant="ghost"
+            size="sm"
+            className="md:hidden pointer-coarse:min-w-11"
+            data-mobile-menu=""
+          >
             <Menu className="size-5" />
             <span className="sr-only">{t('nav.menu')}</span>
           </Button>

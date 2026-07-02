@@ -75,7 +75,9 @@ export function Navbar() {
               : {}),
           })),
         ]
-      : []
+      : // #1300: a logged-out visitor still gets the public Browse funnel link so
+        // the mobile drawer isn't empty (desktop nav shares the same array).
+        [{ to: '/$locale/search', label: t('browse') }]
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
