@@ -7,7 +7,7 @@ import {
 } from '../middleware/auth'
 import type { NotificationLogFilters } from '../services/filters'
 import type { NotificationService } from '../services/notification'
-import { fail, ok, parseId } from './helpers'
+import { fail, ok, parseCrossOperatorRead, parseId } from './helpers'
 
 /**
  * Operator-portal surface for the outbound-notification ledger (#393): a scoped
@@ -32,15 +32,7 @@ export function createNotificationRoutes(service: NotificationService) {
       const bookingId = c.req.query('bookingId')
       if (bookingId) filters.bookingId = bookingId
 
-      // Cross-operator read scope is enforced in the service (audit M3): a bypass
-      // caller that names neither operatorId nor includeAll is rejected there, so a
-      // forgotten guard here can't leak every operator's notifications. Operator
-      // callers auto-scope at the repo.
-      const read = {
-        operatorId: c.req.query('operatorId'),
-        includeAll: c.req.query('includeAll') === 'true',
-      }
-      return ok(c, await service.findAll(ctx, read, filters))
+      return ok(c, await service.findAll(ctx, parseCrossOperatorRead(c), filters))
     })
     .post('/notifications/:id/resend', async (c) => {
       const user = requireUser(c)

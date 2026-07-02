@@ -17,7 +17,9 @@ import type { ResolveWriteOperatorId } from '../tenancy'
 import {
   fail,
   ok,
+  parseArchivableFilters,
   parseBody,
+  parseCrossOperatorRead,
   parseId,
   parseLocale,
   parseScopedCreate,
@@ -47,21 +49,9 @@ export function createAddOnRoutes(
       if (!locale.ok) return locale.response
 
       const ctx = toCallerContext(user)
-      const filters: AddOnFilters = {}
+      const filters: AddOnFilters = { ...parseArchivableFilters(c) }
 
-      const status = c.req.query('status')
-      if (status === 'ACTIVE' || status === 'ARCHIVED') filters.status = status
-      if (c.req.query('includeArchived') === 'true') filters.includeArchived = true
-
-      // Cross-operator read scope is enforced in the service (audit M3): a bypass
-      // caller that names neither operatorId nor includeAll is rejected there, so a
-      // forgotten guard here can't leak every operator's private config. Operator
-      // callers auto-scope; any operatorId they pass is ignored at the repo.
-      const read = {
-        operatorId: c.req.query('operatorId'),
-        includeAll: c.req.query('includeAll') === 'true',
-      }
-      return ok(c, await service.findAll(ctx, read, filters, locale.locale))
+      return ok(c, await service.findAll(ctx, parseCrossOperatorRead(c), filters, locale.locale))
     })
     .get('/add-ons/:id', async (c) => {
       const user = requireUser(c)
