@@ -78,6 +78,16 @@ export class InMemoryProviderInviteRepository implements ProviderInviteRepositor
     return revoked
   }
 
+  // #1277 C1 guard: find any live (PENDING) invite for an email, across ALL
+  // operators. An email already invited anywhere blocks a fresh operator grant
+  // from minting a duplicate membership. Case-insensitive to match DB semantics.
+  async findPendingByEmail(email: string): Promise<ProviderInvite | undefined> {
+    const target = email.toLowerCase()
+    return [...this.store.values()].find(
+      (i) => i.status === 'PENDING' && i.email.toLowerCase() === target,
+    )
+  }
+
   // #904 slice 2: PENDING-only guard. A revoke that lands first leaves the invite
   // REVOKED; a racing accept then finds no PENDING row and is a no-op, so it can
   // never flip REVOKED -> ACCEPTED (mirrors the drizzle WHERE status='PENDING').

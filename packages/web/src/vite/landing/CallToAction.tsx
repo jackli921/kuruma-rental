@@ -26,7 +26,7 @@ export function CallToAction() {
             {t('heading')}
           </h2>
           <p className="mt-4 text-lg text-white/80">{t('description')}</p>
-          <div className="mt-8">
+          <div className="mt-8 flex flex-wrap gap-4">
             <Link
               to="/$locale/search"
               params={{ locale }}
@@ -37,6 +37,16 @@ export function CallToAction() {
             >
               {t('button')}
               <ArrowRight className="size-4 ml-2" />
+            </Link>
+            <Link
+              to="/$locale/business/register"
+              params={{ locale }}
+              className={cn(
+                buttonVariants({ variant: 'outline', size: 'lg' }),
+                'border-white/70 bg-transparent text-white hover:bg-white/10 rounded-xl px-8 h-12 text-base font-semibold',
+              )}
+            >
+              {t('operatorCta')}
             </Link>
           </div>
         </div>

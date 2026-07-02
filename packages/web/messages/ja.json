@@ -905,6 +905,35 @@
       "label": "事業者",
       "all": "すべての事業者",
       "badge": "事業者: {name}"
+    },
+    "register": {
+      "title": "Kurumaにあなたの事業を掲載する",
+      "subtitle": "レンタカー事業について教えてください。すべての申請を審査します。",
+      "form": {
+        "businessName": "事業者名",
+        "contactName": "担当者名",
+        "contactEmail": "メールアドレス",
+        "contactPhone": "電話番号",
+        "serviceArea": "サービスエリア（市区町村・都道府県）",
+        "fleetSize": "保有台数（概算）",
+        "website": "ウェブサイト（任意）",
+        "licenseNumber": "事業許可番号（任意）",
+        "businessType": "事業形態（任意）",
+        "message": "その他ご連絡事項（任意）",
+        "consent": "申請に関するご連絡を受け取ることに同意します",
+        "submit": "申請を送信する",
+        "submitting": "送信中...",
+        "individual": "個人",
+        "company": "法人"
+      },
+      "errors": {
+        "generic": "申請を送信できませんでした。もう一度お試しください。",
+        "duplicate": "このメールアドレスの申請またはアカウントはすでに存在します。"
+      },
+      "success": {
+        "title": "申請を受け付けました",
+        "body": "ありがとうございます - {email} 宛にご連絡いたします。"
+      }
     }
   },
   "messaging": {
@@ -1232,7 +1261,8 @@
     "cta": {
       "heading": "日本を探索する準備はできましたか？",
       "description": "車両を閲覧して数分で予約。ピックアップの72時間前まで無料キャンセル。",
-      "button": "車を見つける"
+      "button": "車を見つける",
+      "operatorCta": "ビジネスを掲載する"
     },
     "footer": {
       "copyright": "クルマレンタル 全著作権所有。",
@@ -1336,7 +1366,36 @@
       "customers": "顧客",
       "operators": "事業者",
       "featureFlags": "機能フラグ",
-      "backToSite": "サイトに戻る"
+      "backToSite": "サイトに戻る",
+      "applications": "申請"
+    },
+    "applications": {
+      "title": "事業者申請",
+      "subtitle": "新規事業者のオンボーディング申請を確認・対応します。",
+      "empty": "審査待ちの申請はありません。",
+      "contactLabel": "担当者",
+      "emailLabel": "メールアドレス",
+      "phoneLabel": "電話番号",
+      "serviceAreaLabel": "サービスエリア",
+      "fleetSizeLabel": "想定車両台数",
+      "businessTypeLabel": "事業形態",
+      "websiteLabel": "ウェブサイト",
+      "messageLabel": "メッセージ",
+      "submittedLabel": "申請日",
+      "reasonLabel": "却下理由",
+      "reject": "却下",
+      "error": "却下を記録できませんでした。もう一度お試しください。",
+      "approve": "承認",
+      "approving": "承認中…",
+      "inviteReadyLabel": "招待リンク",
+      "inviteReadyHint": "このワンタイムリンクを事業者に送信してオンボーディングを完了してください。",
+      "copy": "コピー",
+      "copied": "コピーしました",
+      "approved": "承認済み",
+      "alreadyReviewed": "この申請はすでに審査済みか、メールアドレスがすでに事業者に登録されています。",
+      "approveFailed": "申請を承認できませんでした。もう一度お試しください。",
+      "loadError": "申請キューを読み込めませんでした。",
+      "retry": "再試行"
     },
     "featureFlags": {
       "title": "機能フラグ",

@@ -905,6 +905,35 @@
       "label": "Operator",
       "all": "All operators",
       "badge": "Operator: {name}"
+    },
+    "register": {
+      "title": "List your business on Kuruma",
+      "subtitle": "Tell us about your rental business. We review every application.",
+      "form": {
+        "businessName": "Business name",
+        "contactName": "Contact name",
+        "contactEmail": "Email",
+        "contactPhone": "Phone",
+        "serviceArea": "Service area (city/prefecture)",
+        "fleetSize": "Estimated fleet size",
+        "website": "Website (optional)",
+        "licenseNumber": "Business license number (optional)",
+        "businessType": "Business type (optional)",
+        "message": "Anything else? (optional)",
+        "consent": "I agree to be contacted about my application",
+        "submit": "Submit application",
+        "submitting": "Submitting...",
+        "individual": "Individual",
+        "company": "Company"
+      },
+      "errors": {
+        "generic": "Couldn't submit your application. Please try again.",
+        "duplicate": "An application or account already exists for this email."
+      },
+      "success": {
+        "title": "Application received",
+        "body": "Thanks - we'll reach out at {email}."
+      }
     }
   },
   "messaging": {
@@ -1232,7 +1261,8 @@
     "cta": {
       "heading": "Ready to explore Japan?",
       "description": "Browse our fleet and book your car in minutes. Free cancellation up to 72 hours before pickup.",
-      "button": "Find your car"
+      "button": "Find your car",
+      "operatorCta": "List your business"
     },
     "footer": {
       "copyright": "Kuruma Rental. All rights reserved.",
@@ -1336,7 +1366,36 @@
       "customers": "Customers",
       "operators": "Operators",
       "featureFlags": "Feature flags",
-      "backToSite": "Back to site"
+      "backToSite": "Back to site",
+      "applications": "Applications"
+    },
+    "applications": {
+      "title": "Operator applications",
+      "subtitle": "Review and triage new operator onboarding requests.",
+      "empty": "No applications are awaiting review.",
+      "contactLabel": "Contact",
+      "emailLabel": "Email",
+      "phoneLabel": "Phone",
+      "serviceAreaLabel": "Service area",
+      "fleetSizeLabel": "Fleet size",
+      "businessTypeLabel": "Business type",
+      "websiteLabel": "Website",
+      "messageLabel": "Message",
+      "submittedLabel": "Submitted",
+      "reasonLabel": "Rejection reason",
+      "reject": "Reject",
+      "error": "Couldn't record the rejection. Try again.",
+      "approve": "Approve",
+      "approving": "Approving…",
+      "inviteReadyLabel": "Invitation link",
+      "inviteReadyHint": "Send this one-time link to the operator to finish onboarding.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "approved": "Approved",
+      "alreadyReviewed": "This application was already reviewed, or the email already belongs to an operator.",
+      "approveFailed": "Couldn't approve the application. Try again.",
+      "loadError": "Couldn't load the applications queue.",
+      "retry": "Retry"
     },
     "featureFlags": {
       "title": "Feature flags",

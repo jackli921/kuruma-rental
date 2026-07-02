@@ -354,6 +354,12 @@ Bun.serve({
     // booking's thread without blocking; an empty inbox keeps this newly-reached
     // authenticated page quiet (no 404 retry storm) and renders no "Message host" link.
     if (url.pathname === '/threads') return ok([])
+    // Public operator registration (#1277). The web form POSTs here (credentials
+    // omitted); echo a PENDING application so the success panel renders. Duplicate/
+    // validation paths are covered by the unit + real-DB lanes.
+    if (url.pathname === '/operator-applications' && req.method === 'POST') {
+      return ok({ id: crypto.randomUUID(), status: 'PENDING' })
+    }
 
     // Create a booking (#392). The web sends the slice-6 contract; the server
     // derives renterId/operatorId/snapshots. We reflect the chosen insurance so

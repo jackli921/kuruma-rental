@@ -687,6 +687,13 @@
       "when": 1783030190614,
       "tag": "0097_catalog_insurance_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1783032888677,
+      "tag": "0098_operator_registration",
+      "breakpoints": true
     }
   ]
 }
