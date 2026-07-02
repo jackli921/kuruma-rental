@@ -1,3 +1,4 @@
+import { JST_TIME_ZONE } from '@/lib/datetime'
 import { useSession } from '@/vite/session'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
@@ -17,7 +18,11 @@ function FloatRow({ float, csrfToken }: { float: RawOperatorBooking; csrfToken: 
   const t = useTranslations('business.bookings.calendar.sidebar.floats')
   const candidatesQuery = useQuery(substitutionCandidatesQueryOptions(float.id))
 
-  const windowLabel = `${new Date(float.startAt).toLocaleDateString()} – ${new Date(float.endAt).toLocaleDateString()}`
+  // #1250: pin the day to JST so this calendar-sidebar label agrees with the
+  // JST-anchored bands/timeline — off-JST a near-midnight float would show the wrong day.
+  const jstDate = (iso: string): string =>
+    new Date(iso).toLocaleDateString(undefined, { timeZone: JST_TIME_ZONE })
+  const windowLabel = `${jstDate(float.startAt)} – ${jstDate(float.endAt)}`
   const renterLabel = float.renter?.name ?? float.renter?.email ?? null
 
   return (
