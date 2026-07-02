@@ -285,9 +285,16 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
         ? { code: parsed.data.reason.code, note: parsed.data.reason.note || null }
         : null
 
-      const result = await service.cancel(ctx, idResult.id, reason)
+      // #1260: /cancel has no route gate, so a bypass admin could otherwise cancel
+      // ANY operator's booking (a refund-moving cross-tenant write). Bind it to the
+      // picked operator via ?operatorId=; renters/operators are read-scope clamped
+      // and ignore it. `undefined` keeps the service's default `now`.
+      const actingOperatorId = c.req.query('operatorId')
+      const result = await service.cancel(ctx, idResult.id, reason, undefined, actingOperatorId)
       if (!result.ok) {
-        return fail(c, result.error, result.status)
+        return fail(c, result.error, result.status, {
+          ...(result.code ? { code: result.code } : {}),
+        })
       }
 
       return ok(c, result.booking, 200, { cancellation: result.cancellation })

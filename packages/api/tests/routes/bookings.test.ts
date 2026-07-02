@@ -443,7 +443,9 @@ describe('Booking Routes', () => {
       // Cancel one
       const listRes = await app.request('/bookings')
       const allBookings = await listRes.json()
-      await app.request(`/bookings/${allBookings.data[0].id}/cancel`, { method: 'POST' })
+      await app.request(`/bookings/${allBookings.data[0].id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       const from = futureDate(20)
       const to = futureDate(50)
@@ -749,7 +751,7 @@ describe('Booking Routes', () => {
       const allRes = await app.request('/bookings')
       const allBody = await allRes.json()
       const firstId = allBody.data[0].id
-      await app.request(`/bookings/${firstId}/cancel`, { method: 'POST' })
+      await app.request(`/bookings/${firstId}/cancel?operatorId=${OPERATOR}`, { method: 'POST' })
 
       const res = await app.request('/bookings?status=CONFIRMED&limit=10')
       const body = await res.json()
@@ -1066,7 +1068,9 @@ describe('Booking Routes', () => {
       const first = await createBooking(validBookingInput())
       const created = await first.json()
 
-      await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       const res = await createBooking(validBookingInput())
       expect(res.status).toBe(201)
@@ -1400,7 +1404,9 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       const res = await app.request(`/bookings/${created.data.id}/status?operatorId=${OPERATOR}`, {
         method: 'PATCH',
@@ -1462,7 +1468,11 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      // #1260: the default app is a PLATFORM_ADMIN (bypass); /cancel now binds the
+      // write to the booking's operator via ?operatorId= just like /status.
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       expect(res.status).toBe(200)
 
@@ -1476,7 +1486,7 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: { code: 'TRIP_CANCELLED', note: 'flight cancelled' } }),
@@ -1491,7 +1501,7 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: { code: 'CHANGE_OF_PLANS', note: null } }),
@@ -1505,7 +1515,7 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: { code: 'OTHER', note: '   ' } }),
@@ -1552,7 +1562,9 @@ describe('Booking Routes', () => {
         body: JSON.stringify({ status: 'COMPLETED' }),
       })
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       expect(res.status).toBe(409)
 
@@ -1571,6 +1583,54 @@ describe('Booking Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(false)
       expect(body.error).toBe('Booking not found')
+    })
+
+    // #1260: /cancel has no route gate, so the bypass admin must name the operator
+    // it acts as — otherwise it could cancel any tenant's booking (refund-moving).
+    it('rejects a bypass admin that named no acting operator with 422 OPERATOR_REQUIRED', async () => {
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+
+      expect(res.status).toBe(422)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.code).toBe('OPERATOR_REQUIRED')
+    })
+
+    it('returns 404 (no oracle) when the admin acts as an operator that does not own it', async () => {
+      const WRONG_OPERATOR = '00000000-0000-4000-8000-0000000000c2'
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(
+        `/bookings/${created.data.id}/cancel?operatorId=${WRONG_OPERATOR}`,
+        { method: 'POST' },
+      )
+
+      expect(res.status).toBe(404)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('Booking not found')
+    })
+
+    // The regression guard for expanding the fix to /cancel: a renter self-cancel
+    // is renter-scoped, so the booking guard clears it — no ?operatorId= required.
+    it('still lets a renter self-cancel their own booking without naming an operator', async () => {
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const renterApp = new Hono()
+      renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
+
+      const res = await renterApp.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      expect(body.data.status).toBe('CANCELLED')
     })
 
     // Cancellation fee tiers. The vehicle's 10,000 JPY/day rate gives the 24h
@@ -1600,7 +1660,9 @@ describe('Booking Routes', () => {
       )
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -1620,7 +1682,9 @@ describe('Booking Routes', () => {
       )
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -1636,7 +1700,9 @@ describe('Booking Routes', () => {
       )
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       expect(res.status).toBe(200)
       const body = await res.json()

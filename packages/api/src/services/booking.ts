@@ -210,7 +210,8 @@ export class BookingService {
     bookingId: string,
     reason: CancellationReason | null = null,
     now: Date = new Date(),
+    actingOperatorId?: string,
   ): Promise<CancelResult> {
-    return this.lifecycle.cancel(ctx, bookingId, reason, now)
+    return this.lifecycle.cancel(ctx, bookingId, reason, now, actingOperatorId)
   }
 }

@@ -32,7 +32,11 @@ import { InMemoryBookingEventRepository } from '../../src/repositories/in-memory
 import type { RunInTransaction, TransactionRepos } from '../../src/repositories/types'
 import { BookingService } from '../../src/services/booking'
 import type { Booking } from '../../src/stores'
-import { assertFleetWriteWithinOperator, fleetWriteDenialResult } from '../../src/tenancy'
+import {
+  assertBookingWriteWithinOperator,
+  assertFleetWriteWithinOperator,
+  fleetWriteDenialResult,
+} from '../../src/tenancy'
 
 const OP_A = 'op-write-scope-a'
 const RENTER_ID = 'renter-write-scope-1'
@@ -65,6 +69,43 @@ describe('assertFleetWriteWithinOperator — role keying (#1260)', () => {
 
   it('is a no-op for a tenant operator even with a stray acting id', () => {
     expect(assertFleetWriteWithinOperator(operatorCtxA, 'op-else', 'op-else-2')).toBeNull()
+  })
+})
+
+// The booking guard keys on the RESOLVED read scope (bookingReadScope === 'all'),
+// NOT !isOperatorRole. Bookings are private: only the bypass tier reads `all`, so
+// only it can reach a foreign booking by raw id. The difference matters because
+// /cancel (unlike /status) has no route gate and admits renters + legacy STAFF —
+// both renter-scoped for bookings — who must never be forced to name an operator.
+describe('assertBookingWriteWithinOperator — bypass keying (#1260)', () => {
+  it('denies the bypass admin (all scope) that named no operator', () => {
+    expect(assertBookingWriteWithinOperator(adminCtx, OP_A, undefined)).toEqual({
+      kind: 'operator-required',
+    })
+  })
+
+  it('denies the bypass admin acting as a non-owning operator', () => {
+    expect(assertBookingWriteWithinOperator(adminCtx, OP_A, 'op-else')).toEqual({
+      kind: 'not-in-scope',
+    })
+  })
+
+  it('allows the bypass admin acting as the owning operator', () => {
+    expect(assertBookingWriteWithinOperator(adminCtx, OP_A, OP_A)).toBeNull()
+  })
+
+  it('is a no-op for a renter self-cancelling (renter scope, not all)', () => {
+    const renterCtx: CallerContext = { userId: RENTER_ID, role: 'RENTER', bypassScope: false }
+    expect(assertBookingWriteWithinOperator(renterCtx, OP_A, undefined)).toBeNull()
+  })
+
+  it('is a no-op for a legacy STAFF (renter-scoped for bookings, unlike fleet)', () => {
+    const legacyStaffCtx: CallerContext = { userId: 's', role: 'STAFF', bypassScope: false }
+    expect(assertBookingWriteWithinOperator(legacyStaffCtx, OP_A, undefined)).toBeNull()
+  })
+
+  it('is a no-op for a tenant operator even with a stray acting id', () => {
+    expect(assertBookingWriteWithinOperator(operatorCtxA, 'op-else', 'op-else-2')).toBeNull()
   })
 })
 
@@ -114,6 +155,42 @@ describe('BookingService.updateStatus — operator write scope (#1260)', () => {
     const { service, booking } = await setup()
     const res = await service.updateStatus(operatorCtxA, booking.id, 'ACTIVE', 'op-else')
     expect(res).toMatchObject({ ok: true })
+  })
+})
+
+// cancel is the SIBLING lifecycle write. Unlike updateStatus it has no route gate
+// and serves renters (self-cancel), so the guard must clear renters while still
+// binding the bypass admin — the crux the booking guard's scope keying delivers.
+const CANCEL_NOW = new Date('2027-06-01T00:00:00Z') // 30 days before START -> free tier
+
+describe('BookingService.cancel — operator write scope (#1260)', () => {
+  it('rejects a bypass admin who named no acting operator with 422 OPERATOR_REQUIRED', async () => {
+    const { service, booking } = await setup()
+    const res = await service.cancel(adminCtx, booking.id, null, CANCEL_NOW)
+    expect(res).toMatchObject({ ok: false, status: 422, code: 'OPERATOR_REQUIRED' })
+  })
+
+  it('rejects a bypass admin acting as the WRONG operator with 404 (no existence oracle)', async () => {
+    const { service, booking } = await setup()
+    const res = await service.cancel(adminCtx, booking.id, null, CANCEL_NOW, 'op-not-owner')
+    expect(res).toMatchObject({ ok: false, status: 404, error: 'Booking not found' })
+  })
+
+  it('lets a bypass admin acting as the OWNING operator cancel', async () => {
+    const { service, booking } = await setup()
+    const res = await service.cancel(adminCtx, booking.id, null, CANCEL_NOW, OP_A)
+    expect(res).toMatchObject({ ok: true })
+    if (!res.ok) throw new Error('expected ok')
+    expect(res.booking.status).toBe('CANCELLED')
+  })
+
+  it('still lets a renter self-cancel their own booking without naming an operator', async () => {
+    const { service, booking } = await setup()
+    const renterCtx: CallerContext = { userId: RENTER_ID, role: 'RENTER', bypassScope: false }
+    const res = await service.cancel(renterCtx, booking.id, null, CANCEL_NOW)
+    expect(res).toMatchObject({ ok: true })
+    if (!res.ok) throw new Error('expected ok')
+    expect(res.booking.status).toBe('CANCELLED')
   })
 })
 

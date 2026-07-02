@@ -15,7 +15,7 @@ import type {
   VehicleRepository,
 } from '../repositories/types'
 import type { Booking, Vehicle } from '../stores'
-import { assertFleetWriteWithinOperator, fleetWriteDenialResult } from '../tenancy'
+import { assertBookingWriteWithinOperator, fleetWriteDenialResult } from '../tenancy'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
 import { composeBookingTotal, rentalDays } from './booking-pricing-helpers'
 import type { CancelResult, StatusTransitionResult, SubstituteResult } from './booking-types'
@@ -418,7 +418,7 @@ export class BookingLifecycleService {
 
     // #1260: a bypass admin reads every operator's bookings, so bind this write
     // to the operator it picked — no pick -> 422, wrong pick -> 404 (no oracle).
-    const denial = assertFleetWriteWithinOperator(ctx, booking.operatorId, actingOperatorId)
+    const denial = assertBookingWriteWithinOperator(ctx, booking.operatorId, actingOperatorId)
     if (denial) return fleetWriteDenialResult(denial, 'Booking not found')
 
     const allowedTransitions = VALID_BOOKING_TRANSITIONS[booking.status] ?? []
@@ -497,11 +497,19 @@ export class BookingLifecycleService {
     bookingId: string,
     reason: CancellationReason | null = null,
     now: Date = new Date(),
+    actingOperatorId?: string,
   ): Promise<CancelResult> {
     const booking = await this.bookingRepo.findById(ctx, bookingId)
     if (!booking) {
       return { ok: false, status: 404, error: 'Booking not found' }
     }
+
+    // #1260: /cancel has no route gate, so a bypass admin could cancel ANY
+    // operator's booking by raw id (a refund-moving cross-tenant write). Bind it
+    // to the picked operator, exactly like updateStatus. Renters self-cancel are
+    // renter-scoped, so the booking guard clears them (no operatorId required).
+    const denial = assertBookingWriteWithinOperator(ctx, booking.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, 'Booking not found')
 
     if (booking.status !== 'CONFIRMED') {
       return {

@@ -729,3 +729,57 @@ describe('PATCH /bookings/:id/status acting-operator binding (#1260, Drizzle)', 
     expect(body.data.status).toBe('ACTIVE')
   })
 })
+
+// #1260: the SIBLING lifecycle write. /cancel has NO route gate, so the same
+// bypass admin could otherwise cancel ANY operator's CONFIRMED booking by raw id
+// — a refund-moving cross-tenant write, worse than /status. Bind it identically.
+describe('POST /bookings/:id/cancel acting-operator binding (#1260, Drizzle)', () => {
+  const adminCtx = {
+    userId: 'admin-cancel-1260',
+    role: 'PLATFORM_ADMIN' as const,
+    bypassScope: true,
+  }
+  let app: ReturnType<typeof createApp>
+  let adminHeaders: Record<string, string>
+
+  beforeAll(async () => {
+    setupAuthEnv()
+    app = createApp({ bookingRepo, vehicleRepo })
+    adminHeaders = await authHeaders({ sub: adminCtx.userId, role: 'PLATFORM_ADMIN' })
+  })
+
+  async function seedConfirmed(): Promise<string> {
+    const booking = await seedBooking({ status: 'CONFIRMED' })
+    createdBookingIds.push(booking.id)
+    return booking.id
+  }
+
+  function postCancel(id: string, operatorId?: string) {
+    const suffix = operatorId ? `?operatorId=${operatorId}` : ''
+    return app.request(`/bookings/${id}/cancel${suffix}`, { method: 'POST', headers: adminHeaders })
+  }
+
+  it('rejects an admin that named no acting operator with 422 OPERATOR_REQUIRED', async () => {
+    const id = await seedConfirmed()
+    const res = await postCancel(id)
+    expect(res.status).toBe(422)
+    expect((await res.json()).code).toBe('OPERATOR_REQUIRED')
+    // The booking was NOT cancelled — still CONFIRMED (no cross-tenant refund).
+    expect((await bookingRepo.findById(adminCtx, id))?.status).toBe('CONFIRMED')
+  })
+
+  it('returns 404 (no oracle) when the admin acts as a NON-owning operator', async () => {
+    const id = await seedConfirmed()
+    const res = await postCancel(id, SECOND_OPERATOR_ID)
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toBe('Booking not found')
+    expect((await bookingRepo.findById(adminCtx, id))?.status).toBe('CONFIRMED')
+  })
+
+  it('cancels when the admin acts as the OWNING operator', async () => {
+    const id = await seedConfirmed()
+    const res = await postCancel(id, BEST_CAR_RENTAL_OPERATOR_ID)
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.status).toBe('CANCELLED')
+  })
+})
