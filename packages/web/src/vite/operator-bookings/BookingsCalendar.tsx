@@ -6,10 +6,9 @@ import { CalendarToolbar } from '@/vite/operator-bookings/CalendarToolbar'
 import {
   type CalendarItem,
   type CalendarResource,
-  type CalendarView,
   calendarItemClassName,
-  operatorViews,
 } from '@/vite/operator-bookings/calendar-events'
+import { type CalendarView, operatorViews } from '@/vite/operator-bookings/calendar-view'
 import { endOfWeek, startOfWeek } from 'date-fns'
 import { useCallback, useMemo } from 'react'
 import { Calendar, type EventProps, type SlotInfo, type View } from 'react-big-calendar'
