@@ -210,7 +210,7 @@ describe('actor derivation from JWT', () => {
     expect(res.status).toBe(201)
   })
 
-  it('a platform admin can cancel any booking', async () => {
+  it('a platform admin cancels a booking only when bound to its operator (#1260)', async () => {
     const { app, vehicleRepo, classId, locationId } = await createTestApp()
     const renterHeaders = await authHeaders({ sub: 'renter-user', role: 'RENTER' })
     const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'PLATFORM_ADMIN' })
@@ -252,10 +252,20 @@ describe('actor derivation from JWT', () => {
     })
     const booking = await createRes.json()
 
-    const cancelRes = await app.request(`/bookings/${booking.data.id}/cancel`, {
+    // #1260: a platform admin (bypass) reads every operator's bookings, so it must
+    // bind the cancel to the operator it acts as. Unbound the write is refused
+    // (422); bound to the OWNING operator it proceeds. This replaces the old
+    // "can cancel ANY booking" behaviour — the cross-tenant hole this closes.
+    const unbound = await app.request(`/bookings/${booking.data.id}/cancel`, {
       method: 'POST',
       headers: staffHeaders,
     })
+    expect(unbound.status).toBe(422)
+
+    const cancelRes = await app.request(
+      `/bookings/${booking.data.id}/cancel?operatorId=${TEST_OPERATOR_ID}`,
+      { method: 'POST', headers: staffHeaders },
+    )
     expect(cancelRes.status).toBe(200)
   })
 })

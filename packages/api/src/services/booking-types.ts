@@ -88,7 +88,7 @@ export type SubstituteResult =
 
 export type StatusTransitionResult =
   | { ok: true; booking: Booking }
-  | { ok: false; status: 400 | 404 | 409; error: string }
+  | { ok: false; status: 400 | 404 | 409 | 422; error: string; code?: ErrorCode }
 
 export type CancelResult =
   | {
@@ -96,4 +96,4 @@ export type CancelResult =
       booking: Booking
       cancellation: ReturnType<typeof calculateCancellationFee>
     }
-  | { ok: false; status: 404 | 409; error: string }
+  | { ok: false; status: 404 | 409 | 422; error: string; code?: ErrorCode }
