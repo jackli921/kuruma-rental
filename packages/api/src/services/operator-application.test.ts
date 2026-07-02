@@ -5,7 +5,7 @@ import { InMemoryOperatorApplicationRepository } from '../repositories/in-memory
 import { InMemoryOperatorMembershipRepository } from '../repositories/in-memory/operator-membership'
 import { InMemoryProviderInviteRepository } from '../repositories/in-memory/provider-invite'
 import { InMemoryUserRepository } from '../repositories/in-memory/user'
-import type { ProviderInvite } from '../stores'
+import type { Operator, OperatorApplication, ProviderInvite } from '../stores'
 import { OperatorApplicationService } from './operator-application'
 
 const input = {
@@ -63,7 +63,7 @@ describe('OperatorApplicationService.list + reject', () => {
     const b = await service.submit({ ...input, contactEmail: 'other@example.com' })
     vi.useRealTimers()
 
-    const all = await service.list()
+    const all = await service.list({ limit: 50, offset: 0 })
     // b has a later createdAt so it sorts first (newest-first)
     expect(all).toHaveLength(2)
     expect(all[0]?.id).toBe(b.id)
@@ -119,11 +119,11 @@ describe('OperatorApplicationService.list + reject', () => {
     const toReject = await service.submit({ ...input, contactEmail: 'reject@example.com' })
     await service.reject(toReject.id, 'admin-1', 'no')
 
-    const onlyPending = await service.list('PENDING')
+    const onlyPending = await service.list({ status: 'PENDING', limit: 50, offset: 0 })
     expect(onlyPending).toHaveLength(1)
     expect(onlyPending[0]?.id).toBe(pending.id)
 
-    const onlyRejected = await service.list('REJECTED')
+    const onlyRejected = await service.list({ status: 'REJECTED', limit: 50, offset: 0 })
     expect(onlyRejected).toHaveLength(1)
     expect(onlyRejected[0]?.id).toBe(toReject.id)
   })
@@ -145,16 +145,23 @@ describe('OperatorApplicationService.approve', () => {
   }
 
   function setupApprove() {
+    // External Maps so the transactional runApproval below can snapshot + restore
+    // them, faithfully emulating the real runTx rollback boundary in production.
     const inviteStore = new Map<string, ProviderInvite>()
-    const applications = new InMemoryOperatorApplicationRepository()
-    const operators = new InMemoryOperatorRepository()
+    const operatorStore = new Map<string, Operator>()
+    const applicationStore = new Map<string, OperatorApplication>()
+    const applications = new InMemoryOperatorApplicationRepository(applicationStore)
+    const operators = new InMemoryOperatorRepository(operatorStore)
     const invites = new InMemoryProviderInviteRepository(inviteStore)
     const users = new InMemoryUserRepository()
     const memberships = new InMemoryOperatorMembershipRepository()
     const audit = vi.fn()
 
-    // Passthrough: no real transaction boundary in tests (single-threaded, no races).
-    const runOperatorApproval = <T>(
+    // Transactional passthrough: snapshot the mutable stores, run the approval
+    // callback, and roll the stores back if it throws — so a race-fence throw
+    // (markApprovedIfPending -> undefined) or an exhausted slug retry leaves no
+    // orphaned operator/invite, exactly as the real DB transaction guarantees.
+    const runOperatorApproval = async <T>(
       fn: (repos: {
         users: typeof users
         memberships: typeof memberships
@@ -162,7 +169,19 @@ describe('OperatorApplicationService.approve', () => {
         operators: typeof operators
         applications: typeof applications
       }) => Promise<T>,
-    ) => fn({ users, memberships, invites, operators, applications })
+    ): Promise<T> => {
+      const opSnapshot = new Map(operatorStore)
+      const appSnapshot = new Map(applicationStore)
+      const inviteSnapshot = new Map(inviteStore)
+      try {
+        return await fn({ users, memberships, invites, operators, applications })
+      } catch (err) {
+        restoreStore(operatorStore, opSnapshot)
+        restoreStore(applicationStore, appSnapshot)
+        restoreStore(inviteStore, inviteSnapshot)
+        throw err
+      }
+    }
 
     const service = new OperatorApplicationService(applications, audit, runOperatorApproval, {
       webBaseUrl: 'https://app.example.com',
@@ -243,14 +262,82 @@ describe('OperatorApplicationService.approve', () => {
     expect((await repos.operators.list()).length).toBe(1)
   })
 
-  it('maps a concurrent unique-violation inside the tx to a 409 ConflictError', async () => {
+  it('retries once on a concurrent operators.slug race, then provisions successfully', async () => {
     const { service, repos } = setupApprove()
     const { id } = await repos.applications.create(base)
-    // Simulate a concurrent approval winning the operators.slug unique index.
+
+    // First attempt loses the operators_slug_unique race; the retry re-resolves a
+    // fresh slug against the now-committed row and succeeds (#1371b). The minted
+    // invite is reused across attempts, so only one invite exists at the end.
+    const realCreate = repos.operators.create.bind(repos.operators)
+    let attempts = 0
+    repos.operators.create = (data) => {
+      attempts += 1
+      if (attempts === 1) {
+        return Promise.reject(
+          Object.assign(new Error('duplicate key value violates unique constraint'), {
+            code: '23505',
+            constraint_name: 'operators_slug_unique',
+          }),
+        )
+      }
+      return realCreate(data)
+    }
+
+    const r = await service.approve(id, 'admin-1')
+
+    expect(attempts).toBe(2)
+    expect(await repos.operators.findBySlug(r.operatorSlug)).toMatchObject({
+      name: base.businessName,
+    })
+    expect(repos.inviteStore.size).toBe(1)
+    expect(await repos.applications.findById(id)).toMatchObject({ status: 'APPROVED' })
+  })
+
+  it('surfaces a distinct retryable 409 — never "already reviewed" — when the slug race persists', async () => {
+    const { service, repos } = setupApprove()
+    const { id } = await repos.applications.create(base)
+
+    // Every attempt loses the slug race: after SLUG_ATTEMPTS the loser gets an
+    // accurate, retryable message — critically NOT the misleading review conflict
+    // the old catch-all mapping produced (#1371b).
     repos.operators.create = () =>
-      Promise.reject(Object.assign(new Error('dup'), { code: '23505' }))
-    await expect(service.approve(id, 'admin-1')).rejects.toThrow(ConflictError)
-    await expect(service.approve(id, 'admin-1')).rejects.toThrow('already reviewed')
+      Promise.reject(
+        Object.assign(new Error('duplicate key value violates unique constraint'), {
+          code: '23505',
+          constraint_name: 'operators_slug_unique',
+        }),
+      )
+
+    const err = await service.approve(id, 'admin-1').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    const message = err instanceof Error ? err.message : String(err)
+    expect(message).toMatch(/could not allocate a unique operator slug/)
+    expect(message).not.toMatch(/already reviewed/)
+    // Rolled back: the application is left PENDING and nothing was provisioned,
+    // so a genuine retry can still succeed.
+    expect(await repos.applications.findById(id)).toMatchObject({ status: 'PENDING' })
+    expect((await repos.operators.list()).length).toBe(0)
+    expect(repos.inviteStore.size).toBe(0)
+  })
+
+  it('race fence: markApprovedIfPending -> undefined rolls back the operator + invite', async () => {
+    const { service, repos } = setupApprove()
+    const { id } = await repos.applications.create(base)
+
+    // A concurrent approval won the atomic claim: our tx created the operator +
+    // invite, then the fence returns undefined -> ConflictError -> full rollback.
+    repos.applications.markApprovedIfPending = () => Promise.resolve(undefined)
+
+    const err = await service.approve(id, 'admin-1').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    const message = err instanceof Error ? err.message : String(err)
+    expect(message).toMatch(/already reviewed/)
+    // Rollback proof: nothing the tx created survives.
+    expect((await repos.operators.list()).length).toBe(0)
+    expect(repos.inviteStore.size).toBe(0)
+    // The pre-existing application row is left PENDING for a real retry.
+    expect(await repos.applications.findById(id)).toMatchObject({ status: 'PENDING' })
   })
 
   it('C1 — blocks approval when contactEmail already has a live pending invite', async () => {
@@ -278,6 +365,13 @@ describe('OperatorApplicationService.approve', () => {
     await expect(service.approve(id, 'admin-1')).rejects.toThrow(/invited/)
   })
 })
+
+// Roll a Map store back to a saved snapshot — the rollback half of the test's
+// transactional runApproval (see setupApprove).
+function restoreStore<V>(store: Map<string, V>, saved: Map<string, V>): void {
+  store.clear()
+  for (const [k, v] of saved) store.set(k, v)
+}
 
 function makeService(
   repo: InMemoryOperatorApplicationRepository,

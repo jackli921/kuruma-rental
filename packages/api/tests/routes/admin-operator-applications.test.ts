@@ -150,6 +150,43 @@ describe('GET /admin/operator-applications', () => {
     })
     expect(res.status).toBe(400)
   })
+
+  test('?limit=0 is rejected (400) — the page is always capped, never unbounded', async () => {
+    const res = await harness.app.request('/admin/operator-applications?limit=0', {
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  test('?limit above the 100 max is rejected (400)', async () => {
+    const res = await harness.app.request('/admin/operator-applications?limit=101', {
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  test('?limit caps the returned page and ?offset walks to the next one', async () => {
+    const first = await seedApplication(harness.app)
+    const second = await seedApplication(harness.app, {
+      contactEmail: 'second@example.com',
+      businessName: 'Second Rentals',
+    })
+
+    const capped = await harness.app.request('/admin/operator-applications?limit=1', {
+      headers: await bearer(ADMIN),
+    })
+    const cappedBody = (await capped.json()) as { data: Array<{ id: string }> }
+    expect(cappedBody.data).toHaveLength(1)
+    // Newest-first: the second seed is the head of the queue.
+    expect(cappedBody.data[0]?.id).toBe(second.id)
+
+    const nextPage = await harness.app.request('/admin/operator-applications?limit=1&offset=1', {
+      headers: await bearer(ADMIN),
+    })
+    const nextBody = (await nextPage.json()) as { data: Array<{ id: string }> }
+    expect(nextBody.data).toHaveLength(1)
+    expect(nextBody.data[0]?.id).toBe(first.id)
+  })
 })
 
 describe('POST /admin/operator-applications/:id/reject', () => {
