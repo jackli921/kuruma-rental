@@ -1,5 +1,9 @@
 import type { AuditLogEntry } from '../stores'
 import type { OperatorProfileAuditEvent } from './operator'
+import type {
+  OperatorApplicationApprovedAuditEvent,
+  OperatorApplicationRejectedAuditEvent,
+} from './operator-application'
 import type { OperatorMemberDeactivatedAuditEvent } from './operator-team'
 import type { ProviderInviteAuditEvent } from './provider-invite'
 
@@ -11,6 +15,8 @@ export type AuditEvent =
   | ProviderInviteAuditEvent
   | OperatorProfileAuditEvent
   | OperatorMemberDeactivatedAuditEvent
+  | OperatorApplicationApprovedAuditEvent
+  | OperatorApplicationRejectedAuditEvent
 
 // The injected sink the composition root wires to a fire-and-forget durable
 // insert. Wider than the per-service ports (RecordProviderInviteAudit etc.), so
@@ -51,6 +57,26 @@ export function toAuditRow(event: AuditEvent): AuditRow {
         actorUserId: event.actorUserId,
         operatorId: event.operatorId,
         targetId: event.targetUserId,
+        field: null,
+        oldValue: null,
+        newValue: null,
+      }
+    case 'OPERATOR_APPLICATION_APPROVED':
+      return {
+        kind: 'OPERATOR_APPLICATION_APPROVED',
+        actorUserId: event.actorUserId,
+        operatorId: event.operatorId,
+        targetId: event.applicationId,
+        field: null,
+        oldValue: null,
+        newValue: null,
+      }
+    case 'OPERATOR_APPLICATION_REJECTED':
+      return {
+        kind: 'OPERATOR_APPLICATION_REJECTED',
+        actorUserId: event.actorUserId,
+        operatorId: null,
+        targetId: event.applicationId,
         field: null,
         oldValue: null,
         newValue: null,

@@ -61,4 +61,41 @@ describe('toAuditRow', () => {
       newValue: null,
     })
   })
+
+  it('maps an OPERATOR_APPLICATION_APPROVED event, setting operatorId and routing applicationId to targetId', () => {
+    const event: AuditEvent = {
+      type: 'OPERATOR_APPLICATION_APPROVED',
+      actorUserId: 'admin-1',
+      operatorId: 'op-new',
+      applicationId: 'app-42',
+    }
+
+    expect(toAuditRow(event)).toEqual({
+      kind: 'OPERATOR_APPLICATION_APPROVED',
+      actorUserId: 'admin-1',
+      operatorId: 'op-new',
+      targetId: 'app-42',
+      field: null,
+      oldValue: null,
+      newValue: null,
+    })
+  })
+
+  it('maps an OPERATOR_APPLICATION_REJECTED event, leaving operatorId null and routing applicationId to targetId', () => {
+    const event: AuditEvent = {
+      type: 'OPERATOR_APPLICATION_REJECTED',
+      actorUserId: 'a',
+      applicationId: 'x',
+    }
+
+    expect(toAuditRow(event)).toEqual({
+      kind: 'OPERATOR_APPLICATION_REJECTED',
+      actorUserId: 'a',
+      operatorId: null,
+      targetId: 'x',
+      field: null,
+      oldValue: null,
+      newValue: null,
+    })
+  })
 })

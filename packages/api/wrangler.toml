@@ -79,6 +79,15 @@ namespace_id = "1005"
 simple.limit = 1
 simple.period = 10
 
+# Per-IP rate limit for the public operator application endpoint (#1277).
+# Caps spam submissions at 5/60s per IP — realistic for legitimate applicants,
+# too low to flood the inbox via automation.
+[[ratelimits]]
+name = "OPERATOR_APPLICATION_LIMITER"
+namespace_id = "1006"
+simple.limit = 5
+simple.period = 60
+
 # R2 buckets — R2 enabled on the account + buckets created 2026-06-14.
 # VEHICLE_PHOTOS: public car photos, served via VEHICLE_PHOTOS_PUBLIC_URL (below).
 # The composition root uses R2PhotoStorage only when BOTH the binding and that var
