@@ -2,10 +2,17 @@ import { formatJpy } from '@/lib/format'
 import { VehicleDetail } from '@/vite/operator-fleet/VehicleDetail'
 import type { VehicleDetailResponse } from '@/vite/operator-fleet/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
 
 const detailMsg = enMessages.business.vehicles.detail
 const statusLabels = enMessages.business.vehicles.fleet.status
@@ -73,16 +80,25 @@ function detail(overrides: Partial<VehicleDetailResponse> = {}): VehicleDetailRe
   }
 }
 
-function renderDetail(d: VehicleDetailResponse, canWrite = true) {
+function renderDetail(d: VehicleDetailResponse, canWrite = true, pickedOperatorId?: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
-        <VehicleDetail detail={d} locale="en" canWrite={canWrite} />
+        <VehicleDetail
+          detail={d}
+          locale="en"
+          canWrite={canWrite}
+          pickedOperatorId={pickedOperatorId}
+        />
       </IntlProvider>
     </QueryClientProvider>,
   )
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('VehicleDetail', () => {
   it('renders the vehicle identity, stats, upcoming booking and utilization', () => {
@@ -144,5 +160,24 @@ describe('VehicleDetail', () => {
     expect(screen.getByText('0%')).toBeInTheDocument()
     expect(screen.getByText('--')).toBeInTheDocument()
     expect(screen.queryByText(/Alice Tanaka/)).not.toBeInTheDocument()
+  })
+
+  it('forwards pickedOperatorId to the edit sheet; edit dropdowns scope to the VEHICLE operator (#1264)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderDetail(detail({ operatorId: 'op-veh' }), true, 'op-pick')
+    fireEvent.click(screen.getByRole('button', { name: detailMsg.editVehicle }))
+
+    // Edit mode ⇒ dropdowns scope to the VEHICLE's operator, not the pick.
+    await waitFor(() => {
+      const classCall = fetchMock.mock.calls.find(([u]) =>
+        String(u).includes('/vehicle-classes/manage'),
+      )
+      expect(classCall).toBeDefined()
+      expect(new URL(String(classCall![0]), 'http://x').searchParams.get('operatorId')).toBe(
+        'op-veh',
+      )
+    })
   })
 })

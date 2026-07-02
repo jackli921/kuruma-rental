@@ -1,12 +1,11 @@
 import type { FleetFilterState } from '@/lib/fleet-filters'
 import { PageSkeleton } from '@/vite/PageSkeleton'
-import { isOperatorSession } from '@/vite/guards'
+import { useOperatorScope } from '@/vite/operator-context'
 import { OperatorFleetView } from '@/vite/operator-fleet/OperatorFleetView'
 import {
   operatorFleetQueryOptions,
   vehicleClassOptionsQueryOptions,
 } from '@/vite/operator-fleet/api'
-import { sessionQueryOptions } from '@/vite/session'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
@@ -26,23 +25,27 @@ function validateSearch(search: Record<string, unknown>): FleetSearch {
 }
 
 // Operator fleet management (#526). URL `/<locale>/manage/fleet` — behind the
-// `_business` guard, so only business roles reach it; tenant scoping is
-// server-side (CallerContext), the client passes no operatorId. The loader
-// prefetches into the query cache (no FOUC); the component reads the same
-// options via useSuspenseQuery. This foundation ships the read-only list; the
-// CRUD / filters / bulk / photo slices are mounted here at integration (#526).
-// The loader also prefetches the operator's vehicle-class options so the grid
-// view (#561) can group by class with no "Unassigned" flash, and so the edit
-// sheet's class dropdown is a warm-cache read — both behind this route's
-// pendingComponent rather than each component owning its own loading state.
-// Lives at `fleet/index` (not `fleet.tsx`) so the sibling `fleet/$vehicleId`
-// detail route (#527) can coexist; the URL is unchanged.
+// `_business` guard, so only business roles reach it. An OPERATOR_* session is
+// tenant-scoped server-side (no operatorId sent); a bypass admin using the
+// operator-context picker (#1264) narrows both reads to the picked operator via
+// the `?operator` param, and writes/labels follow the derived scope. The loader
+// prefetches into the query cache (no FOUC); the component reads the same options
+// via useSuspenseQuery. The class-options prefetch lets the grid view (#561) group
+// by class with no "Unassigned" flash and warms the edit sheet's dropdown — both
+// behind this route's pendingComponent rather than each component owning its own
+// loading state. Lives at `fleet/index` (not `fleet.tsx`) so the sibling
+// `fleet/$vehicleId` detail route (#527) can coexist; the URL is unchanged.
 export const Route = createFileRoute('/$locale/_business/manage/fleet/')({
   validateSearch,
-  loader: ({ context }) =>
+  // `operator` is validated/retained on the parent `_business` route and merges
+  // into this route's search at runtime; widen the type so tsc sees it (#1264).
+  loaderDeps: ({ search }: { search: FleetSearch & { operator?: string | undefined } }) => ({
+    operator: search.operator,
+  }),
+  loader: ({ context, deps }) =>
     Promise.all([
-      context.queryClient.ensureQueryData(operatorFleetQueryOptions()),
-      context.queryClient.ensureQueryData(vehicleClassOptionsQueryOptions()),
+      context.queryClient.ensureQueryData(operatorFleetQueryOptions(deps.operator)),
+      context.queryClient.ensureQueryData(vehicleClassOptionsQueryOptions(deps.operator)),
     ]),
   pendingComponent: PageSkeleton,
   errorComponent: OperatorFleetError,
@@ -52,18 +55,16 @@ export const Route = createFileRoute('/$locale/_business/manage/fleet/')({
 export function OperatorFleetRoute() {
   const t = useTranslations('business.vehicles.fleet')
   const { locale } = Route.useParams()
-  const { data: vehicles } = useSuspenseQuery(operatorFleetQueryOptions())
-  const { data: classOptions } = useSuspenseQuery(vehicleClassOptionsQueryOptions())
-  const { data: session } = useSuspenseQuery(sessionQueryOptions())
+  // The operator-context scope narrows every read/write to the picked operator
+  // (or, unpicked, the tenant-scoped/all-operators aggregate) and drives the
+  // write gate + all-mode labeling — mirroring classes (#583) / locations (#581).
+  const scope = useOperatorScope()
+  const { data: vehicles } = useSuspenseQuery(operatorFleetQueryOptions(scope.pickedOperatorId))
+  const { data: classOptions } = useSuspenseQuery(
+    vehicleClassOptionsQueryOptions(scope.pickedOperatorId),
+  )
   const { expiringSoon } = Route.useSearch()
   const initialFilters: FleetFilterState = expiringSoon ? { expiringSoon: true } : {}
-
-  // Bypass roles (PLATFORM_ADMIN / legacy STAFF·ADMIN — no operatorId) read the
-  // fleet cross-operator for oversight but cannot write: every create/edit/bulk
-  // write needs a single target tenant they don't carry, and the form has no
-  // operator picker (the API 422s such a write). So the page is read-only for
-  // them, mirroring classes (#583) and locations (#581).
-  const canWrite = isOperatorSession(session)
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -75,7 +76,7 @@ export function OperatorFleetRoute() {
         <OperatorFleetView
           vehicles={vehicles}
           classOptions={classOptions}
-          canWrite={canWrite}
+          scope={scope}
           locale={locale}
           initialFilters={initialFilters}
         />
