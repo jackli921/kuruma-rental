@@ -2,7 +2,7 @@
 
 > Design doc. Rescopes #1071 (originally "ETC toll card add-on + indicative toll-cost transparency").
 > Status: draft for review 2026-07-02. Branch `docs/add-on-per-day-pricing` off develop `376698a9`.
-> Architect review folded in 2026-07-02 (verdict: sound-with-changes) — see the pricing-math optional-field fix, the reworked slice boundaries, and the named #1315 conflict loci below.
+> Architect + two design-review passes folded in 2026-07-02 (verdicts: sound-with-changes / revise-light; no critical/high) — pricing-math optional-field fix, reworked slice boundaries (entity read-projection before capture; write path last), named #1315 conflict loci, the operator-alert email surface, the `StorefrontAddOnData` wire trio, the compose/derive round-trip test, and the `z.input`-vs-`z.infer` default caveat.
 
 ## Problem
 
@@ -72,6 +72,7 @@ Adding per-day means threading one flag from the operator's add-on row, through 
 - `packages/shared/src/db/add-on.ts` — `addOnPricingModelEnum = pgEnum('add_on_pricing_model', ADD_ON_PRICING_MODELS)`; add `pricingModel: addOnPricingModelEnum('pricingModel').notNull().default('FLAT')` to `add_on_options`.
 - `packages/shared/src/db/booking-types.ts` — `AddOnSnapshot` gains `pricingModel?: AddOnPricingModel` (optional; legacy omit -> `'FLAT'` on read).
 - `packages/api/src/stores.ts` `AddOn` and `packages/shared/src/types/add-on.ts` `OperatorAddOnData` gain `pricingModel`.
+- `packages/shared/src/db/seed-data/add-ons.ts` — add `pricingModel` to the `Pick` and seed the **ETC card as `PER_DAY`** (the motivating example), else with `DEFAULT 'FLAT'` the feature ships invisible in the demo.
 
 ### Pricing math (the money path)
 
@@ -84,7 +85,10 @@ Adding per-day means threading one flag from the operator's add-on row, through 
 
 ### API
 
-- `validators/add-on.ts` — `createAddOnSchema` gains `pricingModel: z.enum(ADD_ON_PRICING_MODELS).default('FLAT')` (default keeps existing callers valid); `updateAddOnSchema` gains an optional `pricingModel` so cadence is editable.
+- `validators/add-on.ts` — `createAddOnSchema` gains `pricingModel: z.enum(ADD_ON_PRICING_MODELS).default('FLAT')`; `updateAddOnSchema` gains an optional `pricingModel` so cadence is editable.
+  Caveat (design-review P2): the `.default()` protects the **runtime** API boundary (an untyped or 3rd-party POST omitting the field parses to `'FLAT'`), but `CreateAddOnInput = z.infer<typeof createAddOnSchema>` is the **output** type, where a defaulted field is **required** — so a typed caller that builds a `CreateAddOnInput` body without `pricingModel` (e.g. `AddAddOnDialog.tsx`) would fail tsc.
+  Resolve by typing request DTOs as `z.input<typeof createAddOnSchema>` (the input type keeps the defaulted field optional); the operator dialog also passes `pricingModel` explicitly from the toggle in the enablement slice.
+  (Contract drift: a defaulted Zod field guards inbound JSON, not the exported TS request type — check every `z.infer` consumer, not just `safeParse`.)
 - `services/add-on.ts` — thread `pricingModel` through `create`, `update`, and the wire projection.
 - `repositories/drizzle/add-on.ts` + `in-memory/add-on.ts` — read/write the new column.
 - `services/booking-creation.ts` — capture `addOn.pricingModel` into the `AddOnSnapshot` at submit.
@@ -92,37 +96,40 @@ Adding per-day means threading one flag from the operator's add-on row, through 
 ### Web
 
 - Operator `AddOnForm.tsx` — a Flat / Per-day toggle (radio); `AddOnRow.tsx` — a cadence badge ("550 yen / day" vs "5,000 yen flat").
+  The operator read schema `vite/operator-add-ons/api.ts` `addOnSchema` (`satisfies z.ZodType<OperatorAddOnData>`) and the API `wire-contract.test.ts` fence gain `pricingModel` too — tsc catches the type, the fence pins the wire.
 - `vite/reservation/pricing.ts` — `ReservationEstimateInput.addOnPricesJpy: readonly number[]` becomes an object array carrying `pricingModel`, and the estimate applies `* days` for per-day.
   This is a breaking signature change: every caller and test updates, notably `ReservationWizard.tsx`.
-  The reservation add-on wire DTO (`ReservationAddOn` in `vite/reservation/api.ts`) and its server projection must also carry `pricingModel`, or the wizard cannot populate the estimate.
+  The add-on wire contract must carry `pricingModel` end-to-end, or the wizard estimate silently under-quotes a per-day add-on while the server charges more (the #855 desync).
+  `ReservationAddOn` is only an alias of the shared `StorefrontAddOnData` (`packages/shared/src/types/storefront.ts`), so **three names change together**: the shared type, its producer `packages/api/src/services/storefront-detail.ts`, and the web parse `reservationAddOnSchema` (`vite/reservation/api.ts`, `satisfies z.ZodType<StorefrontAddOnData>`).
 - **Every add-on display surface** renders the per-day line as `unit x N days` (missing one makes the itemized breakdown fail to sum to the stored total for a per-day booking):
   - `AddOnsStep.tsx` — a "/ day" suffix in the picker.
   - `ConfirmStep.tsx` — the confirm-step breakdown.
   - `bookings/BookingConfirmationView.tsx` — the renter receipt.
-  - `operator-bookings/OperatorBookingDetail.tsx` — the operator's own booking detail (was missing from the first draft; it maps `addOnSnapshot` and prints `priceJpy` flat today).
-  - `vite/bookings/api.ts` `addOnSnapshotSchema` — the zod snapshot schema gains `pricingModel` (note it already drifts from the `AddOnSnapshot` type by omitting `templateId?/nameLocale?`; add `pricingModel` deliberately).
+  - `operator-bookings/OperatorBookingDetail.tsx` — the operator's own booking detail (maps `addOnSnapshot`, prints `priceJpy` flat today).
+  - `packages/api/src/services/email/templates/operator-alert.ts` — the operator new-booking **email**. The dispatcher passes `booking.addOnSnapshot` into the renderer at `notification-dispatcher.ts:509`, and the renderer prints each add-on at `priceJpy` (`operator-alert.ts:61`); a PER_DAY add-on must render `unit x N days`. The total row already uses `totalPriceJpy` (correct), so this is a misleading line item in an operator-facing money notification, not a wrong charge. The renderer already has `startAt/endAt` on `OperatorAlertData` to derive `days`. Needs a unit test.
+  - `vite/bookings/api.ts` `addOnSnapshotSchema` — **correctness-critical, not cosmetic**: zod strips unknown keys, so without `pricingModel` here the field is dropped on every web read and all per-day displays plus `deriveBaseJpy` silently revert to FLAT. Good leverage: `operator-bookings/schema.ts` reuses this schema and `operatorBookingDetailSchema` extends `bookingDtoSchema`, so one edit covers the renter receipt, the operator detail, and the event timeline. (It also currently drifts from the `AddOnSnapshot` type by omitting `templateId?/nameLocale?`.)
 - i18n en/ja/zh — per-day and flat labels, the "x N days" line, and the operator toggle labels.
   Parity is CI-checked (all three locales or the build fails).
 
 ## Slices (each mergeable, TDD)
 
-The ordering constraint (architect HIGH-2): **a PER_DAY add-on must not become creatable until charge, base-derivation, and every display surface handle it.**
-`deriveBaseJpy` and `composeBookingTotal` must change together (a per-day charge with a flat derive mis-recovers the base), and no display may lag creation (a correct charge with a flat line item makes the receipt fail to reconcile).
-So enablement (the write path) is the *last* slice, not the first.
+Two ordering constraints drive the boundaries:
 
-1. **Money path (no per-day data can exist yet)** — enum + column (`NOT NULL DEFAULT 'FLAT'`) + migration (`db:generate --name add_add_on_pricing_model` -> migrate -> verify), `AddOnSnapshot` field, **both** `composeBookingTotal` and `deriveBaseJpy` made per-day-aware (optional field, `?? 'FLAT'`), and the `booking-creation` snapshot capture.
-   Internally consistent: charge and derive agree, and every existing row/booking is `FLAT`, so behavior is unchanged.
-   Pure-function pricing tests (per-day, mixed, inverse, legacy-omitted-field) + real-pg migration/enum-sync + snapshot round-trip.
-2. **Display everywhere** — all five surfaces above render `unit x N days`, plus the web estimate signature + `ReservationAddOn` DTO.
-   Still no per-day data exists, but the whole read path is now ready.
-   Web estimate/server parity test.
-3. **Enablement (first slice that lets a PER_DAY add-on exist)** — validators (`pricingModel` enum, default `FLAT`) + service + both repos + routes + operator `AddOnForm` toggle + `AddOnRow` badge + i18n.
-   The moment an operator can create (and a renter select) a per-day add-on, charge, derive, and all displays already handle it — no reconciliation window.
+- **Write path last (architect HIGH-2).** A PER_DAY add-on must not become creatable until charge, base-derivation, and every display surface handle it. `composeBookingTotal` and `deriveBaseJpy` change together (a per-day charge with a flat derive mis-recovers the base), and no display or notification may lag creation.
+- **Entity read-projection before snapshot capture (design-review P1).** The `booking-creation` snapshot capture reads `addOn.pricingModel` (`booking-creation.ts:675`), and the web estimate reads it off `StorefrontAddOnData` — both require the `AddOn` entity type (`stores.ts`) and the Drizzle read-projection (`repositories/drizzle/shared.ts` mapper) to carry the column first. So capture is **not** in slice 1; it rides with the write path once the projection exists.
+
+1. **Money layer — `packages/shared` only (no per-day data can exist yet).** `ADD_ON_PRICING_MODELS` enum + type; the `pricingModel` column on `add_on_options` (`NOT NULL DEFAULT 'FLAT'`) + migration (`db:generate --name add_add_on_pricing_model` -> migrate -> verify); the optional `pricingModel?` on the `AddOnSnapshot` **type**; and **both** `composeBookingTotal` and `deriveBaseJpy` made per-day-aware (`?? 'FLAT'`). No API service/repo/route/capture changes; every existing row and booking is `FLAT`, so runtime behavior is unchanged.
+   Pure-function pricing tests (per-day, mixed, legacy-omitted-field for both compose and derive, round-trip) + real-pg migration/enum-sync.
+2. **Read + display path.** The `AddOn` entity read-projection (`stores.ts` type + `drizzle/shared.ts` mapper read the new column, default `FLAT`) and the storefront producer (`storefront-detail.ts`); the `StorefrontAddOnData` wire trio + `addOnSnapshotSchema`; the web estimate signature; and all six display surfaces render `unit x N days` (the four UI views + the `operator-alert` email + the schema parse). Still no per-day data exists (capture lands with enablement), so everything reads `FLAT` until then.
+   Web estimate/server parity test + the operator-alert email unit test.
+3. **Enablement (first slice a PER_DAY add-on can exist).** Validators (`pricingModel`, `z.input` request DTOs) + service create/update + routes + operator `AddOnForm` toggle + `AddOnRow` badge + operator wire schema + the `booking-creation` **snapshot capture** (now that the entity projection from slice 2 exists) + seed the ETC card `PER_DAY` + i18n toggle labels.
+   The moment an operator can create (and a renter select) a per-day add-on, charge, derive, capture, and all displays already handle it — no reconciliation window.
    Integration tests: create a per-day add-on, snapshot carries the model, booking total equals `unit x days`, receipt reconciles.
 
 ## Test plan
 
-- `pricing.test.ts` — `composeBookingTotal` per-day add-on equals `priceJpy * days`; mixed flat + per-day booking; `deriveBaseJpy` is the exact inverse; `days = 1` minimum holds.
+- `pricing.test.ts` — `composeBookingTotal` per-day add-on equals `priceJpy * days`; mixed flat + per-day booking; `days = 1` minimum holds.
+  For `deriveBaseJpy`: (a) a legacy case where the snapshot **omits** `pricingModel` recovers the base as FLAT (the receipt calls derive on exactly those rows), and (b) a round-trip `deriveBaseJpy(compose(perDay)) === base` — a one-sided change to only `compose` or only `derive` must fail the suite (this is what actually enforces "change both together").
 - Validators — `pricingModel` is a constrained enum; create defaults to `FLAT`; update leaves it untouched when absent.
 - Integration real-pg — a legacy-shaped insert defaults to `FLAT`; enum-sync (#687) covers the new type; snapshot round-trips the model.
 - Web — estimate/server parity on a per-day booking; receipt renders "unit x N days".
