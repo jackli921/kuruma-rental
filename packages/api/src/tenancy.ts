@@ -235,8 +235,8 @@ export function assertFleetWriteWithinOperator(
 
 /**
  * Map a {@link FleetWriteDenial} to the shape a fleet-write service returns
- * (#1260). Shared by every operator-portal write (bookings, blocks, vehicles) so
- * the refusal contract is identical everywhere:
+ * (#1260). Wired to booking status writes today; the block/vehicle slices adopt
+ * the same mapper so the refusal contract stays identical everywhere:
  * - operator-required -> 422 carrying the same OPERATOR_REQUIRED code the global
  *   OperatorRequiredError emits, so the web can discriminate "pick an operator".
  * - not-in-scope      -> 404 with the CALLER's own not-found message: from the
