@@ -1,15 +1,39 @@
-import { addOnOptions } from '@kuruma/shared/db/schema'
+import { addOnOptions, addOnTemplates } from '@kuruma/shared/db/schema'
 import { type SQL, and, asc, eq, ne, sql } from 'drizzle-orm'
 import { type CallerContext, requireManagementRead } from '../../middleware/auth'
-import type { AddOn } from '../../stores'
+import type { AddOn, AddOnWithTemplate } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
 import type { AddOnFilters, AddOnRepository } from '../types'
-import { type Db, addOnOptionColumns, toAddOn } from './shared'
+import {
+  type Db,
+  addOnOptionColumns,
+  addOnWithTemplateColumns,
+  toAddOn,
+  toAddOnWithTemplate,
+} from './shared'
 
 export class DrizzleAddOnRepository implements AddOnRepository {
   constructor(private readonly db: Db) {}
 
-  async findAll(ctx: CallerContext, filters?: AddOnFilters): Promise<AddOn[]> {
+  // Catalog i18n (slice 2): the single JOIN the reads share. LEFT JOIN so a
+  // legacy null-templateId row (PR1 window) still returns, with null template
+  // bundles the service resolves against the `name`/`description` columns.
+  private baseQuery() {
+    return this.db
+      .select(addOnWithTemplateColumns)
+      .from(addOnOptions)
+      .leftJoin(addOnTemplates, eq(addOnOptions.templateId, addOnTemplates.id))
+  }
+
+  // Re-read one row through the JOIN after a write, so create/update/archive
+  // return the same enriched shape the reads do (a `.returning()` off the base
+  // table alone can't carry the joined template bundles).
+  private async readById(id: string): Promise<AddOnWithTemplate | undefined> {
+    const [row] = await this.baseQuery().where(eq(addOnOptions.id, id))
+    return row ? toAddOnWithTemplate(row) : undefined
+  }
+
+  async findAll(ctx: CallerContext, filters?: AddOnFilters): Promise<AddOnWithTemplate[]> {
     // [P0] reject RENTER/PARTNER BEFORE operatorReadScope (which maps them to
     // {kind:'all'}) — add-ons are operator-private, not a public catalog.
     requireManagementRead(ctx)
@@ -32,16 +56,11 @@ export class DrizzleAddOnRepository implements AddOnRepository {
     }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined
-    const rows = await this.db
-      .select(addOnOptionColumns)
-      .from(addOnOptions)
-      .where(where)
-      .orderBy(asc(addOnOptions.name))
-
-    return rows.map(toAddOn)
+    const rows = await this.baseQuery().where(where).orderBy(asc(addOnOptions.name))
+    return rows.map(toAddOnWithTemplate)
   }
 
-  async findById(ctx: CallerContext, id: string): Promise<AddOn | undefined> {
+  async findById(ctx: CallerContext, id: string): Promise<AddOnWithTemplate | undefined> {
     requireManagementRead(ctx)
     const scope = operatorReadScope(ctx)
     if (scope.kind === 'none') return undefined
@@ -50,7 +69,26 @@ export class DrizzleAddOnRepository implements AddOnRepository {
       conditions.push(eq(addOnOptions.operatorId, scope.operatorId))
     }
 
-    const [row] = await this.db.select(addOnOptionColumns).from(addOnOptions).where(and(...conditions))
+    const [row] = await this.baseQuery().where(and(...conditions))
+    return row ? toAddOnWithTemplate(row) : undefined
+  }
+
+  // Catalog i18n (slice 2): dup pre-check on templateId (base table only, no
+  // join needed) — the DB partial add_on_options_active_template_unique is the seal.
+  async findActiveByOperatorAndTemplate(
+    operatorId: string,
+    templateId: string,
+  ): Promise<AddOn | undefined> {
+    const [row] = await this.db
+      .select(addOnOptionColumns)
+      .from(addOnOptions)
+      .where(
+        and(
+          eq(addOnOptions.operatorId, operatorId),
+          eq(addOnOptions.templateId, templateId),
+          eq(addOnOptions.status, 'ACTIVE'),
+        ),
+      )
     return row ? toAddOn(row) : undefined
   }
 
@@ -68,32 +106,38 @@ export class DrizzleAddOnRepository implements AddOnRepository {
     return row ? toAddOn(row) : undefined
   }
 
-  async findActiveByOperator(operatorId: string): Promise<AddOn[]> {
-    const rows = await this.db
-      .select(addOnOptionColumns)
-      .from(addOnOptions)
+  async findActiveByOperator(operatorId: string): Promise<AddOnWithTemplate[]> {
+    const rows = await this.baseQuery()
       .where(and(eq(addOnOptions.operatorId, operatorId), eq(addOnOptions.status, 'ACTIVE')))
       .orderBy(asc(addOnOptions.name))
-    return rows.map(toAddOn)
+    return rows.map(toAddOnWithTemplate)
   }
 
-  async create(data: Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'>): Promise<AddOn> {
+  async create(data: Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'>): Promise<AddOnWithTemplate> {
     const [inserted] = await this.db
       .insert(addOnOptions)
       .values({
         operatorId: data.operatorId,
         name: data.name,
         description: data.description,
+        templateId: data.templateId,
+        descriptionOverride: data.descriptionOverride,
         priceJpy: data.priceJpy,
         status: data.status,
       })
-      .returning()
+      .returning({ id: addOnOptions.id })
 
     if (!inserted) throw new Error('Failed to insert add-on')
-    return toAddOn(inserted)
+    const created = await this.readById(inserted.id)
+    if (!created) throw new Error('Failed to read back inserted add-on')
+    return created
   }
 
-  async update(ctx: CallerContext, id: string, data: Partial<AddOn>): Promise<AddOn | undefined> {
+  async update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<AddOn>,
+  ): Promise<AddOnWithTemplate | undefined> {
     // Add-ons are private config: reject RENTER/PARTNER at the repo, mirroring the
     // read path — else operatorReadScope maps them to {kind:'all'} (unscoped).
     requireManagementRead(ctx)
@@ -110,12 +154,12 @@ export class DrizzleAddOnRepository implements AddOnRepository {
       .update(addOnOptions)
       .set({ ...fields, updatedAt: sql`now()` })
       .where(and(...conditions))
-      .returning()
+      .returning({ id: addOnOptions.id })
 
-    return updated ? toAddOn(updated) : undefined
+    return updated ? this.readById(updated.id) : undefined
   }
 
-  async archive(ctx: CallerContext, id: string): Promise<AddOn | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<AddOnWithTemplate | undefined> {
     requireManagementRead(ctx)
     const scope = operatorReadScope(ctx)
     if (scope.kind === 'none') return undefined
@@ -126,8 +170,8 @@ export class DrizzleAddOnRepository implements AddOnRepository {
       .update(addOnOptions)
       .set({ status: 'ARCHIVED', updatedAt: sql`now()` })
       .where(and(...conditions))
-      .returning()
+      .returning({ id: addOnOptions.id })
 
-    return archived ? toAddOn(archived) : undefined
+    return archived ? this.readById(archived.id) : undefined
   }
 }

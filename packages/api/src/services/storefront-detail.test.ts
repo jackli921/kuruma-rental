@@ -70,6 +70,8 @@ function makeAddOn(
     operatorId: 'op_a',
     name: 'Baby Seat',
     description: null,
+    templateId: null,
+    descriptionOverride: null,
     priceJpy: 1500,
     status: 'ACTIVE',
     ...overrides,

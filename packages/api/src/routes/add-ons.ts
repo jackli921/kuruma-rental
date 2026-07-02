@@ -81,6 +81,12 @@ export function createAddOnRoutes(
         operatorId,
         name: d.name,
         description: d.description ?? null,
+        // Catalog i18n slice 2: the write path switches to a templateId picker in
+        // Phase 3 (validators + service resolution). Through the PR1 window the
+        // free-text create still writes name/description; the template columns
+        // stay null until the picker lands.
+        templateId: null,
+        descriptionOverride: null,
         priceJpy: d.priceJpy,
         status: 'ACTIVE',
       })
