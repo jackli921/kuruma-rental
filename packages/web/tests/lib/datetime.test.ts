@@ -1,4 +1,11 @@
-import { formatJstDateTimeLocal, formatJstTime, parseJstDateTimeLocal } from '@/lib/datetime'
+import {
+  formatJstDateTimeLocal,
+  formatJstTime,
+  instantToJstFauxLocal,
+  jstWallClockToInstant,
+  parseJstDateTimeLocal,
+  todayInJst,
+} from '@/lib/datetime'
 import { describe, expect, it } from 'vitest'
 
 describe('parseJstDateTimeLocal', () => {
@@ -81,5 +88,58 @@ describe('formatJstTime', () => {
 
   it('pins to Asia/Tokyo regardless of the instant offset (00:30Z == 09:30 JST)', () => {
     expect(formatJstTime('2026-06-30T00:30:00.000Z', 'ja')).toBe('09:30')
+  })
+})
+
+// #1250: the calendar renders in JST regardless of browser TZ. The rbc/timeline libs
+// position by a Date's *local* wall clock, so we (a) read a local wall clock AS JST to
+// build the JST-anchored fetch window and un-shift clicked slots, and (b) rebuild an
+// instant's JST wall clock as a local Date so a band lands at its Tokyo hour. These are
+// inverses. Assertions read/write LOCAL fields on both sides, so they hold under any
+// runner TZ (here: America/Toronto).
+
+describe('jstWallClockToInstant', () => {
+  it('reads a Date local wall clock as JST and returns the true instant (00:00 JST)', () => {
+    // Local wall clock 2026-07-15 00:00 interpreted as JST midnight = 2026-07-14T15:00Z.
+    const wall = new Date(2026, 6, 15, 0, 0, 0)
+    expect(jstWallClockToInstant(wall).toISOString()).toBe('2026-07-14T15:00:00.000Z')
+  })
+
+  it('maps a 10:00 wall clock to 01:00Z (JST is UTC+9)', () => {
+    expect(jstWallClockToInstant(new Date(2026, 6, 15, 10, 0, 0)).toISOString()).toBe(
+      '2026-07-15T01:00:00.000Z',
+    )
+  })
+})
+
+describe('instantToJstFauxLocal', () => {
+  it("rebuilds an instant's JST wall clock as a local Date (01:00Z -> local 10:00)", () => {
+    const faux = instantToJstFauxLocal(new Date('2026-07-15T01:00:00.000Z'))
+    expect([faux.getFullYear(), faux.getMonth(), faux.getDate()]).toEqual([2026, 6, 15])
+    expect([faux.getHours(), faux.getMinutes()]).toEqual([10, 0])
+  })
+
+  it('rolls the local calendar day when JST crosses midnight (15:00Z -> next JST day 00:00)', () => {
+    const faux = instantToJstFauxLocal(new Date('2026-07-15T15:00:00.000Z'))
+    expect([faux.getFullYear(), faux.getMonth(), faux.getDate()]).toEqual([2026, 6, 16])
+    expect([faux.getHours(), faux.getMinutes()]).toEqual([0, 0])
+  })
+
+  it('is the inverse of jstWallClockToInstant', () => {
+    const instant = new Date('2026-07-15T18:23:00.000Z')
+    expect(jstWallClockToInstant(instantToJstFauxLocal(instant)).getTime()).toBe(instant.getTime())
+  })
+})
+
+describe('todayInJst', () => {
+  it('returns the JST calendar day at local midnight (matching the JST wall-clock date of now)', () => {
+    const today = todayInJst()
+    expect([today.getHours(), today.getMinutes(), today.getSeconds()]).toEqual([0, 0, 0])
+    const jstNow = instantToJstFauxLocal(new Date())
+    expect([today.getFullYear(), today.getMonth(), today.getDate()]).toEqual([
+      jstNow.getFullYear(),
+      jstNow.getMonth(),
+      jstNow.getDate(),
+    ])
   })
 })
