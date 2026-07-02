@@ -129,18 +129,23 @@ export function pgErrorCode(err: unknown): string | null {
 }
 
 /** Extract the violated constraint name from a thrown PG error, or null.
- * Like the code, postgres-js exposes `constraint_name`; drizzle wraps the
- * PostgresError under `err.cause`, so we check both paths. */
+ * Driver parity (#1362): production runs the Neon drivers
+ * (`@neondatabase/serverless` HTTP + WebSocket), which — like node-postgres —
+ * expose the name on `.constraint`. The integration test client + the in-memory
+ * repos use postgres-js, which exposes `.constraint_name`. Reading only the
+ * latter left this dead in prod (silent double-charge misclassification), so we
+ * accept every driver's convention. Drizzle wraps the PG error under `err.cause`,
+ * so we check that path too. */
 export function pgConstraintName(err: unknown): string | null {
   return extractConstraint(err) ?? extractConstraint(getCause(err))
 }
 
 function extractConstraint(val: unknown): string | null {
-  if (val && typeof val === 'object' && 'constraint_name' in val) {
-    const name = (val as { constraint_name: unknown }).constraint_name
-    return typeof name === 'string' ? name : null
-  }
-  return null
+  if (!val || typeof val !== 'object') return null
+  const rec = val as Record<string, unknown>
+  // Neon / node-postgres → `constraint`; postgres-js / in-memory → `constraint_name`.
+  const name = rec.constraint ?? rec.constraint_name ?? rec.constraintName
+  return typeof name === 'string' ? name : null
 }
 
 function extractCode(val: unknown): string | null {
