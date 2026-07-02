@@ -18,15 +18,16 @@ export function createVehicleRoutes(
     .get('/vehicles', async (c) => {
       const ctx = toCallerContext(requireUser(c))
       const status = c.req.query('status')
+      const operatorId = c.req.query('operatorId')
       const pg = parsePagination(c, { defaultLimit: 50 })
       if (!pg.ok) return pg.response
       const { limit, offset } = pg
 
-      const { data, total } = await service.findAll(ctx, {
-        limit,
-        offset,
-        ...(status ? { status } : {}),
-      })
+      const { data, total } = await service.findAll(
+        ctx,
+        { limit, offset, ...(status ? { status } : {}) },
+        operatorId,
+      )
       return ok(c, data, 200, { total, limit, offset })
     })
     .get('/vehicles/:id', async (c) => {

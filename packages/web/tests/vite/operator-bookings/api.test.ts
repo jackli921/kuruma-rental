@@ -465,6 +465,7 @@ describe('operatorCalendarVehiclesQueryOptions', () => {
       'operator-bookings',
       'calendar',
       'vehicles',
+      null,
     ])
   })
 })

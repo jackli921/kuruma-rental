@@ -303,6 +303,11 @@ export interface VehicleFilters {
   classId?: string
   limit?: number
   offset?: number
+  // RESOLVED privileged-tier narrowing (#1230 slice 5b): a picker admin narrows the
+  // public catalog read to one operator. Set ONLY by VehicleService (gated on the
+  // platform tier); never populate from raw request input, or a renter could reshape
+  // the catalog via ?operatorId= (the #1272 vocabulary trap).
+  operatorId?: string
 }
 
 export interface PaginatedResult<T> {
