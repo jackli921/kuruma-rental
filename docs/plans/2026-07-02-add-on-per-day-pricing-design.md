@@ -150,13 +150,14 @@ Two ordering constraints drive the boundaries:
   - A 26-hour rental bills 2 days.
   - A sub-day **hourly** rental (e.g. a 3-hour Osaka city trip) bills a **full day** for a per-day add-on even though the car itself is priced by the hour (`days: 0` in the base breakdown).
     So a 550 yen/day ETC card on a 3-hour rental charges 550 yen.
-    This is consistent with how insurance already behaves on hourly rentals; the owner should confirm "minimum 1 day" is acceptable for per-day add-ons.
+    This is consistent with how insurance already behaves on hourly rentals.
+    Owner decision (2026-07-02): **accepted** — a per-day add-on bills a full day minimum, so a sub-day rental still charges one full day.
 
-## Open questions (for review)
+## Decisions and deferrals (owner-reviewed 2026-07-02)
 
-1. **Cadence ownership** — operator-chosen per add-on (this doc's default) vs platform-template-fixed (e.g. "ETC card is always per-day").
-   Recommendation: operator-chosen, because the survey shows the same item is priced both ways.
+1. **Cadence ownership** — operator-chosen per add-on vs platform-template-fixed.
+   Decided (2026-07-02): **operator-chosen.** Businesses operate differently, so the operator always chooses their own cadence per add-on; the platform never dictates it. (Matches the survey: the same item is priced both ways by different operators.)
 2. **Template default hint** — should a platform template carry a suggested default cadence to prefill the operator form (ETC card -> PER_DAY)?
    Recommendation: nice-to-have, defer.
 3. **Daily cap** — bill a per-day add-on for at most N days?
-   Recommendation: follow-up, not MVP.
+   Decided (2026-07-02): **no cap.** A per-day add-on bills every rental day, uncapped.
