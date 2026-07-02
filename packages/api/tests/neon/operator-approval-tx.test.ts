@@ -65,7 +65,14 @@ const baseApplication = {
 describe.skipIf(!NEON_URL)('operator approval transaction atomicity (#1387)', () => {
   const seededUserIds: string[] = []
   const seededAppIds: string[] = []
-  const committedOperatorIds: string[] = []
+  // Cleanup tracks the DETERMINISTIC unique operator names + invite emails each
+  // case uses, captured BEFORE the approval runs — not ids returned only on
+  // success. A negative test must clean the rows that would exist if it FAILS
+  // (a rollback regression leaves the operator + invite persisted), and no
+  // post-success id ever names those. Local Docker drops the volume, but a real
+  // Neon branch relies on afterAll, so untracked orphans would leak there.
+  const usedOperatorNames: string[] = []
+  const usedInviteEmails: string[] = []
   let reviewerId: string
 
   beforeAll(async () => {
@@ -83,16 +90,18 @@ describe.skipIf(!NEON_URL)('operator approval transaction atomicity (#1387)', ()
 
   afterAll(async () => {
     const db = getDb()
-    // FK-safe order: an approved application references its operator
-    // (onDelete restrict), and invites reference operator + reviewer user.
+    // FK-safe order: applications reference operators (onDelete restrict) and
+    // invites reference operators + the reviewer user, so drop apps, then
+    // invites, then operators, then users. Operators/invites are deleted by
+    // their unique name/email (not id) so a leaked rollback-case row is cleaned.
     if (seededAppIds.length > 0) {
       await db.delete(operatorApplications).where(inArray(operatorApplications.id, seededAppIds))
     }
-    if (committedOperatorIds.length > 0) {
-      await db
-        .delete(providerInvites)
-        .where(inArray(providerInvites.operatorId, committedOperatorIds))
-      await db.delete(operators).where(inArray(operators.id, committedOperatorIds))
+    if (usedInviteEmails.length > 0) {
+      await db.delete(providerInvites).where(inArray(providerInvites.email, usedInviteEmails))
+    }
+    if (usedOperatorNames.length > 0) {
+      await db.delete(operators).where(inArray(operators.name, usedOperatorNames))
     }
     if (seededUserIds.length > 0) {
       await db.delete(users).where(inArray(users.id, seededUserIds))
@@ -104,6 +113,8 @@ describe.skipIf(!NEON_URL)('operator approval transaction atomicity (#1387)', ()
     const repo = new DrizzleOperatorApplicationRepository(db)
     const email = `commit-${uniq()}@example.test`
     const businessName = `Commit Co ${uniq()}`
+    usedOperatorNames.push(businessName)
+    usedInviteEmails.push(email)
     const app = await repo.create({ ...baseApplication, businessName, contactEmail: email })
     seededAppIds.push(app.id)
 
@@ -114,7 +125,6 @@ describe.skipIf(!NEON_URL)('operator approval transaction atomicity (#1387)', ()
       { webBaseUrl: WEB_BASE_URL },
     )
     const result = await service.approve(app.id, reviewerId)
-    committedOperatorIds.push(result.operatorId)
 
     const [operator] = await db.select().from(operators).where(eq(operators.id, result.operatorId))
     expect(operator?.name).toBe(businessName)
@@ -137,6 +147,8 @@ describe.skipIf(!NEON_URL)('operator approval transaction atomicity (#1387)', ()
     const repo = new DrizzleOperatorApplicationRepository(db)
     const email = `rollback-${uniq()}@example.test`
     const businessName = `Rollback Co ${uniq()}`
+    usedOperatorNames.push(businessName)
+    usedInviteEmails.push(email)
     const app = await repo.create({ ...baseApplication, businessName, contactEmail: email })
     seededAppIds.push(app.id)
 
