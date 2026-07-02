@@ -5,6 +5,7 @@ import {
   OPERATOR_APPLICATION_FLEET_SIZES,
   OPERATOR_APPLICATION_STATUSES,
 } from '@kuruma/shared/enums'
+import { SUPPORTED_LOCALES } from '@kuruma/shared/i18n/locales'
 import { queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
 
@@ -26,7 +27,7 @@ const operatorApplicationDtoSchema = z.object({
   businessLicenseNumber: z.string().nullable(),
   businessType: z.enum(OPERATOR_APPLICATION_BUSINESS_TYPES).nullable(),
   message: z.string().nullable(),
-  submittedLocale: z.enum(['en', 'ja', 'zh']),
+  submittedLocale: z.enum(SUPPORTED_LOCALES),
   status: z.enum(OPERATOR_APPLICATION_STATUSES),
   rejectionReason: z.string().nullable(),
   reviewedAt: z.string().nullable(),

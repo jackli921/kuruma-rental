@@ -53,7 +53,12 @@ export function createAdminOperatorApplicationRoutes(service: OperatorApplicatio
       const idr = parseId(c)
       if (!idr.ok) return idr.response
 
-      const parsed = await parseBody(c, z.object({ rejectionReason: z.string().trim().min(1) }))
+      const parsed = await parseBody(
+        c,
+        // Cap mirrors the public form's `message` bound (shared validator) so the
+        // admin reason can't write unbounded text into the `text` column.
+        z.object({ rejectionReason: z.string().trim().min(1).max(2000) }),
+      )
       if (!parsed.ok) return parsed.response
 
       // NotFoundError (missing or non-PENDING id) propagates to the global onError → 404.

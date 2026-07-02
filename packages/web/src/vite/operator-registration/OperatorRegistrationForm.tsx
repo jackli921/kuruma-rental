@@ -10,6 +10,7 @@ import {
   OPERATOR_APPLICATION_BUSINESS_TYPES,
   OPERATOR_APPLICATION_FLEET_SIZES,
 } from '@kuruma/shared/enums'
+import type { Locale } from '@kuruma/shared/i18n/locales'
 import {
   type OperatorApplicationInput,
   operatorApplicationSchema,
@@ -36,8 +37,8 @@ export function OperatorRegistrationForm({
   isSubmitting = false,
 }: OperatorRegistrationFormProps) {
   const t = useTranslations('business.register.form')
-  // useLocale() returns string; cast to the three supported locales this app uses.
-  const locale = useLocale() as 'en' | 'ja' | 'zh'
+  // useLocale() returns string; cast to the shared Locale SSoT this app supports.
+  const locale = useLocale() as Locale
 
   const {
     register,
