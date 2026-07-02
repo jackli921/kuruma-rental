@@ -9,8 +9,11 @@ import { FleetTable } from './FleetTable'
 import type { OperatorFleetVehicle } from './api'
 
 // The row/card link the vehicle name to its detail page; stub the router Link so
-// the pure view renders without a RouterProvider (repo test pattern).
-vi.mock('@tanstack/react-router', () => ({
+// the pure view renders without a RouterProvider (repo test pattern). importOriginal
+// SPREAD keeps getRouteApi real — the rows now render OperatorBadge from the
+// operator-context barrel, which loads a getRouteApi at module scope (#1264).
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
   Link: ({ children }: { children: ReactNode }) => <a href="#vehicle">{children}</a>,
 }))
 
