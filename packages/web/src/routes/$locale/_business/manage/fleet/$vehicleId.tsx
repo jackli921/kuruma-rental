@@ -1,5 +1,6 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
-import { isOperatorSession } from '@/vite/guards'
+import { canWriteAsOperator } from '@/vite/guards'
+import { useOperatorContext } from '@/vite/operator-context'
 import { VehicleDetail } from '@/vite/operator-fleet/VehicleDetail'
 import { vehicleDetailQueryOptions } from '@/vite/operator-fleet/api'
 import { sessionQueryOptions } from '@/vite/session'
@@ -37,7 +38,11 @@ function VehicleDetailRoute() {
   const { locale, vehicleId } = Route.useParams()
   const { data: detail } = useSuspenseQuery(vehicleDetailQueryOptions(vehicleId))
   const { data: session } = useSuspenseQuery(sessionQueryOptions())
-  const canWrite = isOperatorSession(session)
+  const { pickedOperatorId } = useOperatorContext()
+  // The detail read is by-id (any operator's vehicle under bypass scope), so the
+  // pick carried from the list only gates WRITES; the sheet's dropdowns scope to
+  // the vehicle's own operator. Not a picker route — no chip here (#1264).
+  const canWrite = canWriteAsOperator(session, pickedOperatorId)
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -51,7 +56,12 @@ function VehicleDetailRoute() {
           {t('backToFleet')}
         </Link>
         {detail ? (
-          <VehicleDetail detail={detail} locale={locale} canWrite={canWrite} />
+          <VehicleDetail
+            detail={detail}
+            locale={locale}
+            canWrite={canWrite}
+            pickedOperatorId={pickedOperatorId}
+          />
         ) : (
           <p className="py-20 text-center text-lg text-muted-foreground">{t('notFound')}</p>
         )}
