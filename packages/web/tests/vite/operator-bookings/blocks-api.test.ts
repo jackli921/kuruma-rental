@@ -85,6 +85,21 @@ describe('createBlock', () => {
     expect(JSON.parse(init.body as string)).toEqual(input)
     expect(result).toEqual(blockRow)
   })
+
+  it('binds the write to the picked operator via ?operatorId= (#1260)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: blockRow }, 201))
+    const input: CreateBlockInput = {
+      kind: 'MAINTENANCE',
+      reason: 'Oil change',
+      startAt: blockRow.startAt,
+      endAt: blockRow.endAt,
+    }
+
+    await createBlock(blockRow.vehicleId, input, 'csrf-tok', 'op-a')
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe(`/api/vehicles/${blockRow.vehicleId}/blocks?operatorId=op-a`)
+  })
 })
 
 describe('deleteBlock', () => {
@@ -97,6 +112,15 @@ describe('deleteBlock', () => {
     expect(url).toBe(`/api/vehicles/${blockRow.vehicleId}/blocks/${blockRow.id}`)
     expect(init.method).toBe('DELETE')
     expect((init.headers as Record<string, string>)['X-CSRF-Token']).toBe('csrf-tok')
+  })
+
+  it('binds the delete to the picked operator via ?operatorId= (#1260)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: blockRow }))
+
+    await deleteBlock(blockRow.vehicleId, blockRow.id, 'csrf-tok', 'op-a')
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe(`/api/vehicles/${blockRow.vehicleId}/blocks/${blockRow.id}?operatorId=op-a`)
   })
 })
 

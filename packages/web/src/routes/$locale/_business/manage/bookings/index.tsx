@@ -393,6 +393,7 @@ export function OperatorBookingsRoute() {
           csrfToken={session?.csrfToken ?? ''}
           initialVehicleId={blockSlotVehicleId}
           initialRange={blockSlotRange ?? undefined}
+          pickedOperatorId={pickedOperatorId}
         />
       )}
       {canViewBlocks && (
@@ -405,6 +406,7 @@ export function OperatorBookingsRoute() {
           }
           canManage={canManageBlocks}
           csrfToken={session?.csrfToken ?? ''}
+          pickedOperatorId={pickedOperatorId}
           locale={locale}
         />
       )}

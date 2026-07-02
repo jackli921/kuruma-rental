@@ -198,6 +198,41 @@ export function threadReadScope(ctx: CallerContext): ThreadReadScope {
 }
 
 /**
+ * Why a fleet WRITE is refused when a non-tenant caller has not bound itself to
+ * the operator that owns the target (#1260):
+ * - `operator-required` — no acting operatorId was supplied (mapped to 422).
+ * - `not-in-scope`      — the acting operator does not own the target vehicle,
+ *                         so from that context the target does not exist (404).
+ */
+export type FleetWriteDenial = { kind: 'operator-required' } | { kind: 'not-in-scope' }
+
+/**
+ * Bind a fleet WRITE to the operator the caller is acting as (#1260).
+ *
+ * A tenant operator (OPERATOR_*) is already clamped to its own tenant by the
+ * repository read scope — `findById` returns undefined for a foreign vehicle —
+ * so its write needs no acting-operator id and a stray one is ignored.
+ *
+ * Every other admitted caller (PLATFORM_ADMIN, and legacy STAFF/ADMIN) resolves
+ * `all` under `operatorReadScope`, so `findById` hands them ANY operator's
+ * vehicle by raw id. Keyed on `!isOperatorRole` (NOT `ctx.bypassScope`) because
+ * #487 dropped legacy STAFF/ADMIN from the bypass set yet left them `all`-scoped
+ * — bypass-keying would leave that pair able to write cross-tenant. Such a caller
+ * must name the operator it picked, and that operator must own the target;
+ * otherwise the client-side "read-only preview" would be its only protection.
+ */
+export function assertFleetWriteWithinOperator(
+  ctx: CallerContext,
+  targetOperatorId: string,
+  actingOperatorId: string | undefined,
+): FleetWriteDenial | null {
+  if (isOperatorRole(ctx.role)) return null
+  if (!actingOperatorId) return { kind: 'operator-required' }
+  if (actingOperatorId !== targetOperatorId) return { kind: 'not-in-scope' }
+  return null
+}
+
+/**
  * Resolve the operatorId to stamp on a write (#401, #407):
  * - OPERATOR_OWNER / OPERATOR_STAFF write under their own tenant; missing
  *   operatorId fails closed. They cannot write for another operator, so an
