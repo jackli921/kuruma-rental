@@ -186,9 +186,11 @@ export function operatorCalendarVehiclesQueryOptions(pickedOperatorId?: string) 
 
 // --- #1101 Slice B: scheduled vehicle blocks ---------------------------------
 // The operator calendar reads fleet-wide blocks over a range (GET /vehicle-blocks,
-// gated MANAGEMENT_READ_ROLES, row-scoped in the repo — the client passes no
-// operatorId) and writes per-vehicle (POST/DELETE /vehicles/:id/blocks, operatorId
-// server-derived from the vehicle). The block DTO + its schema live in ./schema.
+// gated MANAGEMENT_READ_ROLES, row-scoped in the repo) and writes per-vehicle
+// (POST/DELETE /vehicles/:id/blocks). A picker admin passes the picked operatorId
+// on both reads and writes; the API binds the write to it (#1260) so an admin can
+// only mutate the operator it is acting as, not any operator by raw vehicleId. The
+// block operatorId is still server-derived from the vehicle. DTO + schema: ./schema.
 export type { CalendarBlockRow }
 /** Create-block body — the shared validator's input (kind, reason, startAt, endAt, notes?). */
 export type CreateBlockInput = CreateVehicleBlockInput
@@ -226,13 +228,20 @@ export async function createBlock(
   vehicleId: string,
   input: CreateBlockInput,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<CalendarBlockRow> {
-  const res = await fetch(`${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/blocks`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-    body: JSON.stringify(input),
-  })
+  // #1260: a picker admin binds the write to the operator it is acting as; a tenant
+  // operator omits it (the server drops it, so it can never widen scope).
+  const suffix = pickedOperatorId ? `?operatorId=${encodeURIComponent(pickedOperatorId)}` : ''
+  const res = await fetch(
+    `${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/blocks${suffix}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify(input),
+    },
+  )
   return unwrap(res, calendarBlockSchema)
 }
 
@@ -240,9 +249,12 @@ export async function deleteBlock(
   vehicleId: string,
   blockId: string,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<CalendarBlockRow> {
+  // #1260: bind an admin delete to the picked operator (see createBlock).
+  const suffix = pickedOperatorId ? `?operatorId=${encodeURIComponent(pickedOperatorId)}` : ''
   const res = await fetch(
-    `${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/blocks/${encodeURIComponent(blockId)}`,
+    `${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/blocks/${encodeURIComponent(blockId)}${suffix}`,
     {
       method: 'DELETE',
       credentials: 'include',
