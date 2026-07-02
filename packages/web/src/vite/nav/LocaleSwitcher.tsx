@@ -39,16 +39,13 @@ export function LocaleSwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          /* #1300: the label is hidden on mobile, leaving an icon-only trigger; pin
-             the width to the 44px touch floor (the base already pins the height) and
-             give it an aria-label so the control still has a name without the text. */
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 pointer-coarse:min-w-11"
-            aria-label={t('language')}
-          >
+          /* #1300: pin the width to the 44px touch floor (the base already pins the
+             height). On mobile the visible label is hidden, so an sr-only span names
+             the control; on sm+ the visible locale label is the name (an aria-label
+             would override "English" with "Language" — WCAG 2.5.3 Label in Name). */
+          <Button variant="ghost" size="sm" className="gap-1.5 pointer-coarse:min-w-11">
             <Globe className="size-4" />
+            <span className="sr-only sm:hidden">{t('language')}</span>
             <span className="hidden sm:inline">{LOCALE_LABELS[locale]}</span>
           </Button>
         }
