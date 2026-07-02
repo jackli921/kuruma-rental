@@ -58,7 +58,7 @@ import { createOverviewRoutes } from './routes/overview'
 import { createPaymentAnomalyRoutes } from './routes/payment-anomalies'
 import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
-import { rateLimitByIp } from './routes/rate-limit'
+import { rateLimitByIpExcept } from './routes/rate-limit'
 import { createRegionRoutes } from './routes/regions'
 import { createReviewAggregateRoutes } from './routes/review-aggregates'
 import { createReviewRoutes } from './routes/reviews'
@@ -309,12 +309,14 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // Rate limiting via Cloudflare's native rate limit binding. Atomic counters
   // with sub-ms latency, no KV race conditions. Gracefully skipped in local
   // dev (binding absent). When present it fails closed on an unresolvable IP
-  // (#580) rather than bypassing via a shared "" key.
+  // (#580) rather than bypassing via a shared "" key. The Stripe webhook is
+  // EXEMPT (#1377): it is signature-gated and would share one per-IP bucket
+  // across all of Stripe's source IPs, so a budget there could drop payments.
   const rateLimiter = (globalThis as Record<string, unknown>).RATE_LIMITER as
     | RateLimitBinding
     | undefined
   if (rateLimiter) {
-    app.use('*', rateLimitByIp(rateLimiter))
+    app.use('*', rateLimitByIpExcept(rateLimiter))
   }
 
   // CSRF guard for the cookie session (design spec §5.4). Must run before the
