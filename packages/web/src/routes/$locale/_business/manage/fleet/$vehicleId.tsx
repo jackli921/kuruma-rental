@@ -33,7 +33,7 @@ export const Route = createFileRoute('/$locale/_business/manage/fleet/$vehicleId
   component: VehicleDetailRoute,
 })
 
-function VehicleDetailRoute() {
+export function VehicleDetailRoute() {
   const t = useTranslations('business.vehicles.detail')
   const { locale, vehicleId } = Route.useParams()
   const { data: detail } = useSuspenseQuery(vehicleDetailQueryOptions(vehicleId))
