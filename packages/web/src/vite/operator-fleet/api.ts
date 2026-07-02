@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { buildScopeParam } from '@/vite/operator-context'
 import type {
   BulkVehicleStatus,
   CreateVehicleInput,
@@ -274,23 +275,24 @@ export function vehicleRowFromDetail(d: VehicleDetailResponse): OperatorFleetVeh
 // (#528). Operator callers stay tenant-scoped server-side; a bypass admin must
 // explicitly opt into the cross-operator read.
 
-export async function fetchVehicleClassOptions(): Promise<VehicleClassOption[]> {
-  // `/manage` is the session-authed class list (#528). The public
-  // `/vehicle-classes` is PUBLIC_CONTEXT 'all'-scope — it would leak every
-  // operator's classes into this operator's own form dropdown. `includeAll=true`
-  // satisfies the private route's explicit cross-operator read contract for
-  // bypass roles (else they 400); OPERATOR_* callers stay scoped by the API.
-  // Fleet is not a picker route, so there is no `?operator` to honor here.
-  const res = await fetch(`${getApiBaseUrl()}/vehicle-classes/manage?includeAll=true`, {
-    credentials: 'include',
-  })
+export async function fetchVehicleClassOptions(operatorId?: string): Promise<VehicleClassOption[]> {
+  // `/manage` is the session-authed class list (#528). buildScopeParam sends
+  // `operatorId=X` when a bypass admin picked one (#1264 — matches the vehicle's
+  // operator so the composite FK holds), else `includeAll=true` (the bypass-role
+  // cross-operator read contract; OPERATOR_* callers stay scoped by the API).
+  const res = await fetch(
+    `${getApiBaseUrl()}/vehicle-classes/manage?${buildScopeParam(operatorId)}`,
+    {
+      credentials: 'include',
+    },
+  )
   return unwrap(res, vehicleClassOptionsListSchema)
 }
 
-export function vehicleClassOptionsQueryOptions() {
+export function vehicleClassOptionsQueryOptions(operatorId?: string) {
   return queryOptions({
-    queryKey: ['operator-fleet', 'class-options'],
-    queryFn: fetchVehicleClassOptions,
+    queryKey: ['operator-fleet', 'class-options', operatorId ?? 'all'],
+    queryFn: () => fetchVehicleClassOptions(operatorId),
   })
 }
 
@@ -299,21 +301,22 @@ export function vehicleClassOptionsQueryOptions() {
 // inside the web module boundary — mirrors fetchVehicleClassOptions above. The
 // session-authed `/locations` list is operator-scoped server-side; a UI-created
 // vehicle needs a pickupLocationId or it never surfaces in storefront search.
-export async function fetchPickupLocationOptions(): Promise<PickupLocationOption[]> {
-  // `includeArchived=true` keeps a since-archived *assigned* location resolvable
-  // for the edit fallback (the form filters to ACTIVE for selectable options).
-  // `includeAll=true` satisfies the private route's explicit cross-operator read
-  // contract for bypass roles (else they 400); OPERATOR_* callers stay scoped by
-  // the API and it ignores the flag. Fleet is not a picker route — no `?operator`.
-  const res = await fetch(`${getApiBaseUrl()}/locations?includeArchived=true&includeAll=true`, {
-    credentials: 'include',
-  })
+export async function fetchPickupLocationOptions(
+  operatorId?: string,
+): Promise<PickupLocationOption[]> {
+  // `includeArchived=true` keeps a since-archived assigned location resolvable for
+  // the edit fallback. buildScopeParam narrows to the picked operator (#1264) or
+  // opts into the cross-operator read for a bypass admin; OPERATOR_* stay scoped.
+  const res = await fetch(
+    `${getApiBaseUrl()}/locations?includeArchived=true&${buildScopeParam(operatorId)}`,
+    { credentials: 'include' },
+  )
   return unwrap(res, pickupLocationOptionsListSchema)
 }
 
-export function pickupLocationOptionsQueryOptions() {
+export function pickupLocationOptionsQueryOptions(operatorId?: string) {
   return queryOptions({
-    queryKey: ['operator-fleet', 'location-options'],
-    queryFn: fetchPickupLocationOptions,
+    queryKey: ['operator-fleet', 'location-options', operatorId ?? 'all'],
+    queryFn: () => fetchPickupLocationOptions(operatorId),
   })
 }
