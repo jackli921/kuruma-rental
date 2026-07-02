@@ -33,14 +33,24 @@ export function CalendarToolbar({
   return (
     <div className="mb-4 flex items-center justify-between gap-4">
       <div className="flex items-center gap-1.5">
-        <Button variant="outline" size="icon-sm" onClick={() => onNavigate('PREV')}>
-          <ChevronLeft className="size-4" />
+        <Button
+          variant="outline"
+          size="icon-sm"
+          aria-label={t('previous')}
+          onClick={() => onNavigate('PREV')}
+        >
+          <ChevronLeft className="size-4" aria-hidden="true" />
         </Button>
         <Button variant="outline" size="sm" onClick={() => onNavigate('TODAY')}>
           {t('today')}
         </Button>
-        <Button variant="outline" size="icon-sm" onClick={() => onNavigate('NEXT')}>
-          <ChevronRight className="size-4" />
+        <Button
+          variant="outline"
+          size="icon-sm"
+          aria-label={t('next')}
+          onClick={() => onNavigate('NEXT')}
+        >
+          <ChevronRight className="size-4" aria-hidden="true" />
         </Button>
       </div>
 
