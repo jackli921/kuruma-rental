@@ -28,6 +28,20 @@ function appAs(userId: string, role: TestRole = 'RENTER', operatorId?: string): 
   return a
 }
 
+/** Seed a thread straight through the repo. POST /threads (caller-facing thread
+ *  creation) was removed in #1386 as an unused arbitrary-counterparty spam vector;
+ *  every real thread is created server-side by ensureThread, so tests seed the same
+ *  way rather than through the API. SEED_CTX bypasses scope to stand in for that. */
+const SEED_CTX = { userId: 'system', role: 'PLATFORM_ADMIN', bypassScope: true } as const
+
+async function seedThread(
+  participantIds: string[],
+  opts: { operatorId?: string | null } = {},
+): Promise<string> {
+  const t = await threadRepo.create(SEED_CTX, null, participantIds, null, opts.operatorId ?? null)
+  return t.id
+}
+
 describe('Message Routes', () => {
   let app: Hono
 
@@ -49,12 +63,7 @@ describe('Message Routes', () => {
     })
 
     it('returns created thread with participant info', async () => {
-      // Create a thread with two participants
-      await app.request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: [U1, U2] }),
-      })
+      await seedThread([U1, U2])
 
       const res = await app.request('/threads')
       const body = await res.json()
@@ -71,18 +80,9 @@ describe('Message Routes', () => {
 
     it('filters by userId and only shows threads user participates in', async () => {
       // Thread between user1 and user2
-      await app.request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: [U1, U2] }),
-      })
-
+      await seedThread([U1, U2])
       // Thread between user2 and user3 (user1 is NOT a participant)
-      await appAs(U2).request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: [U2, U3] }),
-      })
+      await seedThread([U2, U3])
 
       // user1 should only see 1 thread
       const res1 = await appAs(U1).request('/threads')
@@ -104,212 +104,35 @@ describe('Message Routes', () => {
     })
   })
 
-  describe('POST /threads', () => {
-    it('creates a thread with participants', async () => {
-      const res = await app.request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          participantIds: [U1, U2],
-        }),
-      })
-
-      expect(res.status).toBe(201)
-
-      const body = await res.json()
-      expect(body.success).toBe(true)
-      expect(body.data.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
-      expect(body.data.bookingId).toBeNull()
-      expect(body.data.createdAt).toBeDefined()
-      expect(body.data.updatedAt).toBeDefined()
-    })
-
-    describe('idempotency key', () => {
-      const KEY_A = '00000000-0000-4000-8000-aaaa00000001'
-      const KEY_B = '00000000-0000-4000-8000-aaaa00000002'
-
-      it('returns 200 with same thread when duplicate key is sent', async () => {
-        const first = await app.request('/threads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: KEY_A }),
-        })
-        expect(first.status).toBe(201)
-        const firstBody = await first.json()
-
-        const second = await app.request('/threads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: KEY_A }),
-        })
-        expect(second.status).toBe(200)
-        const secondBody = await second.json()
-
-        expect(secondBody.data.id).toBe(firstBody.data.id)
-        expect(secondBody.data.idempotencyKey).toBe(KEY_A)
-      })
-
-      it('creates distinct threads when different keys are sent', async () => {
-        const first = await app.request('/threads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: KEY_A }),
-        })
-        const second = await app.request('/threads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: KEY_B }),
-        })
-
-        expect(first.status).toBe(201)
-        expect(second.status).toBe(201)
-
-        const a = await first.json()
-        const b = await second.json()
-        expect(a.data.id).not.toBe(b.data.id)
-      })
-
-      it('creates thread without idempotency key for backward compatibility', async () => {
-        const res = await app.request('/threads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ participantIds: [U1, U2] }),
-        })
-        expect(res.status).toBe(201)
-        const body = await res.json()
-        expect(body.data.idempotencyKey).toBeNull()
-      })
-
-      it('concurrent duplicate requests yield exactly one 201 and one 200', async () => {
-        const key = '00000000-0000-4000-8000-aaaa00000099'
-        const [r1, r2] = await Promise.all([
-          app.request('/threads', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: key }),
-          }),
-          app.request('/threads', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: key }),
-          }),
-        ])
-
-        const statuses = [r1.status, r2.status].sort()
-        expect(statuses).toEqual([200, 201])
-
-        const b1 = await r1.json()
-        const b2 = await r2.json()
-        expect(b1.data.id).toBe(b2.data.id)
-      })
-
-      // Issue #328: without caller scope on findByIdempotencyKey, a renter
-      // who guessed or observed another tenant's key would receive the
-      // other tenant's thread on replay. Lookup must filter by participant.
-      it('cross-tenant: U3 replaying U1/U2 thread key gets a fresh thread, not theirs', async () => {
-        const sharedKey = '00000000-0000-4000-8000-aaaa0f0f0f01'
-
-        // U1 creates a thread with U2 using the key.
-        const first = await appAs(U1).request('/threads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: sharedKey }),
-        })
-        expect(first.status).toBe(201)
-        const firstThreadId = (await first.json()).data.id
-
-        // U3 attempts to replay the same key (between themselves and some other user).
-        // Must NOT return U1/U2's thread. Because uniqueness is global on the
-        // idempotency key column, U3's insert will collide; the correct fix
-        // scopes the *lookup* so the post-race re-fetch also returns nothing
-        // for U3. This leaves U3 with a 500 from the collision OR a clean
-        // scope miss — either way, U3 must not see U1/U2's thread id.
-        const second = await appAs(U3).request('/threads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ participantIds: [U3, U2], idempotencyKey: sharedKey }),
-        })
-        if (second.status === 200 || second.status === 201) {
-          const secondBody = await second.json()
-          expect(secondBody.data.id).not.toBe(firstThreadId)
-        }
-        // If status is 500, the collision was caught but not leaked — also acceptable.
-        expect([200, 201, 500]).toContain(second.status)
-      })
-
-      it('same caller replaying own key returns their existing thread', async () => {
-        const key = '00000000-0000-4000-8000-aaaa0f0f0f02'
-        const first = await appAs(U1).request('/threads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: key }),
-        })
-        expect(first.status).toBe(201)
-        const firstId = (await first.json()).data.id
-
-        const replay = await appAs(U1).request('/threads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: key }),
-        })
-        expect(replay.status).toBe(200)
-        expect((await replay.json()).data.id).toBe(firstId)
-      })
-    })
-  })
-
   describe('access control', () => {
-    it('POST /threads rejects when caller is not in participantIds', async () => {
-      const res = await appAs(U1).request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: [U2, U3] }),
-      })
-      expect(res.status).toBe(400)
-      const body = await res.json()
-      expect(body.error).toBe('Caller must be a participant')
-    })
-
-    it('a platform admin can create a thread between arbitrary users', async () => {
-      const res = await appAs(U1, 'PLATFORM_ADMIN').request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: [U2, U3] }),
-      })
-      expect(res.status).toBe(201)
-    })
-
-    it('GET /threads/:id returns 404 for non-participant', async () => {
-      const createRes = await appAs(U1).request('/threads', {
+    // #1386: caller-facing thread creation was removed — it was unused by the web
+    // and let any caller open a thread with arbitrary counterparties (a spam
+    // vector). Threads are created server-side only, by ensureThread on a booking.
+    it('POST /threads is not a route (thread creation is server-side only)', async () => {
+      const res = await app.request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ participantIds: [U1, U2] }),
       })
-      const threadId = (await createRes.json()).data.id
+      expect(res.status).toBe(404)
+    })
+
+    it('GET /threads/:id returns 404 for non-participant', async () => {
+      const threadId = await seedThread([U1, U2])
 
       const res = await appAs(U3).request(`/threads/${threadId}`)
       expect(res.status).toBe(404)
     })
 
     it('a platform admin can read any thread regardless of participation', async () => {
-      const createRes = await appAs(U1).request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: [U1, U2] }),
-      })
-      const threadId = (await createRes.json()).data.id
+      const threadId = await seedThread([U1, U2])
 
       const res = await appAs(U3, 'PLATFORM_ADMIN').request(`/threads/${threadId}`)
       expect(res.status).toBe(200)
     })
 
     it('non-participant cannot send messages to thread', async () => {
-      const createRes = await appAs(U1).request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: [U1, U2] }),
-      })
-      const threadId = (await createRes.json()).data.id
+      const threadId = await seedThread([U1, U2])
 
       const res = await appAs(U3).request(`/threads/${threadId}/messages`, {
         method: 'POST',
@@ -320,12 +143,7 @@ describe('Message Routes', () => {
     })
 
     it('non-participant cannot mark thread as read', async () => {
-      const createRes = await appAs(U1).request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: [U1, U2] }),
-      })
-      const threadId = (await createRes.json()).data.id
+      const threadId = await seedThread([U1, U2])
 
       const res = await appAs(U3).request(`/threads/${threadId}/read`, {
         method: 'POST',
@@ -340,8 +158,8 @@ describe('Message Routes', () => {
   // operatorId (set by ensureThread, never the request body); an OPERATOR_*
   // caller may read/reply only its own tenant's threads. Exploit path under
   // test: operator B must get a 404 — never a 200 read or a 201 reply — on
-  // operator A's thread. Threads are seeded via the repo directly because the
-  // caller-facing POST /threads always leaves operatorId null.
+  // operator A's thread. Threads are seeded via the repo directly with an
+  // operatorId, which only ensureThread sets (from the booking) in production.
   describe('operator tenant scoping (#1205)', () => {
     const OP_A = 'op-aaaa'
     const OP_B = 'op-bbbb'
@@ -402,25 +220,13 @@ describe('Message Routes', () => {
     const MSG_KEY_A = '00000000-0000-4000-8000-bbbb00000001'
     const MSG_KEY_B = '00000000-0000-4000-8000-bbbb00000002'
 
-    /** Helper: create a thread and return its id. */
+    /** Helper: seed a thread and return its id (POST /threads was removed in #1386). */
     async function createThread(): Promise<string> {
-      const res = await app.request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: [U1, U2] }),
-      })
-      return (await res.json()).data.id
+      return seedThread([U1, U2])
     }
 
     it('sends a message to a thread', async () => {
-      // Create thread first
-      const createRes = await app.request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: [U1, U2] }),
-      })
-      const created = await createRes.json()
-      const threadId = created.data.id
+      const threadId = await createThread()
 
       // senderId derived from JWT (U1)
       const res = await app.request(`/threads/${threadId}/messages`, {
@@ -528,13 +334,8 @@ describe('Message Routes', () => {
       // participants in the same thread replaying the same key must
       // not see each other's messages.
       it('cross-tenant: U2 replaying U1 message key does not leak U1 message', async () => {
-        // U1 creates thread and sends a message with idempotency key.
-        const createRes = await appAs(U1).request('/threads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ participantIds: [U1, U2] }),
-        })
-        const threadId = (await createRes.json()).data.id
+        // U1's thread with U2.
+        const threadId = await seedThread([U1, U2])
 
         const sharedKey = '00000000-0000-4000-8000-bbbb0f0f0f01'
         const u1Msg = await appAs(U1).request(`/threads/${threadId}/messages`, {
@@ -584,14 +385,7 @@ describe('Message Routes', () => {
 
   describe('GET /threads/:id', () => {
     it('returns thread with messages', async () => {
-      // Create thread
-      const createRes = await app.request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: [U1, U2] }),
-      })
-      const created = await createRes.json()
-      const threadId = created.data.id
+      const threadId = await seedThread([U1, U2])
 
       // U1 sends a message
       await appAs(U1).request(`/threads/${threadId}/messages`, {
@@ -644,14 +438,7 @@ describe('Message Routes', () => {
 
   describe('POST /threads/:id/read', () => {
     it('resets unread count for user after messages are sent', async () => {
-      // Create thread
-      const createRes = await app.request('/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: [U1, U2] }),
-      })
-      const created = await createRes.json()
-      const threadId = created.data.id
+      const threadId = await seedThread([U1, U2])
 
       // user1 sends two messages (user2 gets unread incremented)
       await appAs(U1).request(`/threads/${threadId}/messages`, {
