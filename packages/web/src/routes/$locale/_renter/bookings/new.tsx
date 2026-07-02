@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE, isLocale } from '@/vite/i18n/locale'
 import { ReservationWizard } from '@/vite/reservation/ReservationWizard'
 import { fetchAddOns, fetchInsuranceOptions } from '@/vite/reservation/api'
 import { fetchStorefrontDetail } from '@/vite/storefronts/api'
@@ -73,8 +74,12 @@ export const Route = createFileRoute('/$locale/_renter/bookings/new')({
       })
     }
 
+    // The $locale layout already 404s an invalid param; narrow it to satisfy the
+    // typed client (fall back to the default defensively). Add-on names resolve to
+    // this locale server-side; a locale change re-runs the loader via the path.
+    const locale = isLocale(params.locale) ? params.locale : DEFAULT_LOCALE
     const [addOns, insuranceOptions] = await Promise.all([
-      fetchAddOns(deps.locationId),
+      fetchAddOns(deps.locationId, locale),
       fetchInsuranceOptions(deps.locationId),
     ])
     return {
