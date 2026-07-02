@@ -1,3 +1,4 @@
+import { instantToJstFauxLocal, todayInJst } from '@/lib/datetime'
 import { STATUS_CLASS } from '@/lib/event-colors'
 import { useFeatureFlag } from '@/vite/config'
 import { CalendarToolbar } from '@/vite/operator-bookings/CalendarToolbar'
@@ -64,9 +65,22 @@ export function FleetTimeline({
 
   // The visible window is the SAME range the loader fetched (calendarRange), so the
   // board shows exactly the rows that were loaded — no off-by-one against the fetch.
-  const { from, to } = useMemo(() => {
+  // calendarRange is JST-anchored (#1250), so `*True` are the real instants used to
+  // clamp bars below. react-calendar-timeline positions bars AND renders its axis
+  // labels in the browser's local tz, so `from`/`to` (and each bar) are shifted to
+  // faux-local — a local wall clock that reads as the Tokyo wall clock — for the lib.
+  // The shift is uniform, preserving clamping + relative spacing while pinning the
+  // axis to JST on any browser.
+  const { fromTrue, toTrue, from, to } = useMemo(() => {
     const r = calendarRange('timeline', date)
-    return { from: Date.parse(r.from), to: Date.parse(r.to) }
+    const fromTrue = Date.parse(r.from)
+    const toTrue = Date.parse(r.to)
+    return {
+      fromTrue,
+      toTrue,
+      from: instantToJstFauxLocal(new Date(fromTrue)).getTime(),
+      to: instantToJstFauxLocal(new Date(toTrue)).getTime(),
+    }
   }, [date])
 
   const toolbarLabel = useMemo(() => {
@@ -82,8 +96,15 @@ export function FleetTimeline({
   }, [date, culture])
 
   const layout = useMemo(
-    () => buildTimelineLayout({ rows, vehicles, from, to, unassignedLabel: t('unassigned') }),
-    [rows, vehicles, from, to, t],
+    () =>
+      buildTimelineLayout({
+        rows,
+        vehicles,
+        from: fromTrue,
+        to: toTrue,
+        unassignedLabel: t('unassigned'),
+      }),
+    [rows, vehicles, fromTrue, toTrue, t],
   )
 
   const groups = useMemo<TimelineGroupBase[]>(
@@ -97,8 +118,9 @@ export function FleetTimeline({
         id: it.id,
         group: it.group,
         title: it.title,
-        start_time: it.start,
-        end_time: it.end,
+        // #1250: faux-local so the bar lands at its Tokyo wall clock on the local axis.
+        start_time: instantToJstFauxLocal(new Date(it.start)).getTime(),
+        end_time: instantToJstFauxLocal(new Date(it.end)).getTime(),
         canMove: false,
         canResize: false,
         className: `${STATUS_CLASS[it.status]}${
@@ -111,7 +133,9 @@ export function FleetTimeline({
   const handleNavigate = useCallback(
     (action: 'PREV' | 'NEXT' | 'TODAY') => {
       if (action === 'TODAY') {
-        onDateChange(new Date())
+        // #1250: the JST calendar day (see BookingsCalendar) — off-JST the browser-local
+        // day can differ from the Tokyo day the operator plans in.
+        onDateChange(todayInJst())
         return
       }
       onDateChange(shiftCalendarDate('timeline', date, action === 'PREV' ? -1 : 1))

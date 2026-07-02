@@ -250,13 +250,14 @@ describe('OperatorBookingsRoute manual-booking affordance (#589 1d)', () => {
 
   it('opens the dialog with the clicked calendar slot prefilled (wall-clock JST)', async () => {
     renderRoute(operatorSession, bookableVehicles, [nambaStore])
-    // rbc hands a SlotInfo to BookingsCalendar's adapter (captured here); it surfaces
-    // {start,end}, which the route threads to the dialog as initialRange. 01:00Z is
-    // 10:00 JST — the form shows wall-clock Tokyo.
+    // rbc hands a SlotInfo to BookingsCalendar's adapter (captured here). #1250 pins the
+    // calendar to JST, so rbc reports the slot in local wall clock that reads as Tokyo
+    // time: clicking the 10:00 gridline on Jul 1/Jul 3 yields these local Dates. The
+    // adapter un-shifts them to true instants, and the dialog re-renders wall-clock JST.
     await act(async () => {
       ;(calendarProps.onSelectSlot as (s: { start: Date; end: Date }) => void)({
-        start: new Date('2026-07-01T01:00:00.000Z'),
-        end: new Date('2026-07-03T01:00:00.000Z'),
+        start: new Date(2026, 6, 1, 10, 0), // local wall clock = 10:00 JST
+        end: new Date(2026, 6, 3, 10, 0),
       })
     })
     expect(await screen.findByRole('heading', { name: c.dialogTitle })).toBeInTheDocument()
