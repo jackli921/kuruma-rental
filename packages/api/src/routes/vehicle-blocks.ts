@@ -56,7 +56,15 @@ export function createVehicleBlockRoutes(service: VehicleBlockService) {
       const parsed = await parseBody(c, createVehicleBlockSchema)
       if (!parsed.ok) return parsed.response
 
-      const result = await service.createBlock(toCallerContext(user), idResult.id, parsed.data)
+      // #1260: a picker admin binds the write to the operator it is acting as; the
+      // service drops the id for a tenant operator, so it can never widen scope.
+      const actingOperatorId = c.req.query('operatorId')
+      const result = await service.createBlock(
+        toCallerContext(user),
+        idResult.id,
+        parsed.data,
+        actingOperatorId,
+      )
       if (!result.ok)
         return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)
       return ok(c, result.block, 201)
@@ -70,10 +78,13 @@ export function createVehicleBlockRoutes(service: VehicleBlockService) {
       const blockIdResult = parseId(c, 'blockId')
       if (!blockIdResult.ok) return blockIdResult.response
 
+      // #1260: bind an admin delete to the operator it is acting as (see POST).
+      const actingOperatorId = c.req.query('operatorId')
       const result = await service.deleteBlock(
         toCallerContext(user),
         vehicleIdResult.id,
         blockIdResult.id,
+        actingOperatorId,
       )
       if (!result.ok)
         return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)

@@ -51,6 +51,9 @@ export const FEATURE_FLAGS = {
     runtimeControlled: true,
   },
   REVIEWS: { env: 'VITE_FEATURE_REVIEWS', label: 'Reviews & ratings', runtimeControlled: true },
+  // GA gate: the board is built on a pinned react-calendar-timeline pre-release whose bars are
+  // mouse-only (no keyboard/ARIA). Do not flip this on in a paid/GA build until #1349 lands an
+  // accessible path. Background: #1330 / docs/2026-07-02-fleet-timeline-lib-pin.md.
   FLEET_TIMELINE: {
     env: 'VITE_FEATURE_FLEET_TIMELINE',
     label: 'Fleet timeline board',

@@ -1,7 +1,11 @@
+import { seedId } from '@kuruma/shared/db/seed-id'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CallerContext } from '../../src/middleware/auth'
 import { PG_ERROR } from '../../src/pg-errors'
-import { InMemoryAddOnRepository } from '../../src/repositories/in-memory'
+import {
+  InMemoryAddOnRepository,
+  InMemoryAddOnTemplateRepository,
+} from '../../src/repositories/in-memory'
 import { AddOnService } from '../../src/services/add-on'
 
 const uniqueViolation = () =>
@@ -12,6 +16,10 @@ const uniqueViolation = () =>
 const opA = 'op_a'
 const opB = 'op_b'
 
+const CHILD_SEAT = seedId('tmpl_child_seat')
+const ETC_CARD = seedId('tmpl_etc_card')
+const LOCALE = 'en' as const
+
 const ctxFor = (operatorId: string): CallerContext => ({
   userId: 'owner',
   role: 'OPERATOR_OWNER',
@@ -19,13 +27,12 @@ const ctxFor = (operatorId: string): CallerContext => ({
   bypassScope: false,
 })
 
-function createInput(operatorId: string, name: string) {
+function createInput(operatorId: string, templateId: string) {
   return {
     operatorId,
-    name,
-    description: null,
+    templateId,
+    descriptionOverride: null,
     priceJpy: 1500,
-    status: 'ACTIVE' as const,
   }
 }
 
@@ -35,125 +42,153 @@ describe('AddOnService', () => {
 
   beforeEach(() => {
     repo = new InMemoryAddOnRepository()
-    service = new AddOnService(repo)
+    service = new AddOnService(repo, new InMemoryAddOnTemplateRepository())
   })
 
   describe('create', () => {
-    it('creates an add-on for the caller operator', async () => {
-      const result = await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
+    it('creates an add-on from a template and resolves its name to the locale', async () => {
+      const result = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), 'ja')
       expect(result.ok).toBe(true)
       if (result.ok) {
-        expect(result.option.name).toBe('Baby Seat')
+        expect(result.option.templateId).toBe(CHILD_SEAT)
+        expect(result.option.resolvedName).toBe('チャイルドシート')
         expect(result.option.operatorId).toBe(opA)
       }
     })
 
-    it('rejects a duplicate ACTIVE name within the same operator with 409', async () => {
-      await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
-      const result = await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
+    it('rejects a second add-on for the same template within one operator with 409', async () => {
+      await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
+      const result = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
       expect(result.ok).toBe(false)
       if (!result.ok) {
         expect(result.status).toBe(409)
-        expect(result.error).toBe('An add-on with this name already exists')
+        expect(result.error).toBe('You already offer this add-on')
       }
     })
 
-    it('allows the same name under a different operator', async () => {
-      await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
-      const result = await service.create(ctxFor(opB), createInput(opB, 'Baby Seat'))
+    it('allows the same template under a different operator', async () => {
+      await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
+      const result = await service.create(ctxFor(opB), createInput(opB, CHILD_SEAT), LOCALE)
       expect(result.ok).toBe(true)
     })
 
+    it('rejects an unknown templateId with 400', async () => {
+      const result = await service.create(
+        ctxFor(opA),
+        createInput(opA, crypto.randomUUID()),
+        LOCALE,
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.status).toBe(400)
+        expect(result.error).toBe('Unknown or unavailable add-on template')
+      }
+    })
+
+    it('rejects an ARCHIVED template with 400 (never newly offered)', async () => {
+      const store = new Map([
+        [
+          ETC_CARD,
+          {
+            id: ETC_CARD,
+            key: 'etc_card',
+            name: { en: 'ETC card' },
+            description: null,
+            status: 'ARCHIVED' as const,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+      ])
+      const svc = new AddOnService(
+        new InMemoryAddOnRepository(),
+        new InMemoryAddOnTemplateRepository(store),
+      )
+      const result = await svc.create(ctxFor(opA), createInput(opA, ETC_CARD), LOCALE)
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.status).toBe(400)
+    })
+
     it('maps a unique-violation that slips past the pre-check (lost race) to 409', async () => {
-      vi.spyOn(repo, 'findActiveByOperatorAndName').mockResolvedValue(undefined)
+      vi.spyOn(repo, 'findActiveByOperatorAndTemplate').mockResolvedValue(undefined)
       vi.spyOn(repo, 'create').mockRejectedValue(uniqueViolation())
-      const result = await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
+      const result = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.status).toBe(409)
     })
   })
 
   describe('update', () => {
-    it('updates a field for an owned add-on', async () => {
-      const created = await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
+    it('updates the price for an owned add-on', async () => {
+      const created = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
       if (!created.ok) throw new Error('seed failed')
-      const result = await service.update(ctxFor(opA), created.option.id, { priceJpy: 3000 })
+      const result = await service.update(
+        ctxFor(opA),
+        created.option.id,
+        { priceJpy: 3000 },
+        LOCALE,
+      )
       expect(result.ok).toBe(true)
       if (result.ok) expect(result.option.priceJpy).toBe(3000)
     })
 
-    it('returns 404 (not 403) when the id belongs to another operator', async () => {
-      const created = await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
+    it('updates the description override and reflects it in resolvedDescription', async () => {
+      const created = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
       if (!created.ok) throw new Error('seed failed')
-      const result = await service.update(ctxFor(opB), created.option.id, { name: 'Hijack' })
+      const result = await service.update(
+        ctxFor(opA),
+        created.option.id,
+        { descriptionOverride: { en: 'Our own copy' } },
+        'en',
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.option.descriptionOverride).toEqual({ en: 'Our own copy' })
+        expect(result.option.resolvedDescription).toBe('Our own copy')
+      }
+    })
+
+    it('returns 404 (not 403) when the id belongs to another operator', async () => {
+      const created = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
+      if (!created.ok) throw new Error('seed failed')
+      const result = await service.update(ctxFor(opB), created.option.id, { priceJpy: 1 }, LOCALE)
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.status).toBe(404)
     })
 
     it('loads the row (scoped) before writing, never writes on a cross-tenant id', async () => {
-      const created = await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
+      const created = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
       if (!created.ok) throw new Error('seed failed')
       const updateSpy = vi.spyOn(repo, 'update')
-      await service.update(ctxFor(opB), created.option.id, { name: 'Hijack' })
+      await service.update(ctxFor(opB), created.option.id, { priceJpy: 1 }, LOCALE)
       expect(updateSpy).not.toHaveBeenCalled()
-    })
-
-    it('rejects renaming to a name already used by the same operator with 409', async () => {
-      await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
-      const etc = await service.create(ctxFor(opA), createInput(opA, 'ETC Card'))
-      if (!etc.ok) throw new Error('seed failed')
-      const result = await service.update(ctxFor(opA), etc.option.id, { name: 'Baby Seat' })
-      expect(result.ok).toBe(false)
-      if (!result.ok) expect(result.status).toBe(409)
-    })
-
-    it('allows a no-name-change edit without a self-collision (excludes current id)', async () => {
-      const created = await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
-      if (!created.ok) throw new Error('seed failed')
-      // Patch the same name back plus a price change — must not 409 on itself.
-      const result = await service.update(ctxFor(opA), created.option.id, {
-        name: 'Baby Seat',
-        priceJpy: 1800,
-      })
-      expect(result.ok).toBe(true)
-      if (result.ok) expect(result.option.priceJpy).toBe(1800)
-    })
-
-    it('maps a unique-violation on rename that slips past the pre-check to 409', async () => {
-      const created = await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
-      if (!created.ok) throw new Error('seed failed')
-      vi.spyOn(repo, 'findActiveByOperatorAndName').mockResolvedValue(undefined)
-      vi.spyOn(repo, 'update').mockRejectedValue(uniqueViolation())
-      const result = await service.update(ctxFor(opA), created.option.id, { name: 'ETC Card' })
-      expect(result.ok).toBe(false)
-      if (!result.ok) expect(result.status).toBe(409)
     })
   })
 
   describe('archive', () => {
     it('sets status to ARCHIVED for an owned add-on', async () => {
-      const created = await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
+      const created = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
       if (!created.ok) throw new Error('seed failed')
-      const result = await service.archive(ctxFor(opA), created.option.id)
+      const result = await service.archive(ctxFor(opA), created.option.id, LOCALE)
       expect(result.ok).toBe(true)
       if (result.ok) expect(result.option.status).toBe('ARCHIVED')
     })
 
     it('returns 404 and does not write when archiving another operator add-on', async () => {
-      const created = await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
+      const created = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
       if (!created.ok) throw new Error('seed failed')
       const archiveSpy = vi.spyOn(repo, 'archive')
-      const result = await service.archive(ctxFor(opB), created.option.id)
+      const result = await service.archive(ctxFor(opB), created.option.id, LOCALE)
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.status).toBe(404)
       expect(archiveSpy).not.toHaveBeenCalled()
     })
 
-    it('frees the name so a new ACTIVE add-on can reuse it', async () => {
-      const created = await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
+    it('frees the template so the operator can offer it again after archiving', async () => {
+      const created = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
       if (!created.ok) throw new Error('seed failed')
-      await service.archive(ctxFor(opA), created.option.id)
-      const recreated = await service.create(ctxFor(opA), createInput(opA, 'Baby Seat'))
+      await service.archive(ctxFor(opA), created.option.id, LOCALE)
+      const recreated = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
       expect(recreated.ok).toBe(true)
     })
   })

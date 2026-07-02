@@ -1,8 +1,8 @@
+import { todayInJst } from '@/lib/datetime'
 import type { CalendarBookingRow } from '@/vite/operator-bookings/api'
 import {
   type BlockCalendarEvent,
   type CalendarItem,
-  type CalendarView,
   blocksToCalendarEvents,
   calendarItemClassName,
   calendarRange,
@@ -99,44 +99,40 @@ describe('fleetToResources', () => {
   })
 })
 
-describe('calendarRange', () => {
-  // 2026-07-15 is a Wednesday; noon avoids any midnight/DST boundary flake.
-  const anchor = new Date('2026-07-15T12:00:00.000Z')
+describe('calendarRange (JST-anchored, #1250)', () => {
+  // 2026-07-15 is a Wednesday. Built from LOCAL fields so the anchor's calendar day is
+  // July 15 in ANY runner TZ. The bounds are anchored to the JST day/week/month, not
+  // the browser-local one, so an off-JST viewer's fetch window is the SAME instants a
+  // Tokyo viewer gets — no booking near JST-midnight drops out of the query. Asserted
+  // as exact UTC ISO (a JST wall clock is `wall - 9h`), so these hold under any TZ.
+  const anchor = new Date(2026, 6, 15, 12)
 
-  const span = (view: CalendarView) => {
-    const { from, to } = calendarRange(view, anchor)
-    return { from: new Date(from), to: new Date(to) }
-  }
-
-  it('spans a fixed 14-day planning window from the anchor day in timeline view', () => {
-    const { from, to } = span('timeline')
-    expect(from.getHours()).toBe(0) // anchored at local midnight of the anchor day
-    expect(from.getTime()).toBeLessThanOrEqual(anchor.getTime())
-    const days = (to.getTime() - from.getTime()) / DAY_MS
-    expect(days).toBeGreaterThanOrEqual(13.9) // ~14 days (DST-tolerant), not 13 or 15
-    expect(days).toBeLessThanOrEqual(14.1)
+  it('spans the JST day in day view (00:00–23:59:59.999 JST)', () => {
+    expect(calendarRange('day', anchor)).toEqual({
+      from: '2026-07-14T15:00:00.000Z', // JST 2026-07-15 00:00
+      to: '2026-07-15T14:59:59.999Z', // JST 2026-07-15 23:59:59.999
+    })
   })
 
-  it('spans the anchor day in day view (~24h, containing the anchor)', () => {
-    const { from, to } = span('day')
-    expect(from.getTime()).toBeLessThanOrEqual(anchor.getTime())
-    expect(to.getTime()).toBeGreaterThan(anchor.getTime())
-    expect(to.getTime() - from.getTime()).toBeGreaterThanOrEqual(23 * HOUR_MS)
-    expect(to.getTime() - from.getTime()).toBeLessThanOrEqual(25 * HOUR_MS)
+  it('spans a fixed 14-day JST planning window from the anchor day in timeline view', () => {
+    const { from, to } = calendarRange('timeline', anchor)
+    expect(from).toBe('2026-07-14T15:00:00.000Z') // JST 2026-07-15 00:00
+    expect(to).toBe('2026-07-28T15:00:00.000Z') // JST 2026-07-29 00:00 — exactly 14 days
+    expect(new Date(to).getTime() - new Date(from).getTime()).toBe(14 * DAY_MS)
   })
 
-  it('spans a Monday-start week in week view (~7 days)', () => {
-    const { from, to } = span('week')
-    expect(from.getDay()).toBe(1) // Monday
-    expect(to.getTime() - from.getTime()).toBeGreaterThanOrEqual(6 * DAY_MS)
-    expect(to.getTime() - from.getTime()).toBeLessThanOrEqual(8 * DAY_MS)
+  it('spans the Monday-start JST week in week view', () => {
+    expect(calendarRange('week', anchor)).toEqual({
+      from: '2026-07-12T15:00:00.000Z', // JST Mon 2026-07-13 00:00
+      to: '2026-07-19T14:59:59.999Z', // JST Sun 2026-07-19 23:59:59.999
+    })
   })
 
-  it('covers the whole month grid in month view (Monday-aligned, enclosing the month)', () => {
-    const { from, to } = span('month')
-    expect(from.getDay()).toBe(1) // grid starts on a Monday
-    expect(from.getTime()).toBeLessThanOrEqual(new Date('2026-07-01T00:00:00').getTime())
-    expect(to.getTime()).toBeGreaterThanOrEqual(new Date('2026-07-31T23:59:59').getTime())
+  it('covers the whole month grid in month view (Monday-aligned JST weeks enclosing July)', () => {
+    expect(calendarRange('month', anchor)).toEqual({
+      from: '2026-06-28T15:00:00.000Z', // JST Mon 2026-06-29 00:00 (grid start)
+      to: '2026-08-02T14:59:59.999Z', // JST Sun 2026-08-02 23:59:59.999 (grid end)
+    })
   })
 })
 
@@ -196,11 +192,13 @@ describe('formatCalendarDate / parseCalendarDate', () => {
     expect([back.getFullYear(), back.getMonth(), back.getDate()]).toEqual([2026, 6, 15])
   })
 
-  it('falls back to today for a missing, malformed, or overflowed date', () => {
-    const today = new Date()
+  it('falls back to the JST calendar day (not the browser-local day) when missing/malformed', () => {
+    // #1250: near midnight an off-JST browser's local day can differ from the Tokyo
+    // day the operator works in; the fallback must anchor to JST so TODAY lands right.
+    const jstToday = todayInJst()
     const ymd = (d: Date) => [d.getFullYear(), d.getMonth(), d.getDate()]
     for (const bad of [undefined, '', 'not-a-date', '2026-13-99', '2026-7-1']) {
-      expect(ymd(parseCalendarDate(bad))).toEqual(ymd(today))
+      expect(ymd(parseCalendarDate(bad))).toEqual(ymd(jstToday))
     }
   })
 })

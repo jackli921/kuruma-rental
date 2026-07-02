@@ -62,3 +62,63 @@ export function formatJstTime(iso: string, locale: string): string {
     timeZone: JST_TIME_ZONE,
   })
 }
+
+/**
+ * Read a Date's *local* wall-clock fields and re-interpret them as JST, returning
+ * the true instant. The inverse of `instantToJstFauxLocal`.
+ *
+ * #1250: the operator calendar's fetch window and its react-big-calendar /
+ * react-calendar-timeline surfaces are anchored to the browser's local wall clock
+ * (that's how those libs position bands and derive day/week/month bounds). To make
+ * them mean JST regardless of where the browser lives, we compute in "faux-local"
+ * space — a local wall clock that reads as the Tokyo wall clock — then map back to a
+ * real instant with this. Used to serialize JST-anchored range bounds and to
+ * un-shift a clicked calendar slot before it prefills a JST-anchored dialog.
+ */
+export function jstWallClockToInstant(wall: Date): Date {
+  return new Date(
+    Date.UTC(
+      wall.getFullYear(),
+      wall.getMonth(),
+      wall.getDate(),
+      wall.getHours(),
+      wall.getMinutes(),
+      wall.getSeconds(),
+      wall.getMilliseconds(),
+    ) - JST_OFFSET_MS,
+  )
+}
+
+/**
+ * Build a browser-local Date whose *local* wall clock equals the JST wall clock of
+ * `instant`. The inverse of `jstWallClockToInstant`.
+ *
+ * #1250: rbc/timeline read a band's local hours to place it on the axis. Feeding
+ * them this faux-local Date makes a booking render at its Tokyo hour on any browser
+ * (a 10:00 JST pickup shows at 10:00, not the viewer's local offset). The shift is
+ * confined to the rbc/timeline edge; the CalendarItem model stays true-instant, so
+ * every text formatter still pins JST via `timeZone` (no double shift).
+ */
+export function instantToJstFauxLocal(instant: Date): Date {
+  const jst = new Date(instant.getTime() + JST_OFFSET_MS)
+  return new Date(
+    jst.getUTCFullYear(),
+    jst.getUTCMonth(),
+    jst.getUTCDate(),
+    jst.getUTCHours(),
+    jst.getUTCMinutes(),
+    jst.getUTCSeconds(),
+    jst.getUTCMilliseconds(),
+  )
+}
+
+/**
+ * The JST calendar day of "now" as a browser-local Date at local midnight — the
+ * anchor the operator calendar's TODAY button and its `?date=` fallback resolve to.
+ * On an off-JST browser near midnight, `new Date()`'s local day can differ from the
+ * Tokyo day the operator works in; this pins it to JST (#1250).
+ */
+export function todayInJst(): Date {
+  const jstNow = instantToJstFauxLocal(new Date())
+  return new Date(jstNow.getFullYear(), jstNow.getMonth(), jstNow.getDate())
+}

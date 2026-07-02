@@ -1,10 +1,11 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { DEFAULT_LOCALE, isLocale } from '@/vite/i18n/locale'
 import { OperatorAddOnsView } from '@/vite/operator-add-ons/OperatorAddOnsView'
 import { addOnsQueryOptions } from '@/vite/operator-add-ons/api'
 import { useOperatorScope } from '@/vite/operator-context'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
-import { useTranslations } from 'use-intl'
+import { useLocale, useTranslations } from 'use-intl'
 
 // Operator add-on management (#585). URL `/<locale>/manage/add-ons` — behind the
 // `_business` guard, so only business roles reach it. Tenant scoping is server-side
@@ -17,8 +18,10 @@ export const Route = createFileRoute('/$locale/_business/manage/add-ons')({
   loaderDeps: ({ search }: { search: { operator?: string | undefined } }) => ({
     operator: search.operator,
   }),
-  loader: ({ context, deps }) =>
-    context.queryClient.ensureQueryData(addOnsQueryOptions(deps.operator)),
+  loader: ({ context, deps, params }) => {
+    const locale = isLocale(params.locale) ? params.locale : DEFAULT_LOCALE
+    return context.queryClient.ensureQueryData(addOnsQueryOptions(deps.operator, locale))
+  },
   pendingComponent: PageSkeleton,
   errorComponent: OperatorAddOnsError,
   component: OperatorAddOnsRoute,
@@ -27,7 +30,9 @@ export const Route = createFileRoute('/$locale/_business/manage/add-ons')({
 function OperatorAddOnsRoute() {
   const t = useTranslations('business.addOns')
   const scope = useOperatorScope()
-  const { data: addOns } = useSuspenseQuery(addOnsQueryOptions(scope.pickedOperatorId))
+  const rawLocale = useLocale()
+  const locale = isLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE
+  const { data: addOns } = useSuspenseQuery(addOnsQueryOptions(scope.pickedOperatorId, locale))
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">

@@ -1,3 +1,4 @@
+import { instantToJstFauxLocal, jstWallClockToInstant, todayInJst } from '@/lib/datetime'
 import { localizer } from '@/lib/rbc-localizer'
 import { isCalendarQuickViewEnabled, useFeatureFlag } from '@/vite/config'
 import { CalendarEventChip } from '@/vite/operator-bookings/CalendarEventChip'
@@ -89,7 +90,9 @@ export function BookingsCalendar({
   const handleToolbarNavigate = useCallback(
     (action: 'PREV' | 'NEXT' | 'TODAY') => {
       if (action === 'TODAY') {
-        onDateChange(new Date())
+        // #1250: the JST calendar day, so an off-JST viewer's TODAY lands on the Tokyo
+        // day the operator works in (not the browser-local day, which differs near midnight).
+        onDateChange(todayInJst())
         return
       }
       const offset = action === 'PREV' ? -1 : 1
@@ -110,8 +113,12 @@ export function BookingsCalendar({
   const handleSelectSlot = useCallback(
     (slot: SlotInfo) =>
       onSelectSlot?.({
-        start: slot.start,
-        end: slot.end,
+        // #1250: rbc reports the slot in the calendar's local coordinate space, which
+        // startAccessor/endAccessor below pin to the JST wall clock. Read those local
+        // fields back as JST to recover the true instant, so a slot-prefill matches the
+        // Tokyo time the operator clicked (the dialogs re-anchor via formatJstDateTimeLocal).
+        start: jstWallClockToInstant(slot.start),
+        end: jstWallClockToInstant(slot.end),
         // rbc only sets resourceId in the resource (day) view; week/month omit it —
         // so omit the key entirely there (exactOptionalPropertyTypes rejects undefined).
         ...(slot.resourceId != null ? { resourceId: String(slot.resourceId) } : {}),
@@ -123,6 +130,14 @@ export function BookingsCalendar({
     (item: CalendarItem) => ({ className: calendarItemClassName(item) }),
     [],
   )
+
+  // #1250: rbc positions a band by reading its start/end LOCAL wall clock. The
+  // CalendarItem carries true instants, so feed rbc a faux-local Date whose local wall
+  // clock equals the Tokyo wall clock — a 10:00 JST pickup then renders at 10:00 on any
+  // browser. rbc keeps the original event for callbacks, so onSelectEvent (and the
+  // block-detail dialog) still receive true instants — no double shift.
+  const startAccessor = useCallback((item: CalendarItem) => instantToJstFauxLocal(item.start), [])
+  const endAccessor = useCallback((item: CalendarItem) => instantToJstFauxLocal(item.end), [])
 
   // rbc renders each band through `components.event`. A booking becomes the
   // interactive quick-view chip (hover-peek / click-pin); a block stays a plain band
@@ -184,6 +199,8 @@ export function BookingsCalendar({
         resourceTitleAccessor="resourceTitle"
         view={view}
         date={date}
+        startAccessor={startAccessor}
+        endAccessor={endAccessor}
         onView={(v) => onViewChange(v as CalendarView)}
         onNavigate={onDateChange}
         onSelectEvent={handleSelectEvent}

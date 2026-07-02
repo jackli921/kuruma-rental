@@ -65,15 +65,35 @@ describe('BlockDetailDialog', () => {
     expect(screen.queryByText(T.notesLabel)).toBeNull()
   })
 
+  it('renders the block window at the JST wall clock, not the browser-local one (#1250)', () => {
+    // The block bands elsewhere on the calendar are placed in JST; this detail dialog
+    // must agree, else the window label disagrees with the bar the operator clicked.
+    // 00:00Z = 09:00 JST, 04:00Z = 13:00 JST.
+    const block = {
+      ...BLOCK,
+      start: new Date('2026-07-01T00:00:00.000Z'),
+      end: new Date('2026-07-01T04:00:00.000Z'),
+    }
+    setup({ block })
+    const jstFmt = new Intl.DateTimeFormat('en', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'Asia/Tokyo',
+    })
+    const expected = `${jstFmt.format(block.start)} – ${jstFmt.format(block.end)}`
+    expect(screen.getByText(expected)).not.toBeNull()
+  })
+
   it('shows the notes row when the block carries notes', () => {
     setup({ block: { ...BLOCK, notes: 'Bay 3 lift' } })
     expect(screen.getByText(T.notesLabel)).not.toBeNull()
     expect(screen.getByText('Bay 3 lift')).not.toBeNull()
   })
 
-  it('requires a confirm click, then deletes, invalidates the cache, and closes', async () => {
+  it('requires a confirm click, then deletes (forwarding the picked operator), invalidates the cache, and closes', async () => {
     deleteBlockMock.mockResolvedValue(BLOCK)
-    const { onClose, invalidate } = setup()
+    // #1260: a picker admin's delete binds to the operator it is acting as.
+    const { onClose, invalidate } = setup({ pickedOperatorId: 'op-7' })
 
     // First click arms the confirm — no API call yet.
     fireEvent.click(screen.getByRole('button', { name: T.deleteAction }))
@@ -83,7 +103,7 @@ describe('BlockDetailDialog', () => {
     // Second click performs the hard delete against the block's vehicle + id.
     fireEvent.click(screen.getByRole('button', { name: T.deleteAction }))
     await waitFor(() => expect(onClose).toHaveBeenCalled())
-    expect(deleteBlockMock).toHaveBeenCalledWith('veh-2', 'blk-1', 'csrf-1')
+    expect(deleteBlockMock).toHaveBeenCalledWith('veh-2', 'blk-1', 'csrf-1', 'op-7')
     expect(invalidate).toHaveBeenCalledWith({ queryKey: OPERATOR_BOOKINGS_KEY })
   })
 

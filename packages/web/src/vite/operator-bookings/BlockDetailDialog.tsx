@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { JST_TIME_ZONE } from '@/lib/datetime'
 import { OPERATOR_BOOKINGS_KEY, deleteBlock } from '@/vite/operator-bookings/api'
 import type { BlockCalendarEvent } from '@/vite/operator-bookings/calendar-events'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -20,10 +21,13 @@ export interface BlockDetailDialogProps {
   /** Resolved by the route from the block's `resourceId` (the calendar item carries
    *  only the vehicle id, never an enriched name). */
   readonly vehicleName: string | null
-  /** Operator-session viewers manage blocks; a platform-admin preview is read-only
-   *  (the API admits an admin write, so this affordance gate is the boundary). */
+  /** Operator-session viewers manage blocks; a platform-admin manages blocks only
+   *  within the operator it has picked (canManage folds that in). */
   readonly canManage: boolean
   readonly csrfToken: string
+  /** #1260: the picked operator a platform-admin is acting as; the delete binds to
+   *  it server-side. Undefined for a tenant operator (its own scope binds it). */
+  readonly pickedOperatorId?: string | undefined
   readonly locale: string
 }
 
@@ -38,6 +42,7 @@ export function BlockDetailDialog({
   vehicleName,
   canManage,
   csrfToken,
+  pickedOperatorId,
   locale,
 }: BlockDetailDialogProps) {
   const t = useTranslations('bookings.operator.blocks')
@@ -47,7 +52,7 @@ export function BlockDetailDialog({
   const mutation = useMutation({
     mutationFn: () => {
       if (!block) throw new Error('no block selected')
-      return deleteBlock(block.resourceId, block.id, csrfToken)
+      return deleteBlock(block.resourceId, block.id, csrfToken, pickedOperatorId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: OPERATOR_BOOKINGS_KEY })
@@ -60,7 +65,13 @@ export function BlockDetailDialog({
   if (!block) return null
 
   const culture = locale === 'zh' ? 'zh-CN' : locale
-  const fmt = new Intl.DateTimeFormat(culture, { dateStyle: 'medium', timeStyle: 'short' })
+  // #1250: pin to JST so the window label matches the JST-placed band on the calendar
+  // (block.start/end are true instants; the shared pin keeps every formatter aligned).
+  const fmt = new Intl.DateTimeFormat(culture, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: JST_TIME_ZONE,
+  })
   const windowLabel = `${fmt.format(block.start)} – ${fmt.format(block.end)}`
 
   return (

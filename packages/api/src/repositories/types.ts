@@ -15,6 +15,7 @@ export type {
   InsuranceOption,
   AddOn,
   AddOnTemplate,
+  AddOnWithTemplate,
   FeeSchedule,
   PaymentEvent,
   RenterDocument,
@@ -38,6 +39,7 @@ import type { CallerContext } from '../middleware/auth'
 import type {
   AddOn,
   AddOnTemplate,
+  AddOnWithTemplate,
   Booking,
   InsuranceOption,
   Location,
@@ -224,14 +226,25 @@ export interface AddOnFilters {
 export interface AddOnRepository {
   // Reads call requireManagementRead(ctx) (rejects RENTER + PARTNER) BEFORE
   // operatorReadScope(ctx): add-ons are operator-private, not a public catalog
-  // (#460, mirrors insurance options).
-  findAll(ctx: CallerContext, filters?: AddOnFilters): Promise<AddOn[]>
-  findById(ctx: CallerContext, id: string): Promise<AddOn | undefined>
+  // (#460, mirrors insurance options). Catalog i18n (slice 2): reads AND writes
+  // return the joined AddOnWithTemplate (the LEFT JOIN add_on_templates bundles),
+  // so the service can resolve a caller-locale name; AddOn stays the write entity.
+  findAll(ctx: CallerContext, filters?: AddOnFilters): Promise<AddOnWithTemplate[]>
+  findById(ctx: CallerContext, id: string): Promise<AddOnWithTemplate | undefined>
   /**
-   * Operator-keyed lookup for the service-level name-uniqueness pre-check,
-   * filtered to status='ACTIVE' to match the partial active-name unique index
-   * (archiving frees the name). NOT ctx-scoped — the caller passes an
-   * already-resolved operatorId; the DB partial index is the real seal.
+   * Operator-keyed dup pre-check on templateId (catalog i18n slice 2), filtered
+   * to status='ACTIVE' to match the partial active-template unique index. NOT
+   * ctx-scoped — the caller passes an already-resolved operatorId; the DB partial
+   * index is the real seal. The picker excludes already-offered templates, so the
+   * resulting 409 is only a race backstop.
+   */
+  findActiveByOperatorAndTemplate(
+    operatorId: string,
+    templateId: string,
+  ): Promise<AddOn | undefined>
+  /**
+   * Legacy name-keyed dup pre-check, retained through the PR1 nullable-templateId
+   * window for rows the picker path does not cover. Drops with the write switch.
    */
   findActiveByOperatorAndName(operatorId: string, name: string): Promise<AddOn | undefined>
   /**
@@ -241,10 +254,14 @@ export interface AddOnRepository {
    * add-ons, so this deliberately bypasses the management-only `findAll` seal.
    * Scope is single-operator + ACTIVE-only, never a cross-operator enumeration.
    */
-  findActiveByOperator(operatorId: string): Promise<AddOn[]>
-  create(data: Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'>): Promise<AddOn>
-  update(ctx: CallerContext, id: string, data: Partial<AddOn>): Promise<AddOn | undefined>
-  archive(ctx: CallerContext, id: string): Promise<AddOn | undefined>
+  findActiveByOperator(operatorId: string): Promise<AddOnWithTemplate[]>
+  create(data: Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'>): Promise<AddOnWithTemplate>
+  update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<AddOn>,
+  ): Promise<AddOnWithTemplate | undefined>
+  archive(ctx: CallerContext, id: string): Promise<AddOnWithTemplate | undefined>
 }
 
 /**
@@ -256,6 +273,13 @@ export interface AddOnRepository {
  */
 export interface AddOnTemplateRepository {
   findActive(): Promise<AddOnTemplate[]>
+  /**
+   * Look up ONE template by id — the write-path primitive (catalog i18n slice 2):
+   * a create resolves the picked template's en name for the still-NOT-NULL `name`
+   * column. NOT status-filtered (returns ARCHIVED too); the create service applies
+   * the ACTIVE-only policy. Undefined when no row matches.
+   */
+  findById(id: string): Promise<AddOnTemplate | undefined>
 }
 
 // #521 provider authorization. Not ctx-scoped: the admin endpoint

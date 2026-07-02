@@ -2,6 +2,7 @@ import type { Column } from 'drizzle-orm'
 import type { getDb, RunTx } from '@kuruma/shared/db'
 import {
   addOnOptions,
+  addOnTemplates,
   bookingEvents,
   bookings,
   classRatePlans,
@@ -22,8 +23,10 @@ import {
 } from '@kuruma/shared/db/schema'
 import type { BookingEventPayload } from '@kuruma/shared/db/schema'
 import type { VehicleDetailBooking } from '@kuruma/shared/types/vehicle-detail'
+import type { LocalizedText } from '@kuruma/shared/i18n/localized-text'
 import type {
   AddOn,
+  AddOnWithTemplate,
   Booking,
   BookingEvent,
   ClassRatePlan,
@@ -145,10 +148,23 @@ export const addOnOptionColumns = {
   operatorId: addOnOptions.operatorId,
   name: addOnOptions.name,
   description: addOnOptions.description,
+  templateId: addOnOptions.templateId,
+  descriptionOverride: addOnOptions.descriptionOverride,
   priceJpy: addOnOptions.priceJpy,
   status: addOnOptions.status,
   createdAt: addOnOptions.createdAt,
   updatedAt: addOnOptions.updatedAt,
+}
+
+// Catalog i18n (slice 2): the add-on row columns PLUS the LEFT JOIN
+// add_on_templates name/description bundles. Both template columns come back
+// null for a legacy null-templateId row (no join match) — resolution falls back
+// to the `name`/`description` columns then. Kept separate from
+// addOnOptionColumns so writes (`.returning()` off the base table) stay simple.
+export const addOnWithTemplateColumns = {
+  ...addOnOptionColumns,
+  templateName: addOnTemplates.name,
+  templateDescription: addOnTemplates.description,
 }
 
 export const feeScheduleColumns = {
@@ -365,6 +381,13 @@ type VehicleRow = ColumnRow<typeof vehicleColumns>
 type LocationRow = ColumnRow<typeof locationColumns>
 type InsuranceOptionRow = ColumnRow<typeof insuranceOptionColumns>
 type AddOnOptionRow = ColumnRow<typeof addOnOptionColumns>
+// ColumnRow can't express LEFT-JOIN nullability (add_on_templates.name is NOT
+// NULL as a column, but null when the join misses), so widen the two joined
+// bundles to `| null` by hand.
+type AddOnWithTemplateRow = AddOnOptionRow & {
+  templateName: LocalizedText | null
+  templateDescription: LocalizedText | null
+}
 type FeeScheduleRow = ColumnRow<typeof feeScheduleColumns>
 type ClassRatePlanRow = ColumnRow<typeof classRatePlanColumns>
 type PaymentEventRow = ColumnRow<typeof paymentEventColumns>
@@ -464,10 +487,20 @@ export function toAddOn(r: AddOnOptionRow): AddOn {
     operatorId: r.operatorId,
     name: r.name,
     description: r.description,
+    templateId: r.templateId,
+    descriptionOverride: r.descriptionOverride,
     priceJpy: r.priceJpy,
     status: r.status,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+  }
+}
+
+export function toAddOnWithTemplate(r: AddOnWithTemplateRow): AddOnWithTemplate {
+  return {
+    ...toAddOn(r),
+    templateName: r.templateName,
+    templateDescription: r.templateDescription,
   }
 }
 
