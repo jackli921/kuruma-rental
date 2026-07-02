@@ -102,7 +102,20 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
     const [vehicle] = await this.db
       .select(vehicleColumns)
       .from(vehicles)
-      .where(eq(vehicles.id, vehicleId))
+      .where(
+        and(
+          eq(vehicles.id, vehicleId),
+          // #1268: a targeted lookup by a known vehicleId must not leak a
+          // soft-deactivated operator's car — same NOT EXISTS(operators …
+          // deactivatedAt) seam as findAvailableVehicles above. No row -> not_found.
+          // Orphan vehicles (no operators row) are kept, matching that predicate.
+          sql`NOT EXISTS (
+                SELECT 1 FROM ${operators} o
+                WHERE o.id = ${vehicles.operatorId}
+                AND o."deactivatedAt" IS NOT NULL
+              )`,
+        ),
+      )
 
     if (!vehicle) return undefined
 
@@ -162,6 +175,14 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
           eq(bookings.pickupLocationId, pickupLocationId),
           sql`status IN ('CONFIRMED', 'ACTIVE')`,
           sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+          // #1268: keep the demand seam consistent with the capacity seam — a
+          // soft-deactivated operator contributes no demand either, so the pair
+          // stays symmetric and neither becomes a latent caller-dependent hole.
+          sql`NOT EXISTS (
+                SELECT 1 FROM ${operators} o
+                WHERE o.id = ${bookings.operatorId}
+                AND o."deactivatedAt" IS NOT NULL
+              )`,
         ),
       )
     return row?.count ?? 0
@@ -214,6 +235,16 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
           // class supply. Shares the predicate with findAvailableVehicles; the
           // in-memory path mirrors it.
           blockOverlapNotExists(fromIso, toIso),
+          // #1268: a soft-deactivated operator produces zero real class supply.
+          // Today the CLASS_COMBO producer only reaches here for operators the
+          // findActiveStorefronts seam already kept, but enforcing it in the data
+          // (not the caller) closes the latent hole a future caller would reopen.
+          // NOT EXISTS keeps orphan vehicles, matching findAvailableVehicles.
+          sql`NOT EXISTS (
+                SELECT 1 FROM ${operators} o
+                WHERE o.id = ${vehicles.operatorId}
+                AND o."deactivatedAt" IS NOT NULL
+              )`,
         ),
       )
     return row?.count ?? 0

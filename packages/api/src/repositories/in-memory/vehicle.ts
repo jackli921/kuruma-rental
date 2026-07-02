@@ -21,9 +21,12 @@ export class InMemoryVehicleRepository implements VehicleRepository {
   async findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
     const scope = operatorReadScope(ctx)
     if (scope.kind === 'none') return { data: [], total: 0 }
-    const all = [...this.store.values()].filter((v) =>
-      scope.kind === 'operator' ? v.operatorId === scope.operatorId : true,
-    )
+    const all = [...this.store.values()].filter((v) => {
+      if (scope.kind === 'operator') return v.operatorId === scope.operatorId
+      // scope.kind === 'all': apply the service-resolved picker narrow when present.
+      if (filters?.operatorId) return v.operatorId === filters.operatorId
+      return true
+    })
     let filtered: Vehicle[]
     if (filters?.status) {
       filtered = all.filter((v) => v.status === filters.status)

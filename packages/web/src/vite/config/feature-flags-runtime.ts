@@ -28,6 +28,8 @@ const BUILD_TIME_READERS: Record<FeatureFlagKey, () => boolean> = {
   REVIEWS: () => isEnvTrue(import.meta.env.VITE_FEATURE_REVIEWS),
   FLEET_TIMELINE: () => isEnvTrue(import.meta.env.VITE_FEATURE_FLEET_TIMELINE),
   MULTI_CURRENCY: () => isEnvTrue(import.meta.env.VITE_FEATURE_MULTI_CURRENCY),
+  OPERATOR_TODAY: () => isEnvTrue(import.meta.env.VITE_FEATURE_OPERATOR_TODAY),
+  CALENDAR_QUICKVIEW: () => isEnvTrue(import.meta.env.VITE_FEATURE_CALENDAR_QUICKVIEW),
 }
 
 export function isBuildTimeEnabled(key: FeatureFlagKey): boolean {

@@ -53,15 +53,21 @@ export class InMemoryVehicleBlockRepository implements VehicleBlockRepository {
     )
   }
 
-  async findOverlappingInRange(ctx: CallerContext, from: Date, to: Date): Promise<VehicleBlock[]> {
+  async findOverlappingInRange(
+    ctx: CallerContext,
+    from: Date,
+    to: Date,
+    requestedOperatorId?: string,
+  ): Promise<VehicleBlock[]> {
     const scope = vehicleBlockReadScope(ctx)
     if (scope.kind === 'none') return []
-    return [...this.store.values()].filter(
-      (b) =>
-        b.startAt < to &&
-        b.endAt > from &&
-        (scope.kind === 'operator' ? b.operatorId === scope.operatorId : true),
-    )
+    return [...this.store.values()].filter((b) => {
+      if (b.startAt >= to || b.endAt <= from) return false
+      if (scope.kind === 'operator') return b.operatorId === scope.operatorId
+      // scope.kind === 'all': apply the service-resolved narrow when present.
+      if (requestedOperatorId) return b.operatorId === requestedOperatorId
+      return true
+    })
   }
 
   async delete(id: string, operatorId: string): Promise<VehicleBlock | undefined> {

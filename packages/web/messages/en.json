@@ -51,7 +51,7 @@
     "google": "Google",
     "apple": "Apple",
     "signInTitle": "Sign in",
-    "signInSubtitle": "Continue to Best Car Rental",
+    "signInSubtitle": "Continue to Kuruma Rental",
     "continueWithGoogle": "Continue with Google",
     "inAppBrowser": {
       "title": "Open this page in your browser",
@@ -91,6 +91,7 @@
     "fees": "Fees",
     "addOns": "Add-ons",
     "menu": "Menu",
+    "language": "Language",
     "close": "Close menu",
     "switchToRenter": "Switch to renter view",
     "switchToBusiness": "Switch to business view",

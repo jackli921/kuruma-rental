@@ -1,3 +1,4 @@
+import { ViewModeProvider } from '@/vite/ViewModeProvider'
 import { useOperatorUnreadBadge, useUnreadBadge } from '@/vite/messaging'
 import type { NavItem } from '@/vite/nav/MobileMenu'
 import { Navbar } from '@/vite/nav/Navbar'
@@ -84,7 +85,9 @@ function renderNavbar(data: Session | undefined) {
   mockUseSession.mockReturnValue({ data } as unknown as ReturnType<typeof useSession>)
   return render(
     <IntlProvider locale="en" messages={en}>
-      <Navbar />
+      <ViewModeProvider>
+        <Navbar />
+      </ViewModeProvider>
     </IntlProvider>,
   )
 }
@@ -102,13 +105,18 @@ afterEach(() => {
 })
 
 describe('Navbar', () => {
-  it('links the logo to the locale home and shows no nav links when signed out', () => {
+  it('exposes the public Browse (search) link when signed out (#1300)', () => {
     renderNavbar(undefined)
     expect(screen.getByText('Kuruma').closest('a')).toHaveAttribute('data-to', '/$locale')
+    // A logged-out visitor gets one public funnel link, Browse -> /search, so the
+    // mobile drawer is no longer empty. The same navItems array feeds desktop + drawer.
+    expect(screen.getByText('Browse').closest('a')).toHaveAttribute('data-to', '/$locale/search')
+    // No authenticated nav leaks in for an anonymous session.
     expect(screen.queryByText('Dashboard')).toBeNull()
     expect(screen.queryByText('Bookings')).toBeNull()
+    expect(screen.queryByText('My Bookings')).toBeNull()
     expect(screen.getByTestId('navbar-client')).toHaveAttribute('data-signed-in', 'false')
-    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '0')
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '1')
   })
 
   it('shows the dashboard, operator bookings + fleet + classes + insurance links and business markers for a business user', () => {

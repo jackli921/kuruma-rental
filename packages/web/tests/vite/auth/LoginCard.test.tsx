@@ -5,7 +5,7 @@ vi.mock('use-intl', () => ({
   useTranslations: () => (key: string) => {
     const messages: Record<string, string> = {
       signInTitle: 'Sign in',
-      signInSubtitle: 'Continue to Best Car Rental',
+      signInSubtitle: 'Continue to Kuruma Rental',
       continueWithGoogle: 'Continue with Google',
     }
     return messages[key] ?? key
@@ -20,7 +20,7 @@ describe('LoginCard', () => {
   it('renders the title and subtitle', () => {
     render(<LoginCard />)
     expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
-    expect(screen.getByText('Continue to Best Car Rental')).toBeInTheDocument()
+    expect(screen.getByText('Continue to Kuruma Rental')).toBeInTheDocument()
   })
 
   it('submits a POST form to /auth/google/start (no returnTo)', () => {

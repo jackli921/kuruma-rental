@@ -157,14 +157,17 @@ export interface CalendarVehicle {
   name: string
 }
 
-export async function fetchCalendarVehicles(): Promise<CalendarVehicle[]> {
+export async function fetchCalendarVehicles(pickedOperatorId?: string): Promise<CalendarVehicle[]> {
   // Degrade to an empty list on failure: the vehicle columns + sidebar filter are
   // a day-view convenience, so a vehicle-list error must NOT take down the whole
   // bookings calendar (week/month render fine without columns, and the route's
-  // loader Promise.all would otherwise reject and blank the page — the exact
-  // coupling that broke the operator portal when this read /vehicles/fleet-overview).
+  // loader Promise.all would otherwise reject and blank the page).
   try {
-    const res = await fetch(`${getApiBaseUrl()}/vehicles?limit=${VEHICLES_PAGE_LIMIT}`, {
+    const sp = new URLSearchParams({ limit: String(VEHICLES_PAGE_LIMIT) })
+    // #1230 slice 5b: a picker admin narrows the columns + dialog vehicle pickers to
+    // one operator. The API drops the id for any non-privileged caller.
+    if (pickedOperatorId) sp.set('operatorId', pickedOperatorId)
+    const res = await fetch(`${getApiBaseUrl()}/vehicles?${sp.toString()}`, {
       credentials: 'include',
     })
     const data = await unwrap(res, calendarVehicleRowSchema.array())
@@ -174,10 +177,10 @@ export async function fetchCalendarVehicles(): Promise<CalendarVehicle[]> {
   }
 }
 
-export function operatorCalendarVehiclesQueryOptions() {
+export function operatorCalendarVehiclesQueryOptions(pickedOperatorId?: string) {
   return queryOptions({
-    queryKey: ['operator-bookings', 'calendar', 'vehicles'],
-    queryFn: fetchCalendarVehicles,
+    queryKey: ['operator-bookings', 'calendar', 'vehicles', pickedOperatorId ?? null],
+    queryFn: () => fetchCalendarVehicles(pickedOperatorId),
   })
 }
 
@@ -190,18 +193,28 @@ export type { CalendarBlockRow }
 /** Create-block body — the shared validator's input (kind, reason, startAt, endAt, notes?). */
 export type CreateBlockInput = CreateVehicleBlockInput
 
-export async function fetchCalendarBlocks(from: string, to: string): Promise<CalendarBlockRow[]> {
+export async function fetchCalendarBlocks(
+  from: string,
+  to: string,
+  pickedOperatorId?: string,
+): Promise<CalendarBlockRow[]> {
   const sp = new URLSearchParams({ from, to })
+  // #1230 slice 5b: a picker admin narrows the block bands to one operator.
+  if (pickedOperatorId) sp.set('operatorId', pickedOperatorId)
   const res = await fetch(`${getApiBaseUrl()}/vehicle-blocks?${sp.toString()}`, {
     credentials: 'include',
   })
   return unwrap(res, calendarBlockSchema.array())
 }
 
-export function operatorCalendarBlocksQueryOptions(from: string, to: string) {
+export function operatorCalendarBlocksQueryOptions(
+  from: string,
+  to: string,
+  pickedOperatorId?: string,
+) {
   return queryOptions({
-    queryKey: ['operator-bookings', 'blocks', from, to],
-    queryFn: () => fetchCalendarBlocks(from, to),
+    queryKey: ['operator-bookings', 'blocks', from, to, pickedOperatorId ?? null],
+    queryFn: () => fetchCalendarBlocks(from, to, pickedOperatorId),
   })
 }
 

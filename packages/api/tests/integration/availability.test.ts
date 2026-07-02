@@ -1,6 +1,6 @@
 import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
-import { users, vehicleBlocks } from '@kuruma/shared/db/schema'
-import { inArray } from 'drizzle-orm'
+import { operators, users, vehicleBlocks } from '@kuruma/shared/db/schema'
+import { eq, inArray } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
@@ -40,6 +40,7 @@ const createdVehicleIds: string[] = []
 const createdBookingIds: string[] = []
 const createdClassIds: string[] = []
 const createdLocationIds: string[] = []
+const createdOperatorIds: string[] = []
 
 beforeAll(async () => {
   const [user] = await db
@@ -72,7 +73,45 @@ afterAll(async () => {
   await cleanupUsers([testUser.id])
   await cleanupVehicleClasses(createdClassIds)
   await cleanupLocations(createdLocationIds)
+  // Operators own the classes/locations above by composite FK, so drop them last.
+  for (const id of createdOperatorIds) {
+    await db.delete(operators).where(eq(operators.id, id))
+  }
 })
+
+// #1268: a fresh operator (that we can safely deactivate — unlike the shared
+// BEST_CAR_RENTAL seed) with its own class, location, and one AVAILABLE road-legal
+// car. Returns the ids so a test can flip the operator to deactivated and assert the
+// availability seams stop counting/disclosing its car.
+async function seedFreshOperatorWithVehicle(): Promise<{
+  operatorId: string
+  vehicleId: string
+  classId: string
+  locationId: string
+}> {
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const [op] = await db
+    .insert(operators)
+    .values({ slug: `op1268-${uniq}`, name: `Op 1268 ${uniq}` })
+    .returning({ id: operators.id })
+  createdOperatorIds.push(op.id)
+  const klass = await seedVehicleClass('a1268', op.id)
+  createdClassIds.push(klass.id)
+  const location = await seedLocation('a1268', TURNAROUND_MINUTES, op.id)
+  createdLocationIds.push(location.id)
+  const vehicle = await createTestVehicle({
+    operatorId: op.id,
+    classId: klass.id,
+    pickupLocationId: location.id,
+    name: '1268 Car',
+  })
+  createdVehicleIds.push(vehicle.id)
+  return { operatorId: op.id, vehicleId: vehicle.id, classId: klass.id, locationId: location.id }
+}
+
+function deactivateOperator(operatorId: string): Promise<unknown> {
+  return db.update(operators).set({ deactivatedAt: new Date() }).where(eq(operators.id, operatorId))
+}
 
 function createTestVehicle(
   overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>> = {},
@@ -425,6 +464,21 @@ describe('DrizzleAvailabilityRepository', () => {
 
       expect(result).toBeUndefined()
     })
+
+    it('returns undefined (not_found) for a soft-deactivated operator’s vehicle (#1268)', async () => {
+      const { operatorId, vehicleId } = await seedFreshOperatorWithVehicle()
+      const lookup = () =>
+        availabilityRepo.checkVehicleAvailability(
+          vehicleId,
+          new Date('2026-08-01T10:00:00Z'),
+          new Date('2026-08-01T14:00:00Z'),
+        )
+      // Active: a targeted lookup by the known id resolves the car.
+      expect(await lookup()).toBeDefined()
+      await deactivateOperator(operatorId)
+      // Deactivated: the same known id now reads as not_found — no disclosure.
+      expect(await lookup()).toBeUndefined()
+    })
   })
 
   // #464: countClassDemand backs slice 2's inventory guard — it sums BLOCKING
@@ -471,6 +525,34 @@ describe('DrizzleAvailabilityRepository', () => {
         TO,
       )
       expect(count).toBe(2)
+    })
+
+    it('drops a soft-deactivated operator’s bookings from class demand — guarantee in the data (#1268)', async () => {
+      const { operatorId, classId, locationId } = await seedFreshOperatorWithVehicle()
+      // A car-less CLASS_COMBO float on the fresh operator's (class, location).
+      const float = await bookingRepo.create(
+        SYSTEM_CONTEXT,
+        bookingInput({
+          operatorId,
+          renterId: testUser.id,
+          classId,
+          requestedVehicleId: null,
+          assignedVehicleId: null,
+          fulfillmentMode: 'CLASS_COMBO',
+          pickupLocationId: locationId,
+          dropoffLocationId: locationId,
+          status: 'CONFIRMED',
+          ...window,
+        }),
+      )
+      createdBookingIds.push(float.id)
+      const forOp = () =>
+        availabilityRepo.countClassDemand(operatorId, classId, locationId, FROM, TO)
+      // Active: the booking counts as blocking demand for the class.
+      expect(await forOp()).toBe(1)
+      await deactivateOperator(operatorId)
+      // Deactivated: the demand seam counts zero, symmetric with the capacity seam.
+      expect(await forOp()).toBe(0)
     })
 
     it('excludes CANCELLED bookings and windows that do not overlap', async () => {
@@ -672,6 +754,19 @@ describe('DrizzleAvailabilityRepository', () => {
         ASOF,
       )
       expect(count).toBe(1)
+    })
+
+    it('drops a soft-deactivated operator’s cars from class capacity — guarantee in the data (#1268)', async () => {
+      const { operatorId, classId, locationId } = await seedFreshOperatorWithVehicle()
+      const from = new Date('2026-08-01T10:00:00Z')
+      const to = new Date('2026-08-01T14:00:00Z')
+      const forOp = () =>
+        availabilityRepo.countClassCapacity(operatorId, classId, locationId, from, to, to)
+      // Active: the road-legal AVAILABLE car counts as real class supply.
+      expect(await forOp()).toBe(1)
+      await deactivateOperator(operatorId)
+      // Deactivated: the seam counts zero even without the caller's storefront guard.
+      expect(await forOp()).toBe(0)
     })
   })
 })

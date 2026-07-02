@@ -42,6 +42,10 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       conditions.push(eq(vehicles.operatorId, scope.operatorId))
     } else if (scope.kind === 'none') {
       conditions.push(sql`false`)
+    } else if (filters?.operatorId) {
+      // scope.kind === 'all': the picker admin's narrow (service-gated to the platform
+      // tier). Applied ONLY in the bypass/catalog `all` branch — H2.
+      conditions.push(eq(vehicles.operatorId, filters.operatorId))
     }
 
     if (filters?.status) {

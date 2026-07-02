@@ -103,6 +103,6 @@ describe('deleteBlock', () => {
 describe('operatorCalendarBlocksQueryOptions', () => {
   it('keys the cache under the operator-bookings/blocks prefix + range', () => {
     const opts = operatorCalendarBlocksQueryOptions('from-iso', 'to-iso')
-    expect(opts.queryKey).toEqual(['operator-bookings', 'blocks', 'from-iso', 'to-iso'])
+    expect(opts.queryKey).toEqual(['operator-bookings', 'blocks', 'from-iso', 'to-iso', null])
   })
 })

@@ -1,6 +1,7 @@
 import { useOperatorUnreadBadge } from '@/vite/messaging'
 import { NavBadge } from '@/vite/nav/NavBadge'
 import { visibleBusinessNavItems } from '@/vite/nav/business-nav-items'
+import { useBusinessNavFlags } from '@/vite/nav/useNavFlags'
 import { useNewBookingsBadge } from '@/vite/operator-bookings/useNewBookingsBadge'
 import { useSession } from '@/vite/session'
 import { Link } from '@tanstack/react-router'
@@ -29,6 +30,8 @@ export function BusinessSidebar() {
   // so the operator-scoped badge scans are safe to enable unconditionally.
   const { count: newBookingsCount } = useNewBookingsBadge({ enabled: true })
   const { count: operatorUnread } = useOperatorUnreadBadge({ enabled: true })
+  // #1322: read the runtime-toggleable nav flags so a dashboard override reflects live.
+  const businessNavFlags = useBusinessNavFlags()
 
   return (
     <aside
@@ -38,7 +41,7 @@ export function BusinessSidebar() {
       className="hidden md:flex md:flex-col w-56 shrink-0 border-r border-sidebar-border bg-sidebar"
     >
       <nav className="flex flex-col gap-1 p-3">
-        {visibleBusinessNavItems(session?.user?.role).map(({ to, labelKey }) => (
+        {visibleBusinessNavItems(session?.user?.role, businessNavFlags).map(({ to, labelKey }) => (
           <Link
             key={to}
             to={to}

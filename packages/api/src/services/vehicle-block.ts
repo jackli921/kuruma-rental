@@ -8,6 +8,7 @@ import type {
   VehicleBlockRepository,
   VehicleRepository,
 } from '../repositories/types'
+import { narrowReadToOperator, vehicleBlockReadScope } from '../tenancy'
 
 export type VehicleBlockResult =
   | { ok: true; block: VehicleBlock }
@@ -130,7 +131,15 @@ export class VehicleBlockService {
    * via `vehicleBlockReadScope(ctx)` (operator → own tenant, admin → all, else →
    * []), so this is a thin delegation — no separate scope check to drift.
    */
-  async listBlocks(ctx: CallerContext, from: Date, to: Date): Promise<VehicleBlock[]> {
-    return this.vehicleBlockRepo.findOverlappingInRange(ctx, from, to)
+  async listBlocks(
+    ctx: CallerContext,
+    from: Date,
+    to: Date,
+    requestedOperatorId?: string,
+  ): Promise<VehicleBlock[]> {
+    // #1230 slice 5b: a picker admin narrows the fleet-wide read to one operator.
+    // vehicleBlockReadScope's `all` is bypass-only, so only an admin's id survives.
+    const operatorId = narrowReadToOperator(ctx, requestedOperatorId, vehicleBlockReadScope)
+    return this.vehicleBlockRepo.findOverlappingInRange(ctx, from, to, operatorId)
   }
 }

@@ -28,22 +28,22 @@ export const FEATURE_FLAGS = {
   OPERATOR_TEAM: {
     env: 'VITE_FEATURE_OPERATOR_TEAM',
     label: 'Operator team management',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   OPERATOR_SETTINGS: {
     env: 'VITE_FEATURE_OPERATOR_SETTINGS',
     label: 'Operator settings',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   RENTER_DOCUMENTS: {
     env: 'VITE_FEATURE_RENTER_DOCUMENTS',
     label: 'Renter document upload',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   MESSAGING: {
     env: 'VITE_FEATURE_MESSAGING',
     label: 'Renter–operator messaging',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   OPERATOR_BLOCKS: {
     env: 'VITE_FEATURE_OPERATOR_BLOCKS',
@@ -51,6 +51,9 @@ export const FEATURE_FLAGS = {
     runtimeControlled: true,
   },
   REVIEWS: { env: 'VITE_FEATURE_REVIEWS', label: 'Reviews & ratings', runtimeControlled: true },
+  // GA gate: the board is built on a pinned react-calendar-timeline pre-release whose bars are
+  // mouse-only (no keyboard/ARIA). Do not flip this on in a paid/GA build until #1349 lands an
+  // accessible path. Background: #1330 / docs/2026-07-02-fleet-timeline-lib-pin.md.
   FLEET_TIMELINE: {
     env: 'VITE_FEATURE_FLEET_TIMELINE',
     label: 'Fleet timeline board',
@@ -60,6 +63,16 @@ export const FEATURE_FLAGS = {
     env: 'VITE_FEATURE_MULTI_CURRENCY',
     label: 'Multi-currency display',
     runtimeControlled: true,
+  },
+  OPERATOR_TODAY: {
+    env: 'VITE_FEATURE_OPERATOR_TODAY',
+    label: 'Operator today panel',
+    runtimeControlled: false,
+  },
+  CALENDAR_QUICKVIEW: {
+    env: 'VITE_FEATURE_CALENDAR_QUICKVIEW',
+    label: 'Calendar quick-view',
+    runtimeControlled: false,
   },
 } as const
 

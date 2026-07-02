@@ -2,11 +2,12 @@ import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import {
   featureFlagsQueryOptions,
+  isCalendarQuickViewEnabled,
   isVisibleToViewer,
   resolveFeatureFlag,
   useFeatureFlag,
 } from '@/vite/config'
-import { isOperatorSession } from '@/vite/guards'
+import { canWriteAsOperator } from '@/vite/guards'
 import {
   BlockDetailDialog,
   BlockLegend,
@@ -99,7 +100,7 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
     const { from, to } = calendarRange(view, parseCalendarDate(deps.date))
     return Promise.all([
       context.queryClient.ensureQueryData(operatorCalendarQueryOptions(from, to, deps.operator)),
-      context.queryClient.ensureQueryData(operatorCalendarVehiclesQueryOptions()),
+      context.queryClient.ensureQueryData(operatorCalendarVehiclesQueryOptions(deps.operator)),
     ])
   },
   pendingComponent: PageSkeleton,
@@ -115,9 +116,10 @@ export function OperatorBookingsRoute() {
 
   const queryClient = useQueryClient()
   const { data: session } = useSession()
-  // #1230 slice 5a: a picker admin narrows the calendar reads to the picked operator;
-  // undefined (no pick, or an operator session) leaves the read session-scoped. Write
-  // affordances below stay gated on isOperatorSession (slice 5b owns cross-tenant writes).
+  // #1230: a picker admin narrows the calendar reads to the picked operator; undefined
+  // (no pick, or an operator session) leaves the read session-scoped. Slice 5b threads
+  // the same pick into the write gates below (canWriteAsOperator), so a picked admin can
+  // write as that operator while an unpicked admin stays read-only.
   const { pickedOperatorId } = useOperatorContext()
   const [bookingDialogOpen, setBookingDialogOpen] = useState(false)
   // The clicked slot's range (null when opened from the header button), threaded to
@@ -131,7 +133,8 @@ export function OperatorBookingsRoute() {
   // flag AND the operator-session permission. OFF in the beta demo (flag unset).
   // The flag reads through useFeatureFlag so the /admin dashboard toggles it live (#1322).
   const canManualBook =
-    useFeatureFlag('OPERATOR_MANUAL_BOOKING') && isOperatorSession(session ?? null)
+    useFeatureFlag('OPERATOR_MANUAL_BOOKING') &&
+    canWriteAsOperator(session ?? null, pickedOperatorId)
 
   // #1101 scheduled blocks. Visibility (read + the detail dialog) follows the
   // beta gate with the platform-admin preview bypass; management (schedule + delete)
@@ -139,7 +142,12 @@ export function OperatorBookingsRoute() {
   // platform admin (operatorId derived from the vehicle), so this affordance gate is
   // what keeps an admin preview read-only. Mirrors `canManualBook`.
   const canViewBlocks = isVisibleToViewer(useFeatureFlag('OPERATOR_BLOCKS'), session?.user.role)
-  const canManageBlocks = canViewBlocks && isOperatorSession(session ?? null)
+  const canManageBlocks = canViewBlocks && canWriteAsOperator(session ?? null, pickedOperatorId)
+
+  // The booking quick-view chip (#1282) is gated OFF for the beta MVP (#1329). When
+  // off, a booking band is a plain link-less span, so booking navigation moves back
+  // to the rbc event-click (handleSelectEvent) — the pre-#1282 baseline.
+  const quickViewEnabled = isCalendarQuickViewEnabled()
 
   // Block dialogs: a schedule (create) form and a click-to-view detail. The schedule
   // slot prefill carries the clicked vehicle + range; the detail dialog is keyed on
@@ -153,7 +161,7 @@ export function OperatorBookingsRoute() {
   // that can manual-book), so it's ready the moment they open the dialog and a
   // read-only viewer never pays for it.
   const { data: locationRows } = useQuery({
-    ...operatorLocationsQueryOptions(),
+    ...operatorLocationsQueryOptions(pickedOperatorId),
     enabled: canManualBook,
   })
 
@@ -178,7 +186,9 @@ export function OperatorBookingsRoute() {
   const { data: bookings } = useSuspenseQuery(
     operatorCalendarQueryOptions(from, to, pickedOperatorId),
   )
-  const { data: vehicles } = useSuspenseQuery(operatorCalendarVehiclesQueryOptions())
+  const { data: vehicles } = useSuspenseQuery(
+    operatorCalendarVehiclesQueryOptions(pickedOperatorId),
+  )
 
   // Blocks are an additive layer (not in the suspense loader): a non-suspense query
   // that degrades to empty on error/disabled, so a blocks-read failure never blanks
@@ -186,7 +196,7 @@ export function OperatorBookingsRoute() {
   // Skipped on the timeline view — FleetTimeline renders no block bands (#1244), so
   // fetching them on the default landing view would be a wasted request.
   const { data: blocks } = useQuery({
-    ...operatorCalendarBlocksQueryOptions(from, to),
+    ...operatorCalendarBlocksQueryOptions(from, to, pickedOperatorId),
     enabled: canViewBlocks && view !== 'timeline',
   })
 
@@ -253,15 +263,22 @@ export function OperatorBookingsRoute() {
     [navigate, locale],
   )
 
-  const handleSelectEvent = useCallback((item: CalendarItem) => {
-    // #1101: dispatch by the discriminant. A block opens its detail dialog (view +
-    // delete). A booking is handled by the CalendarEventChip's own popover
-    // (hover-peek / click-pin), whose inner <Link> owns navigation — so an rbc
-    // event-click is a no-op for bookings here; navigating would defeat the pin.
-    if (item.type === 'block') {
-      setSelectedBlock(item)
-    }
-  }, [])
+  const handleSelectEvent = useCallback(
+    (item: CalendarItem) => {
+      // #1101: dispatch by the discriminant. A block opens its detail dialog (view +
+      // delete).
+      if (item.type === 'block') {
+        setSelectedBlock(item)
+        return
+      }
+      // Booking: with the quick-view chip ON (#1282), its inner <Link> owns
+      // navigation and an rbc event-click must stay a no-op (navigating would defeat
+      // the pin). With the chip gated OFF (#1329) the band is link-less, so restore
+      // the pre-#1282 baseline — the click navigates to the booking detail.
+      if (!quickViewEnabled) navigateToBooking(item.id)
+    },
+    [quickViewEnabled, navigateToBooking],
+  )
 
   // Both the header button and a calendar slot-click open the dialog; a slot also
   // prefills the pickup/return range (the button opens an empty range).

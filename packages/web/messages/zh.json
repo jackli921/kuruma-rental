@@ -51,7 +51,7 @@
     "google": "Google",
     "apple": "Apple",
     "signInTitle": "登录",
-    "signInSubtitle": "继续使用 Best Car Rental",
+    "signInSubtitle": "继续使用库鲁马租车",
     "continueWithGoogle": "使用 Google 继续",
     "inAppBrowser": {
       "title": "请在浏览器中打开此页面",
@@ -91,6 +91,7 @@
     "fees": "费用",
     "addOns": "附加项目",
     "menu": "菜单",
+    "language": "语言",
     "close": "关闭菜单",
     "switchToRenter": "切换到租客视图",
     "switchToBusiness": "切换到管理视图",
