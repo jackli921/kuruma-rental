@@ -34,6 +34,9 @@ export interface ScheduleBlockDialogProps {
   readonly initialVehicleId?: string | undefined
   /** A clicked slot's range, to prefill start/end (wall-clock JST). */
   readonly initialRange?: { start: Date; end: Date } | undefined
+  /** #1260: the picked operator a platform-admin is acting as; the write binds to
+   *  it server-side. Undefined for a tenant operator (its own scope binds it). */
+  readonly pickedOperatorId?: string | undefined
 }
 
 const HTTP_CONFLICT = 409
@@ -51,6 +54,7 @@ export function ScheduleBlockDialog({
   csrfToken,
   initialVehicleId,
   initialRange,
+  pickedOperatorId,
 }: ScheduleBlockDialogProps) {
   const t = useTranslations('bookings.operator.blocks')
   const queryClient = useQueryClient()
@@ -73,7 +77,7 @@ export function ScheduleBlockDialog({
         // optional notes; sending '' would be a needless empty string.
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       }
-      return createBlock(vehicleId, input, csrfToken)
+      return createBlock(vehicleId, input, csrfToken, pickedOperatorId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: OPERATOR_BOOKINGS_KEY })

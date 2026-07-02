@@ -87,6 +87,7 @@ import {
   InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
+  seedDemoAddOnTemplates,
 } from '../repositories/in-memory'
 import { InMemoryVehicleDetailRepository } from '../repositories/in-memory-vehicle-detail'
 import { InMemoryConsentRepository } from '../repositories/in-memory/consent'
@@ -241,8 +242,13 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const locationRepo = overrides.locationRepo ?? new InMemoryLocationRepository()
   const insuranceOptionRepo =
     overrides.insuranceOptionRepo ?? new InMemoryInsuranceOptionRepository()
-  const addOnRepo = overrides.addOnRepo ?? new InMemoryAddOnRepository()
-  const addOnTemplateRepo = overrides.addOnTemplateRepo ?? new InMemoryAddOnTemplateRepository()
+  // M4: one shared template store so the in-memory add-on JOIN (the list) and the
+  // template picker resolve against the SAME curated catalog.
+  const addOnTemplateStore = seedDemoAddOnTemplates()
+  const addOnRepo =
+    overrides.addOnRepo ?? new InMemoryAddOnRepository(undefined, addOnTemplateStore)
+  const addOnTemplateRepo =
+    overrides.addOnTemplateRepo ?? new InMemoryAddOnTemplateRepository(addOnTemplateStore)
   const feeScheduleRepo = overrides.feeScheduleRepo ?? new InMemoryFeeScheduleRepository()
   const classRatePlanRepo = overrides.classRatePlanRepo ?? new InMemoryClassRatePlanRepository()
   // #1206: declared ahead of runInTransaction so the bundle closure captures it
@@ -498,8 +504,9 @@ export function buildInMemoryRepos(): Repos {
   const userRepo = new InMemoryUserRepository()
   const locationRepo = new InMemoryLocationRepository()
   const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
-  const addOnRepo = new InMemoryAddOnRepository()
-  const addOnTemplateRepo = new InMemoryAddOnTemplateRepository()
+  const addOnTemplateStore = seedDemoAddOnTemplates()
+  const addOnRepo = new InMemoryAddOnRepository(undefined, addOnTemplateStore)
+  const addOnTemplateRepo = new InMemoryAddOnTemplateRepository(addOnTemplateStore)
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const operatorRepo = new InMemoryOperatorRepository()

@@ -1,8 +1,12 @@
+import { seedId } from '@kuruma/shared/db/seed-id'
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { setupGlobalHandlers } from '../../src/error-handlers'
 import type { UserRole } from '../../src/middleware/auth'
-import { InMemoryAddOnRepository } from '../../src/repositories/in-memory'
+import {
+  InMemoryAddOnRepository,
+  InMemoryAddOnTemplateRepository,
+} from '../../src/repositories/in-memory'
 import { createAddOnRoutes } from '../../src/routes/add-ons'
 import { AddOnService } from '../../src/services/add-on'
 import { testAuthMiddleware } from '../helpers/auth'
@@ -10,17 +14,27 @@ import { testResolveWriteOperatorId } from '../helpers/operator'
 
 const OP_A = 'operator-aaaaaaaa'
 const OP_B = 'operator-bbbbbbbb'
+// Catalog i18n (slice 2): a create picks a platform template by id. seedId is
+// v4-shaped so the seeded catalog validates; the in-memory template repo below
+// pre-seeds the same ids, so this templateId resolves to an ACTIVE 'Child seat'.
+const CHILD_SEAT = seedId('tmpl_child_seat')
 
 function mountFor(repo: InMemoryAddOnRepository, role: UserRole, operatorId?: string) {
   const app = new Hono()
   setupGlobalHandlers(app)
   app.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
-  app.route('/', createAddOnRoutes(new AddOnService(repo), testResolveWriteOperatorId()))
+  app.route(
+    '/',
+    createAddOnRoutes(
+      new AddOnService(repo, new InMemoryAddOnTemplateRepository()),
+      testResolveWriteOperatorId(),
+    ),
+  )
   return app
 }
 
 function body(extra: Record<string, unknown> = {}) {
-  return JSON.stringify({ name: 'Baby Seat', priceJpy: 1500, ...extra })
+  return JSON.stringify({ templateId: CHILD_SEAT, priceJpy: 1500, ...extra })
 }
 
 const POST = (app: Hono, b = body()) =>
@@ -36,7 +50,7 @@ describe('Add-on routes — auth', () => {
     app.route(
       '/',
       createAddOnRoutes(
-        new AddOnService(new InMemoryAddOnRepository()),
+        new AddOnService(new InMemoryAddOnRepository(), new InMemoryAddOnTemplateRepository()),
         testResolveWriteOperatorId(),
       ),
     )
@@ -67,7 +81,9 @@ describe('Add-on routes — operator CRUD', () => {
     expect(res.status).toBe(201)
     const { data } = await res.json()
     expect(data.operatorId).toBe(OP_A)
-    expect(data.name).toBe('Baby Seat')
+    // Catalog i18n (slice 2): a create picks a template; the response carries the
+    // template name resolved to the caller locale (default en here).
+    expect(data.resolvedName).toBe('Child seat')
     expect(data.priceJpy).toBe(1500)
     expect(data.status).toBe('ACTIVE')
   })
@@ -75,14 +91,14 @@ describe('Add-on routes — operator CRUD', () => {
   it('lists only the caller operator add-ons', async () => {
     const repo = new InMemoryAddOnRepository()
     await POST(mountFor(repo, 'OPERATOR_OWNER', OP_A))
-    await POST(mountFor(repo, 'OPERATOR_OWNER', OP_B), body({ name: 'B Seat' }))
+    await POST(mountFor(repo, 'OPERATOR_OWNER', OP_B), body())
     const res = await mountFor(repo, 'OPERATOR_OWNER', OP_A).request('/add-ons')
     const { data } = await res.json()
     expect(data).toHaveLength(1)
     expect(data[0].operatorId).toBe(OP_A)
   })
 
-  it('rejects a duplicate name within the operator with 409', async () => {
+  it('rejects a duplicate template within the operator with 409', async () => {
     const repo = new InMemoryAddOnRepository()
     const app = mountFor(repo, 'OPERATOR_OWNER', OP_A)
     await POST(app)
@@ -93,7 +109,7 @@ describe('Add-on routes — operator CRUD', () => {
     const repo = new InMemoryAddOnRepository()
     const res = await POST(
       mountFor(repo, 'OPERATOR_OWNER', OP_A),
-      JSON.stringify({ name: 'No price' }),
+      JSON.stringify({ templateId: CHILD_SEAT }),
     )
     expect(res.status).toBe(400)
   })
@@ -120,7 +136,7 @@ describe('Add-on routes — operator CRUD', () => {
         await intruder.request(`/add-ons/${created.data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'Hijack' }),
+          body: JSON.stringify({ priceJpy: 1 }),
         })
       ).status,
     ).toBe(404)
@@ -141,7 +157,7 @@ describe('Add-on routes — operator CRUD', () => {
   it('drops a stray ?operatorId for an operator caller (cannot widen scope)', async () => {
     const repo = new InMemoryAddOnRepository()
     await POST(mountFor(repo, 'OPERATOR_OWNER', OP_A))
-    await POST(mountFor(repo, 'OPERATOR_OWNER', OP_B), body({ name: 'B Seat' }))
+    await POST(mountFor(repo, 'OPERATOR_OWNER', OP_B), body())
     const res = await mountFor(repo, 'OPERATOR_OWNER', OP_A).request(`/add-ons?operatorId=${OP_B}`)
     const { data } = await res.json()
     expect(data).toHaveLength(1)
@@ -153,9 +169,7 @@ describe('Add-on routes — platform-admin scoping (bypass-precedence)', () => {
   async function seedTwoOperators() {
     const repo = new InMemoryAddOnRepository()
     const a = await (await POST(mountFor(repo, 'OPERATOR_OWNER', OP_A))).json()
-    const b = await (
-      await POST(mountFor(repo, 'OPERATOR_OWNER', OP_B), body({ name: 'B Seat' }))
-    ).json()
+    const b = await (await POST(mountFor(repo, 'OPERATOR_OWNER', OP_B), body())).json()
     return { repo, a: a.data, b: b.data }
   }
 

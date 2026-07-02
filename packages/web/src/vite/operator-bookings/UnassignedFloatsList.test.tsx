@@ -80,6 +80,22 @@ describe('UnassignedFloatsList', () => {
     expect(screen.getAllByText(overdue)).toHaveLength(1)
   })
 
+  it('renders the float window at the JST calendar day, not the browser-local one (#1250)', () => {
+    // 2026-06-30T15:30Z is 2026-07-01 00:30 JST — off-JST (Toronto) toLocaleDateString
+    // would show Jun 30. The sidebar list must agree with the JST-anchored calendar.
+    const nearMidnight = makeFloat({
+      id: 'float-midnight',
+      bookingCode: 'MIDNIGHT1',
+      startAt: '2026-06-30T15:30:00.000Z', // JST 2026-07-01 00:30
+      endAt: '2026-07-02T15:30:00.000Z', // JST 2026-07-03 00:30
+    })
+    renderList([nearMidnight])
+    const jstDate = (iso: string) =>
+      new Date(iso).toLocaleDateString(undefined, { timeZone: 'Asia/Tokyo' })
+    const expected = `${jstDate(nearMidnight.startAt)} – ${jstDate(nearMidnight.endAt)}`
+    expect(screen.getByText(expected)).toBeTruthy()
+  })
+
   it('sorts ACTIVE floats above CONFIRMED floats in DOM order', () => {
     // Provide CONFIRMED first to confirm sorting is applied (not just input order).
     renderList([CONFIRMED_FLOAT, ACTIVE_FLOAT])

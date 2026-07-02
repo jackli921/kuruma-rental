@@ -11,7 +11,20 @@ import { z } from 'zod'
 // cache so the Navbar badge and the orders-route clear-on-visit stay in sync.
 
 export const LAST_SEEN_STORAGE_KEY = 'kuruma_bookings_last_seen_at'
-export const LAST_SEEN_QUERY_KEY = ['operator-bookings', 'last-seen-at'] as const
+
+// #1230 slice 5a keyed the scan per operator; #1324 keys the watermark to match, so a
+// picker admin switching operators measures each operator's badge against ITS OWN
+// last-seen instant instead of whichever operator's was advanced last. No-pick (tenant
+// sessions) keeps the bare base storage key and a `null` query slot — a single stable
+// watermark, no migration/reset. markBookingsSeen and lastSeenQueryOptions both derive
+// from these, so clear-on-visit and the badge read always share one key per pick.
+export function lastSeenStorageKey(pickedOperatorId?: string): string {
+  return pickedOperatorId ? `${LAST_SEEN_STORAGE_KEY}:${pickedOperatorId}` : LAST_SEEN_STORAGE_KEY
+}
+
+export function lastSeenQueryKey(pickedOperatorId?: string) {
+  return ['operator-bookings', 'last-seen-at', pickedOperatorId ?? null] as const
+}
 
 // #1230 slice 5a: the scan is keyed by the picked operator (null = no pick) so a
 // picker admin switching operators gets that operator's own count instead of a
@@ -78,18 +91,19 @@ export function newOrderBookingsQueryOptions(enabled: boolean, pickedOperatorId?
  * than the epoch — otherwise the badge would light up with the entire existing
  * backlog, which is not "new".
  */
-export function getStoredLastSeenAt(): string {
-  const stored = window.localStorage.getItem(LAST_SEEN_STORAGE_KEY)
+export function getStoredLastSeenAt(pickedOperatorId?: string): string {
+  const storageKey = lastSeenStorageKey(pickedOperatorId)
+  const stored = window.localStorage.getItem(storageKey)
   if (stored) return stored
   const now = new Date().toISOString()
-  window.localStorage.setItem(LAST_SEEN_STORAGE_KEY, now)
+  window.localStorage.setItem(storageKey, now)
   return now
 }
 
-export function lastSeenQueryOptions() {
+export function lastSeenQueryOptions(pickedOperatorId?: string) {
   return queryOptions({
-    queryKey: LAST_SEEN_QUERY_KEY,
-    queryFn: () => getStoredLastSeenAt(),
+    queryKey: lastSeenQueryKey(pickedOperatorId),
+    queryFn: () => getStoredLastSeenAt(pickedOperatorId),
     staleTime: Number.POSITIVE_INFINITY,
   })
 }
@@ -110,6 +124,6 @@ export function markBookingsSeen(queryClient: QueryClient, pickedOperatorId?: st
     newOrderScanQueryKey(pickedOperatorId),
   )
   const seenAt = scanned?.[0]?.createdAt ?? new Date().toISOString()
-  window.localStorage.setItem(LAST_SEEN_STORAGE_KEY, seenAt)
-  queryClient.setQueryData(LAST_SEEN_QUERY_KEY, seenAt)
+  window.localStorage.setItem(lastSeenStorageKey(pickedOperatorId), seenAt)
+  queryClient.setQueryData(lastSeenQueryKey(pickedOperatorId), seenAt)
 }

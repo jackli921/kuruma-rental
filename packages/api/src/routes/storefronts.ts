@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { PUBLIC_CONTEXT } from '../middleware/auth'
 import type { StorefrontDetailService } from '../services/storefront-detail'
 import type { StorefrontSearchService } from '../services/storefront-search'
-import { cachePublic, fail, ok, parseDateRange, parseId, parseLimit } from './helpers'
+import { cachePublic, fail, ok, parseDateRange, parseId, parseLimit, parseLocale } from './helpers'
 import { rateLimitByIp } from './rate-limit'
 
 const DEFAULT_LIMIT = 25
@@ -100,10 +100,16 @@ export function createStorefrontRoutes(
       const idResult = parseId(c, 'locationId')
       if (!idResult.ok) return idResult.response
 
+      // Catalog i18n (slice 2): resolve names to the renter's locale. Parse
+      // BEFORE cachePublic — a bad ?locale= is a 400 that must never be cached
+      // (a cached error would pin the miss edge-wide until TTL).
+      const locale = parseLocale(c)
+      if (!locale.ok) return locale.response
+
       // The ACTIVE paid add-ons a renter can pick when booking at this storefront
       // (#460). Public + active-only + single-operator — see the service for the
       // [P0] seal rationale. 404 mirrors the vehicles route (unknown/archived).
-      const result = await detailService.getAddOns(PUBLIC_CONTEXT, idResult.id)
+      const result = await detailService.getAddOns(PUBLIC_CONTEXT, idResult.id, locale.locale)
       if (!result.ok) return fail(c, result.error, result.status)
       cachePublic(c, CACHE_SECONDS)
       return ok(c, result.data)

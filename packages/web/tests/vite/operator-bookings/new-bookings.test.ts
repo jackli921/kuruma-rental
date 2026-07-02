@@ -4,6 +4,8 @@ import {
   countNewBookings,
   fetchNewOrderBookings,
   getStoredLastSeenAt,
+  lastSeenQueryKey,
+  lastSeenStorageKey,
   markBookingsSeen,
   newOrderScanQueryKey,
 } from '@/vite/operator-bookings/new-bookings'
@@ -76,7 +78,7 @@ describe('markBookingsSeen', () => {
     // Exactly the newest scanned createdAt — NOT the client clock.
     expect(stored).toBe('2026-06-13T05:00:00.000Z')
     // Same value mirrored into the cache so subscribers (the nav badge) re-derive.
-    expect(qc.getQueryData(['operator-bookings', 'last-seen-at'])).toBe(stored)
+    expect(qc.getQueryData(lastSeenQueryKey())).toBe(stored)
   })
 
   it('falls back to now when no orders have been scanned yet', () => {
@@ -88,7 +90,43 @@ describe('markBookingsSeen', () => {
     expect(new Date(stored).getTime()).toBeGreaterThan(
       new Date('2020-01-01T00:00:00.000Z').getTime(),
     )
-    expect(qc.getQueryData(['operator-bookings', 'last-seen-at'])).toBe(stored)
+    expect(qc.getQueryData(lastSeenQueryKey())).toBe(stored)
+  })
+})
+
+describe('per-operator watermark (#1324)', () => {
+  it('namespaces keys by picked operator; no-pick keeps the stable base slot', () => {
+    // No-pick (tenant sessions) must keep the exact legacy key so their existing
+    // watermark is not reset (no migration); a pick is namespaced by operator id.
+    expect(lastSeenStorageKey(undefined)).toBe(LAST_SEEN_STORAGE_KEY)
+    expect(lastSeenStorageKey('op_a')).toBe(`${LAST_SEEN_STORAGE_KEY}:op_a`)
+    // Mirrors newOrderScanQueryKey's `?? null` no-pick slot.
+    expect(lastSeenQueryKey(undefined)).toEqual(['operator-bookings', 'last-seen-at', null])
+    expect(lastSeenQueryKey('op_a')).toEqual(['operator-bookings', 'last-seen-at', 'op_a'])
+  })
+
+  it("does not measure one operator against another operator's watermark (the slice-5a gap)", () => {
+    // Operator A opened its orders at T; that must NOT become operator B's baseline.
+    window.localStorage.setItem(lastSeenStorageKey('op_a'), '2026-06-13T05:00:00.000Z')
+    const bSeen = getStoredLastSeenAt('op_b')
+    expect(bSeen).not.toBe('2026-06-13T05:00:00.000Z')
+    // Reading B does not disturb A's slot.
+    expect(window.localStorage.getItem(lastSeenStorageKey('op_a'))).toBe('2026-06-13T05:00:00.000Z')
+  })
+
+  it("markBookingsSeen advances only the picked operator's slot", () => {
+    const qc = new QueryClient()
+    window.localStorage.setItem(lastSeenStorageKey('op_a'), '2020-01-01T00:00:00.000Z')
+    window.localStorage.setItem(lastSeenStorageKey('op_b'), '2020-01-01T00:00:00.000Z')
+    qc.setQueryData(newOrderScanQueryKey('op_a'), [{ createdAt: '2026-06-13T05:00:00.000Z' }])
+
+    markBookingsSeen(qc, 'op_a')
+
+    expect(window.localStorage.getItem(lastSeenStorageKey('op_a'))).toBe('2026-06-13T05:00:00.000Z')
+    // Operator B's watermark is untouched by advancing A.
+    expect(window.localStorage.getItem(lastSeenStorageKey('op_b'))).toBe('2020-01-01T00:00:00.000Z')
+    expect(qc.getQueryData(lastSeenQueryKey('op_a'))).toBe('2026-06-13T05:00:00.000Z')
+    expect(qc.getQueryData(lastSeenQueryKey('op_b'))).toBeUndefined()
   })
 })
 

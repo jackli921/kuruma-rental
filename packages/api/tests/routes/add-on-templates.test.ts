@@ -2,7 +2,10 @@ import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { setupGlobalHandlers } from '../../src/error-handlers'
 import type { UserRole } from '../../src/middleware/auth'
-import { InMemoryAddOnTemplateRepository } from '../../src/repositories/in-memory'
+import {
+  InMemoryAddOnRepository,
+  InMemoryAddOnTemplateRepository,
+} from '../../src/repositories/in-memory'
 import { createAddOnTemplateRoutes } from '../../src/routes/add-on-templates'
 import { AddOnTemplateService } from '../../src/services/add-on-template'
 import { testAuthMiddleware } from '../helpers/auth'
@@ -10,7 +13,12 @@ import { testAuthMiddleware } from '../helpers/auth'
 const OP = 'operator-aaaaaaaa'
 
 function routes() {
-  return createAddOnTemplateRoutes(new AddOnTemplateService(new InMemoryAddOnTemplateRepository()))
+  // The route resolves a target operator (a management caller reads its own
+  // tenant), so the picker service needs the add-on repo to exclude already-offered
+  // templates. An empty add-on repo offers nothing, so the full catalog shows.
+  return createAddOnTemplateRoutes(
+    new AddOnTemplateService(new InMemoryAddOnTemplateRepository(), new InMemoryAddOnRepository()),
+  )
 }
 
 function mountFor(role: UserRole, operatorId?: string) {

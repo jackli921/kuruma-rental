@@ -75,9 +75,13 @@ describe('ScheduleBlockDialog', () => {
     expect((screen.getByLabelText(T.vehicleLabel) as HTMLSelectElement).value).toBe('veh-1')
   })
 
-  it('creates the block (JST→ISO), invalidates the operator-bookings cache, and closes on success', async () => {
+  it('creates the block (JST→ISO), forwards the picked operator, invalidates the cache, and closes on success', async () => {
     createBlockMock.mockResolvedValue(CREATED)
-    const { onOpenChange, invalidate } = setup({ initialVehicleId: 'veh-2' })
+    // #1260: a picker admin's write binds to the operator it is acting as.
+    const { onOpenChange, invalidate } = setup({
+      initialVehicleId: 'veh-2',
+      pickedOperatorId: 'op-7',
+    })
 
     fillRequiredFields()
     fireEvent.click(screen.getByRole('button', { name: T.submit }))
@@ -93,6 +97,7 @@ describe('ScheduleBlockDialog', () => {
         endAt: '2026-07-02T00:00:00.000Z',
       },
       'csrf-1',
+      'op-7',
     )
     expect(invalidate).toHaveBeenCalledWith({ queryKey: OPERATOR_BOOKINGS_KEY })
   })

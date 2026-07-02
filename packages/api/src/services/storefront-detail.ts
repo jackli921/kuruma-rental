@@ -1,3 +1,4 @@
+import type { Locale } from '@kuruma/shared/i18n/locales'
 import { type LuggageSize, resolveLuggage } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 import type { StorefrontAddOnData, StorefrontInsuranceData } from '@kuruma/shared/types/storefront'
@@ -11,6 +12,7 @@ import type {
   VehicleClass,
   VehicleClassRepository,
 } from '../repositories/types'
+import { resolveAddOnDescription, resolveAddOnName } from './add-on-resolve'
 import { clampLimit, decodeCursor, encodeCursor } from './search-paging'
 
 export interface StorefrontSummary {
@@ -155,19 +157,26 @@ export class StorefrontDetailService {
    * operator's active add-ons. PUBLIC: the route builds PUBLIC_CONTEXT and the
    * repo read is single-operator + active-only (never a cross-operator leak).
    */
-  async getAddOns(ctx: CallerContext, locationId: string): Promise<StorefrontAddOnResult> {
+  async getAddOns(
+    ctx: CallerContext,
+    locationId: string,
+    locale: Locale,
+  ): Promise<StorefrontAddOnResult> {
     const [storefront] = await this.storefrontRepo.findActiveStorefronts(ctx, {
       pickupLocationId: locationId,
     })
     if (!storefront) return { ok: false, error: 'Storefront not found', status: 404 }
 
+    // Catalog i18n (slice 2): resolve the template name/description to the
+    // renter's locale here, at the boundary — the multi-locale bundle never
+    // reaches the wire. Legacy null-templateId rows fall back to their columns.
     const addOns = await this.addOnRepo.findActiveByOperator(storefront.operatorId)
     return {
       ok: true,
       data: addOns.map((o) => ({
         id: o.id,
-        name: o.name,
-        description: o.description,
+        name: resolveAddOnName(o, locale),
+        description: resolveAddOnDescription(o, locale),
         priceJpy: o.priceJpy,
       })),
     }

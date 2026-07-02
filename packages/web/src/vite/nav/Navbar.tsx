@@ -49,6 +49,10 @@ export function Navbar() {
   const businessNavFlags = useBusinessNavFlags()
   const renterNavFlags = useRenterNavFlags()
 
+  // #1300: Browse (-> /search) leads every non-business nav — the public funnel
+  // link a logged-out visitor sees and the renter's first item.
+  const browseItem: NavItem = { to: '/$locale/search', label: t('browse') }
+
   const navItems: readonly NavItem[] = isBusinessView
     ? visibleBusinessNavItems(role, businessNavFlags).map((item) => ({
         to: item.to,
@@ -60,22 +64,24 @@ export function Navbar() {
             ? { badge: operatorUnread, badgeLabel: t('unreadMessages', { count: operatorUnread }) }
             : {}),
       }))
-    : session?.user
-      ? [
-          { to: '/$locale/search', label: t('browse') },
-          ...visibleRenterNavItems(role, renterNavFlags).map((item) => ({
-            to: item.to,
-            label: t(item.labelKey),
-            // exactOptionalPropertyTypes: only attach the badge when there is one.
-            ...(item.to === '/$locale/messages' && unreadMessages > 0
-              ? {
-                  badge: unreadMessages,
-                  badgeLabel: t('unreadMessages', { count: unreadMessages }),
-                }
-              : {}),
-          })),
-        ]
-      : []
+    : // Browse leads for renter and logged-out alike; the same array feeds the
+      // desktop nav and the mobile drawer, so neither is ever empty (#1300).
+      [
+        browseItem,
+        ...(session?.user
+          ? visibleRenterNavItems(role, renterNavFlags).map((item) => ({
+              to: item.to,
+              label: t(item.labelKey),
+              // exactOptionalPropertyTypes: only attach the badge when there is one.
+              ...(item.to === '/$locale/messages' && unreadMessages > 0
+                ? {
+                    badge: unreadMessages,
+                    badgeLabel: t('unreadMessages', { count: unreadMessages }),
+                  }
+                : {}),
+            }))
+          : []),
+      ]
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

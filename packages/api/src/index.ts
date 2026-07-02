@@ -477,8 +477,8 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const vehicleService = new VehicleService(vehicleRepo, resolveWriteOperatorId, photosPublicUrl)
   const locationService = new LocationService(locationRepo, bookingRepo, cachedGeocoder, regionRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
-  const addOnService = new AddOnService(addOnRepo)
-  const addOnTemplateService = new AddOnTemplateService(addOnTemplateRepo)
+  const addOnService = new AddOnService(addOnRepo, addOnTemplateRepo)
+  const addOnTemplateService = new AddOnTemplateService(addOnTemplateRepo, addOnRepo)
   const feeScheduleService = new FeeScheduleService(feeScheduleRepo)
   const storefrontSearchService = new StorefrontSearchService(
     storefrontRepo,
