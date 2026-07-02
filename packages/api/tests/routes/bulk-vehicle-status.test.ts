@@ -46,7 +46,10 @@ describe('PATCH /vehicles/bulk-status', () => {
   beforeEach(() => {
     repo = new InMemoryVehicleRepository()
     app = new Hono()
-    app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
+    // #1260: run as a tenant OPERATOR_OWNER (primary fleet manager) so the
+    // acting-operator write guard no-ops; admin-picker binding is covered by
+    // the dedicated route-binding tests.
+    app.use('*', testAuthMiddleware('operator-user', 'OPERATOR_OWNER', TEST_OPERATOR_ID))
     // maintenanceService is unused by the bulk-status + create paths under test.
     const service = new VehicleService(repo, testResolveWriteOperatorId(), '')
     app.route('/', createVehicleRoutes(service, undefined))
