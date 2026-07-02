@@ -88,3 +88,34 @@ describe('fail-closed rate limiting (#580)', () => {
     })
   })
 })
+
+// #1377: /webhooks/stripe is signature-gated (constructEventAsync) and arrives
+// from a small fixed set of Stripe source IPs that collapse into ONE per-IP
+// bucket. A per-IP budget there risks 429-dropping money-critical
+// `checkout.session.completed` events, and the signature — not an IP budget — is
+// the real gate. So the webhook path must be EXEMPT from the global limiter.
+describe('webhook rate-limit exemption (#1377)', () => {
+  afterEach(() => {
+    ;(globalThis as Record<string, unknown>).RATE_LIMITER = undefined
+  })
+
+  it('exempts /webhooks/stripe from the global IP limiter even when the bucket is exhausted', async () => {
+    const exhausted = { limit: vi.fn(async () => ({ success: false })) }
+    ;(globalThis as Record<string, unknown>).RATE_LIMITER = exhausted
+    const app = createApp()
+    const ip = { 'cf-connecting-ip': '203.0.113.7' }
+
+    // A normal path IS limited: an exhausted bucket returns 429.
+    const health = await app.request('/health', { headers: ip })
+    expect(health.status).toBe(429)
+
+    // The webhook is exempt: it reaches its handler (400 for the missing
+    // signature) instead of being 429'd by the shared-IP bucket.
+    const webhook = await app.request('/webhooks/stripe', { method: 'POST', headers: ip })
+    expect(webhook.status).toBe(400)
+
+    // Proof of exemption: the limiter was consulted ONLY for /health, never the webhook.
+    expect(exhausted.limit).toHaveBeenCalledTimes(1)
+    expect(exhausted.limit).toHaveBeenCalledWith({ key: '203.0.113.7' })
+  })
+})

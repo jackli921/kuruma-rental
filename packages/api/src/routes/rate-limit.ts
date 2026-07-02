@@ -29,3 +29,26 @@ export function rateLimitByIp(limiter: RateLimitBinding): MiddlewareHandler {
     return limited(c, next)
   }
 }
+
+/**
+ * Paths exempt from the global per-IP limiter (#1377). `/webhooks/stripe` is
+ * signature-gated (`constructEventAsync`) and arrives from a small fixed set of
+ * Stripe source IPs that collapse into ONE per-IP bucket — so a per-IP budget
+ * there risks 429-dropping money-critical `checkout.session.completed` events,
+ * and the signature (not an IP budget) is the real gate. Matched against
+ * `c.req.path`, which excludes the query string.
+ */
+export const RATE_LIMIT_EXEMPT_PATHS: ReadonlySet<string> = new Set(['/webhooks/stripe'])
+
+/**
+ * `rateLimitByIp`, but requests whose path is in `exemptPaths` skip the limiter
+ * entirely (including the fail-closed 429). The exemption is applied at the
+ * composition root so the limiter stays a generic per-IP guard.
+ */
+export function rateLimitByIpExcept(
+  limiter: RateLimitBinding,
+  exemptPaths: ReadonlySet<string> = RATE_LIMIT_EXEMPT_PATHS,
+): MiddlewareHandler {
+  const limited = rateLimitByIp(limiter)
+  return async (c, next) => (exemptPaths.has(c.req.path) ? next() : limited(c, next))
+}
