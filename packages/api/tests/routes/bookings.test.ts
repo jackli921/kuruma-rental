@@ -1633,6 +1633,29 @@ describe('Booking Routes', () => {
       expect(body.data.status).toBe('CANCELLED')
     })
 
+    // #1367: a PARTNER (Trip.com) books but does not MANAGE the order — it is
+    // excluded from /status, /substitute and /events for the same reason. /cancel
+    // has no role gate (renters must self-cancel), so a PARTNER's `partner` read
+    // scope would otherwise let it cancel any TRIP_COM-sourced booking across
+    // operators. Rejected at the route, before it can resolve any booking.
+    it('forbids a PARTNER from cancelling (403)', async () => {
+      const partnerApp = new Hono()
+      partnerApp.use('*', testAuthMiddleware(USER2, 'PARTNER'))
+      partnerApp.route('/', createBookingRoutes(service, inertConsentGate))
+
+      const res = await partnerApp.request(
+        '/bookings/00000000-0000-4000-8000-00000000abcd/cancel',
+        {
+          method: 'POST',
+        },
+      )
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('Partners cannot cancel bookings')
+    })
+
     // Cancellation fee tiers. The vehicle's 10,000 JPY/day rate gives the 24h
     // booking a deterministic 10,000 totalPrice. Anchor `now` once per test:
     // separate futureDate() calls drift a few ms and Math.ceil(hours/24) rounds
