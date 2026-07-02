@@ -24,16 +24,18 @@ import {
 import {
   type BlockCalendarEvent,
   type CalendarItem,
-  type CalendarView,
   blocksToCalendarEvents,
-  calendarRange,
   fleetToResources,
+  toCalendarEvents,
+} from '@/vite/operator-bookings/calendar-events'
+import {
+  type CalendarView,
+  calendarRange,
   formatCalendarDate,
   normalizeViewParam,
   parseCalendarDate,
   parseCalendarView,
-  toCalendarEvents,
-} from '@/vite/operator-bookings/calendar-events'
+} from '@/vite/operator-bookings/calendar-view'
 import { markBookingsSeen } from '@/vite/operator-bookings/new-bookings'
 import { useCalendarFilters } from '@/vite/operator-bookings/useCalendarFilters'
 import { useOperatorContext } from '@/vite/operator-context'

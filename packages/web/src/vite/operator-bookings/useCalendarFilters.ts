@@ -52,9 +52,13 @@ export interface CalendarFiltersApi {
   clearAllVehicles: () => void
   // #1101: items are the booking|block union. Both are filtered by vehicle
   // (resourceId); the STATUS filter applies to bookings only — a block carries no
-  // status, so a status toggle never hides it. Generic so a caller passing a
-  // narrower array (bookings only) gets that narrower element type back.
-  filterEvents: <T extends { resourceId: string }>(events: readonly T[]) => T[]
+  // status, so a status toggle never hides it. The constraint admits an optional
+  // `status` (a block omits it, which is assignable), so the implementation reads it
+  // without a cast. Generic so a caller passing a narrower array (bookings only) gets
+  // that narrower element type back.
+  filterEvents: <T extends { resourceId: string; status?: OperatorBookingStatus }>(
+    events: readonly T[],
+  ) => T[]
   filterResources: <T extends { resourceId: string }>(resources: readonly T[]) => T[]
 }
 
@@ -134,15 +138,13 @@ export function useCalendarFilters(knownVehicleIds: readonly string[]): Calendar
   const clearAllVehicles = useCallback(() => setUncheckedVehicles(new Set(knownIdsRef.current)), [])
 
   const filterEvents = useCallback(
-    <T extends { resourceId: string }>(events: readonly T[]): T[] =>
+    <T extends { resourceId: string; status?: OperatorBookingStatus }>(events: readonly T[]): T[] =>
       events.filter((e) => {
         if (uncheckedVehicles.has(e.resourceId)) return false
-        // The generic `<T extends { resourceId }>` erases the CalendarItem
-        // discriminant (this filter is shared with filterResources), so we probe
-        // `status` structurally rather than switching on `type`. Safe because the
-        // union guarantees only bookings carry a status — a block reads `undefined`
-        // and bypasses the status filter entirely (`status === undefined` passes).
-        const status = (e as { status?: OperatorBookingStatus }).status
+        // #1245: the constraint admits an optional `status`, so we read it directly —
+        // no cast needed. Only bookings carry a status; a block's is `undefined` and
+        // bypasses the status filter entirely (`status === undefined` passes).
+        const status = e.status
         return status === undefined || !uncheckedStatuses.has(status)
       }),
     [uncheckedVehicles, uncheckedStatuses],
