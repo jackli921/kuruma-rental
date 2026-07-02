@@ -5,7 +5,9 @@ import {
   exceedsContentLength,
   fail,
   ok,
+  parseArchivableFilters,
   parseBody,
+  parseCrossOperatorRead,
   parseDateRange,
   parseId,
   parseLimit,
@@ -69,6 +71,9 @@ function createTestApp() {
   })
 
   app.post('/guarded', (c) => rejectOversizedBody(c, GUARD_MAX_BYTES) ?? ok(c, { passed: true }))
+
+  app.get('/read-scope', (c) => ok(c, parseCrossOperatorRead(c)))
+  app.get('/archivable', (c) => ok(c, parseArchivableFilters(c)))
 
   app.get('/parse-id/:id', (c) => {
     const result = parseId(c)
@@ -430,6 +435,62 @@ describe('parsePagination()', () => {
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error).toBe('limit must be between 1 and 50')
+  })
+})
+
+describe('parseCrossOperatorRead()', () => {
+  const app = createTestApp()
+
+  it('defaults to no operatorId and includeAll=false when nothing is passed', async () => {
+    const res = await app.request('/read-scope')
+    expect(await res.json()).toEqual({ success: true, data: { includeAll: false } })
+  })
+
+  it('carries operatorId through verbatim', async () => {
+    const res = await app.request('/read-scope?operatorId=op_1')
+    expect(await res.json()).toEqual({
+      success: true,
+      data: { operatorId: 'op_1', includeAll: false },
+    })
+  })
+
+  it('sets includeAll only on the exact string "true"', async () => {
+    const yes = await app.request('/read-scope?includeAll=true')
+    expect((await yes.json()).data.includeAll).toBe(true)
+    // A typo/truthy-but-not-"true" value must NOT widen scope.
+    const no = await app.request('/read-scope?includeAll=1')
+    expect((await no.json()).data.includeAll).toBe(false)
+  })
+})
+
+describe('parseArchivableFilters()', () => {
+  const app = createTestApp()
+
+  it('is empty when no filter params are passed', async () => {
+    const res = await app.request('/archivable')
+    expect(await res.json()).toEqual({ success: true, data: {} })
+  })
+
+  it('accepts only the ACTIVE/ARCHIVED status literals and ignores others', async () => {
+    expect((await (await app.request('/archivable?status=ACTIVE')).json()).data).toEqual({
+      status: 'ACTIVE',
+    })
+    expect((await (await app.request('/archivable?status=ARCHIVED')).json()).data).toEqual({
+      status: 'ARCHIVED',
+    })
+    expect((await (await app.request('/archivable?status=BOGUS')).json()).data).toEqual({})
+  })
+
+  it('sets includeArchived only on the exact string "true"', async () => {
+    expect((await (await app.request('/archivable?includeArchived=true')).json()).data).toEqual({
+      includeArchived: true,
+    })
+    expect((await (await app.request('/archivable?includeArchived=1')).json()).data).toEqual({})
+  })
+
+  it('combines status and includeArchived', async () => {
+    const res = await app.request('/archivable?status=ACTIVE&includeArchived=true')
+    expect((await res.json()).data).toEqual({ status: 'ACTIVE', includeArchived: true })
   })
 })
 
