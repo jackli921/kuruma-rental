@@ -59,6 +59,8 @@ interface VehicleFormProps {
   readonly onSaved: () => void
   /** Called when the user cancels without saving. */
   readonly onCancel: () => void
+  /** When a bypass admin has picked an operator, the create body carries it (#1264). */
+  readonly pickedOperatorId?: string | undefined
 }
 
 // Blank numeric inputs must submit `null` (not NaN/undefined) so the nullish
@@ -131,6 +133,7 @@ export function VehicleForm({
   locationOptions,
   onSaved,
   onCancel,
+  pickedOperatorId,
 }: VehicleFormProps) {
   const t = useTranslations('business.vehicles.form')
   // Luggage-size option labels live under the top-level `luggageSize.*` namespace.
@@ -183,7 +186,12 @@ export function VehicleForm({
 
   const mutation = useMutation({
     mutationFn: (data: CreateVehicleInput) =>
-      isEditMode ? updateVehicle(vehicle.id, data, csrfToken) : createVehicle(data, csrfToken),
+      isEditMode
+        ? updateVehicle(vehicle.id, data, csrfToken)
+        : createVehicle(
+            pickedOperatorId ? { ...data, operatorId: pickedOperatorId } : data,
+            csrfToken,
+          ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: FLEET_QUERY_KEY })
       onSaved()
