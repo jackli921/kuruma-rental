@@ -185,6 +185,10 @@ export function VehicleForm({
   })
 
   const mutation = useMutation({
+    // A picked bypass admin carries the operator in the create body (#1264). Unlike
+    // the sibling locations/insurance forms (which wrap `WithOperatorId<...>`), the
+    // shared CreateVehicleInput already declares `operatorId` optional, so we spread
+    // it in conditionally — an operator session's body never gets an operatorId key.
     mutationFn: (data: CreateVehicleInput) =>
       isEditMode
         ? updateVehicle(vehicle.id, data, csrfToken)
