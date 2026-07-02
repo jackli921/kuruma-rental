@@ -297,6 +297,30 @@ export function fleetWriteDenialResult(
 }
 
 /**
+ * Map a {@link FleetWriteDenial} to the shape a fleet-write service returns
+ * (#1260). Shared by every operator-portal write (bookings, blocks, vehicles) so
+ * the refusal contract is identical everywhere:
+ * - operator-required -> 422 carrying the same OPERATOR_REQUIRED code the global
+ *   OperatorRequiredError emits, so the web can discriminate "pick an operator".
+ * - not-in-scope      -> 404 with the CALLER's own not-found message: from the
+ *   acting operator's tenant the target simply does not exist (no existence
+ *   oracle), indistinguishable from a truly-unknown id.
+ */
+export function fleetWriteDenialResult(
+  denial: FleetWriteDenial,
+  notFoundError: string,
+): { ok: false; status: 422 | 404; error: string; code?: ErrorCode } {
+  return denial.kind === 'operator-required'
+    ? {
+        ok: false,
+        status: 422,
+        error: 'operatorId is required: specify the operator to act as',
+        code: 'OPERATOR_REQUIRED',
+      }
+    : { ok: false, status: 404, error: notFoundError }
+}
+
+/**
  * Resolve the operatorId to stamp on a write (#401, #407):
  * - OPERATOR_OWNER / OPERATOR_STAFF write under their own tenant; missing
  *   operatorId fails closed. They cannot write for another operator, so an

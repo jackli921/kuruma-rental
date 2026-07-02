@@ -62,8 +62,13 @@ export function createVehicleRoutes(
         toCallerContext(user),
         parsed.data.vehicleIds,
         parsed.data.status,
+        c.req.query('operatorId'),
       )
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) {
+        return fail(c, result.error, result.status, {
+          ...(result.code ? { code: result.code } : {}),
+        })
+      }
       return ok(c, result.vehicles)
     })
     .patch('/vehicles/:id', async (c) => {
@@ -76,8 +81,17 @@ export function createVehicleRoutes(
       const parsed = await parseBody(c, updateVehicleSchema)
       if (!parsed.ok) return parsed.response
 
-      const result = await service.update(toCallerContext(user), idResult.id, parsed.data)
-      if (!result.ok) return fail(c, result.error, result.status)
+      const result = await service.update(
+        toCallerContext(user),
+        idResult.id,
+        parsed.data,
+        c.req.query('operatorId'),
+      )
+      if (!result.ok) {
+        return fail(c, result.error, result.status, {
+          ...(result.code ? { code: result.code } : {}),
+        })
+      }
       return ok(c, result.vehicle)
     })
     .patch('/vehicles/:id/status', async (c) => {
@@ -107,8 +121,16 @@ export function createVehicleRoutes(
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
 
-      const result = await service.softDelete(toCallerContext(user), idResult.id)
-      if (!result.ok) return fail(c, result.error, result.status)
+      const result = await service.softDelete(
+        toCallerContext(user),
+        idResult.id,
+        c.req.query('operatorId'),
+      )
+      if (!result.ok) {
+        return fail(c, result.error, result.status, {
+          ...(result.code ? { code: result.code } : {}),
+        })
+      }
       return ok(c, result.vehicle)
     })
 }
