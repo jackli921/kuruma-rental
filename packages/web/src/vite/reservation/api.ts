@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import type { Locale } from '@kuruma/shared/i18n/locales'
 import type { StorefrontAddOnData, StorefrontInsuranceData } from '@kuruma/shared/types/storefront'
 import { z } from 'zod'
 
@@ -37,9 +38,18 @@ export type ReservationInsuranceOption = StorefrontInsuranceData
 // Public endpoints — no auth. ACTIVE-only, single-operator reads (the API seals
 // cross-tenant leaks). A 404 (unknown/archived storefront) surfaces as an
 // ApiError so the wizard loader can bounce the renter back to search.
-export async function fetchAddOns(locationId: string): Promise<ReservationAddOn[]> {
+//
+// Catalog i18n slice 2 (#1315): add-on name/description are templated + resolved
+// server-side to `?locale=`, so the renter read threads its route locale (absent
+// ⇒ server default EN). A bad locale is a 400 the server never caches, so the
+// wizard only ever passes a validated `Locale`. Insurance stays EN until slice 3.
+export async function fetchAddOns(
+  locationId: string,
+  locale?: Locale,
+): Promise<ReservationAddOn[]> {
+  const localeParam = locale ? `?locale=${locale}` : ''
   const res = await fetch(
-    `${getApiBaseUrl()}/storefronts/${encodeURIComponent(locationId)}/add-ons`,
+    `${getApiBaseUrl()}/storefronts/${encodeURIComponent(locationId)}/add-ons${localeParam}`,
     { credentials: 'include' },
   )
   return unwrap(res, reservationAddOnSchema.array())
