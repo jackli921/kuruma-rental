@@ -9,6 +9,7 @@ import {
   consentDocuments,
   feeSchedules,
   insuranceOptions,
+  insuranceTemplates,
   locations,
   operators,
   providerInvites,
@@ -24,6 +25,7 @@ import {
   DEMO_CONSENT_DOCUMENTS,
   DEMO_FEE_SCHEDULES,
   DEMO_INSURANCE_OPTIONS,
+  DEMO_INSURANCE_TEMPLATES,
   DEMO_LOCATIONS,
   DEMO_OPERATORS,
   DEMO_REGIONS,
@@ -247,14 +249,44 @@ export async function seed(db: ReturnType<typeof getDb>) {
       })
   }
 
-  // 6. Insurance options (slice 4a). Renter selects one at booking (slice 6).
+  // 6. Insurance templates (catalog i18n, slice 3). Platform-owned, pre-translated
+  // names the operator picks from — global (no operatorId). The id is derived from
+  // the key so a re-seed upserts on the natural key (insurance_templates_key_unique).
+  // Seeded BEFORE the options below, which now FK-reference a template by id.
+  console.log(`Seeding ${DEMO_INSURANCE_TEMPLATES.length} insurance templates...`)
+  for (const template of DEMO_INSURANCE_TEMPLATES) {
+    await db
+      .insert(insuranceTemplates)
+      .values({
+        id: seedId(`tmpl_${template.key}`),
+        key: template.key,
+        name: template.name,
+        description: template.description,
+      })
+      .onConflictDoUpdate({
+        target: insuranceTemplates.key,
+        set: {
+          name: template.name,
+          description: template.description,
+          updatedAt: now,
+        },
+      })
+  }
+
+  // 6a. Insurance options (slice 4a). Renter selects one at booking (slice 6).
+  // Catalog i18n (slice 3): each row links to its template by templateId =
+  // seedId('tmpl_' + slugify(name)); slugify(name) is the template key, so a fresh
+  // seed produces template-stamped rows directly (no backfill needed). `name` stays
+  // the resolved en name through PR1.
   console.log(`Seeding ${DEMO_INSURANCE_OPTIONS.length} insurance options...`)
   for (const opt of DEMO_INSURANCE_OPTIONS) {
+    const templateId = seedId(`tmpl_${slugify(opt.name)}`)
     await db
       .insert(insuranceOptions)
       .values({
         id: seedId(opt.id),
         operatorId: seedId(opt.operatorId),
+        templateId,
         name: opt.name,
         description: opt.description,
         dailyPriceJpy: opt.dailyPriceJpy,
@@ -263,6 +295,7 @@ export async function seed(db: ReturnType<typeof getDb>) {
       .onConflictDoUpdate({
         target: insuranceOptions.id,
         set: {
+          templateId,
           name: opt.name,
           description: opt.description,
           dailyPriceJpy: opt.dailyPriceJpy,
@@ -494,7 +527,8 @@ export async function seed(db: ReturnType<typeof getDb>) {
   console.log(
     `\nSeeded ${DEMO_OPERATORS.length} operators, ${DEMO_LOCATIONS.length} locations, ` +
       `${DEMO_VEHICLE_CLASSES.length} classes, ${DEMO_VEHICLES.length} vehicles, ` +
-      `${DEMO_INSURANCE_OPTIONS.length} insurance options, ${DEMO_ADD_ON_OPTIONS.length} add-on options, ` +
+      `${DEMO_INSURANCE_TEMPLATES.length} insurance templates, ${DEMO_INSURANCE_OPTIONS.length} insurance options, ` +
+      `${DEMO_ADD_ON_OPTIONS.length} add-on options, ` +
       `${DEMO_FEE_SCHEDULES.length} fee schedules, ${DEMO_CLASS_RATE_PLANS.length} class rate plans.`,
   )
 }

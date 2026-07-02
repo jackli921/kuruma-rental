@@ -1,237 +1,9 @@
 {
-  "id": "11fb5aa9-d0af-4f1a-9932-65053835330e",
+  "id": "a9d35ec1-d9b0-4a0e-a460-6195a856e661",
   "prevId": "c6caa5d3-11f4-404a-93d5-f746807f6ffc",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.operator_applications": {
-      "name": "operator_applications",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "operator_application_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'PENDING'"
-        },
-        "businessName": {
-          "name": "businessName",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "contactName": {
-          "name": "contactName",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "contactEmail": {
-          "name": "contactEmail",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "contactPhone": {
-          "name": "contactPhone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "serviceArea": {
-          "name": "serviceArea",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "estimatedFleetSize": {
-          "name": "estimatedFleetSize",
-          "type": "operator_application_fleet_size",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "website": {
-          "name": "website",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "businessLicenseNumber": {
-          "name": "businessLicenseNumber",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "businessType": {
-          "name": "businessType",
-          "type": "operator_application_business_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "message": {
-          "name": "message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "submittedLocale": {
-          "name": "submittedLocale",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "operatorId": {
-          "name": "operatorId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reviewedByUserId": {
-          "name": "reviewedByUserId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reviewedAt": {
-          "name": "reviewedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reviewerNotes": {
-          "name": "reviewerNotes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rejectionReason": {
-          "name": "rejectionReason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_operator_applications_status": {
-          "name": "idx_operator_applications_status",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_operator_applications_operatorId": {
-          "name": "idx_operator_applications_operatorId",
-          "columns": [
-            {
-              "expression": "operatorId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_operator_applications_reviewedByUserId": {
-          "name": "idx_operator_applications_reviewedByUserId",
-          "columns": [
-            {
-              "expression": "reviewedByUserId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "operator_applications_live_email_unique": {
-          "name": "operator_applications_live_email_unique",
-          "columns": [
-            {
-              "expression": "contactEmail",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "status in ('PENDING','APPROVED')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "operator_applications_operatorId_operators_id_fk": {
-          "name": "operator_applications_operatorId_operators_id_fk",
-          "tableFrom": "operator_applications",
-          "tableTo": "operators",
-          "columnsFrom": [
-            "operatorId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "operator_applications_reviewedByUserId_users_id_fk": {
-          "name": "operator_applications_reviewedByUserId_users_id_fk",
-          "tableFrom": "operator_applications",
-          "tableTo": "users",
-          "columnsFrom": [
-            "reviewedByUserId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.regions": {
       "name": "regions",
       "schema": "",
@@ -2176,6 +1948,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "templateId": {
+          "name": "templateId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "descriptionOverride": {
+          "name": "descriptionOverride",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "dailyPriceJpy": {
           "name": "dailyPriceJpy",
           "type": "integer",
@@ -2248,6 +2032,43 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_insurance_options_templateId": {
+          "name": "idx_insurance_options_templateId",
+          "columns": [
+            {
+              "expression": "templateId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "insurance_options_active_template_unique": {
+          "name": "insurance_options_active_template_unique",
+          "columns": [
+            {
+              "expression": "operatorId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "templateId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "status = 'ACTIVE'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2257,6 +2078,19 @@
           "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "insurance_options_templateId_insurance_templates_id_fk": {
+          "name": "insurance_options_templateId_insurance_templates_id_fk",
+          "tableFrom": "insurance_options",
+          "tableTo": "insurance_templates",
+          "columnsFrom": [
+            "templateId"
           ],
           "columnsTo": [
             "id"
@@ -2287,6 +2121,81 @@
           "value": "\"insurance_options\".\"deductibleJpy\" IS NULL OR \"insurance_options\".\"deductibleJpy\" >= 0"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.insurance_templates": {
+      "name": "insurance_templates",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "catalog_template_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ACTIVE'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "insurance_templates_key_unique": {
+          "name": "insurance_templates_key_unique",
+          "columns": [
+            {
+              "expression": "key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.booking_events": {
@@ -5647,33 +5556,6 @@
       "values": [
         "IDP",
         "PASSPORT"
-      ]
-    },
-    "public.operator_application_business_type": {
-      "name": "operator_application_business_type",
-      "schema": "public",
-      "values": [
-        "INDIVIDUAL",
-        "COMPANY"
-      ]
-    },
-    "public.operator_application_fleet_size": {
-      "name": "operator_application_fleet_size",
-      "schema": "public",
-      "values": [
-        "1-5",
-        "6-20",
-        "21-50",
-        "50+"
-      ]
-    },
-    "public.operator_application_status": {
-      "name": "operator_application_status",
-      "schema": "public",
-      "values": [
-        "PENDING",
-        "APPROVED",
-        "REJECTED"
       ]
     },
     "public.region_status": {

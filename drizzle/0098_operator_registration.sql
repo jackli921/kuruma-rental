@@ -1,6 +1,8 @@
 CREATE TYPE "public"."operator_application_business_type" AS ENUM('INDIVIDUAL', 'COMPANY');--> statement-breakpoint
 CREATE TYPE "public"."operator_application_fleet_size" AS ENUM('1-5', '6-20', '21-50', '50+');--> statement-breakpoint
 CREATE TYPE "public"."operator_application_status" AS ENUM('PENDING', 'APPROVED', 'REJECTED');--> statement-breakpoint
+ALTER TYPE "public"."audit_event_kind" ADD VALUE 'OPERATOR_APPLICATION_APPROVED';--> statement-breakpoint
+ALTER TYPE "public"."audit_event_kind" ADD VALUE 'OPERATOR_APPLICATION_REJECTED';--> statement-breakpoint
 CREATE TABLE "operator_applications" (
 	"id" text PRIMARY KEY NOT NULL,
 	"status" "operator_application_status" DEFAULT 'PENDING' NOT NULL,

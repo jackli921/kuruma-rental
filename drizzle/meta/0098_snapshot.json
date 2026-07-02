@@ -1,6 +1,6 @@
 {
-  "id": "eeddee37-852f-4867-adf3-644d0878cef3",
-  "prevId": "11fb5aa9-d0af-4f1a-9932-65053835330e",
+  "id": "422de279-fd24-4976-b81f-dcc94a8ebff0",
+  "prevId": "a9d35ec1-d9b0-4a0e-a460-6195a856e661",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2176,6 +2176,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "templateId": {
+          "name": "templateId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "descriptionOverride": {
+          "name": "descriptionOverride",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "dailyPriceJpy": {
           "name": "dailyPriceJpy",
           "type": "integer",
@@ -2248,6 +2260,43 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_insurance_options_templateId": {
+          "name": "idx_insurance_options_templateId",
+          "columns": [
+            {
+              "expression": "templateId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "insurance_options_active_template_unique": {
+          "name": "insurance_options_active_template_unique",
+          "columns": [
+            {
+              "expression": "operatorId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "templateId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "status = 'ACTIVE'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2257,6 +2306,19 @@
           "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "insurance_options_templateId_insurance_templates_id_fk": {
+          "name": "insurance_options_templateId_insurance_templates_id_fk",
+          "tableFrom": "insurance_options",
+          "tableTo": "insurance_templates",
+          "columnsFrom": [
+            "templateId"
           ],
           "columnsTo": [
             "id"
@@ -2287,6 +2349,81 @@
           "value": "\"insurance_options\".\"deductibleJpy\" IS NULL OR \"insurance_options\".\"deductibleJpy\" >= 0"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.insurance_templates": {
+      "name": "insurance_templates",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "catalog_template_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ACTIVE'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "insurance_templates_key_unique": {
+          "name": "insurance_templates_key_unique",
+          "columns": [
+            {
+              "expression": "key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.booking_events": {
