@@ -1,0 +1,2 @@
+CREATE INDEX "idx_reviews_subject_vehicle_published" ON "reviews" USING btree ("subjectVehicleId","publishedAt","overall") WHERE "reviews"."moderationStatus" = 'VISIBLE' AND "reviews"."publishedAt" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "idx_reviews_subject_class_published" ON "reviews" USING btree ("subjectClassId","publishedAt","overall") WHERE "reviews"."moderationStatus" = 'VISIBLE' AND "reviews"."publishedAt" IS NOT NULL;

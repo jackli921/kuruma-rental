@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/dialog'
 import { ClassForm } from '@/vite/operator-classes/ClassForm'
 import { type OperatorClass, updateOperatorClass } from '@/vite/operator-classes/api'
+import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
 
@@ -23,10 +24,12 @@ interface EditClassDialogProps {
 export function EditClassDialog({ vehicleClass, onOpenChange }: EditClassDialogProps) {
   const t = useTranslations('business.classes')
   const queryClient = useQueryClient()
+  // Cookie writes need the double-submit CSRF token echoed in the header (#1304).
+  const csrfToken = useSession().data?.csrfToken ?? ''
 
   const { mutateAsync, isPending, error } = useMutation({
     mutationFn: (data: Parameters<typeof updateOperatorClass>[1]) =>
-      updateOperatorClass(vehicleClass?.id ?? '', data),
+      updateOperatorClass(vehicleClass?.id ?? '', data, csrfToken),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['operator-classes'] })
       onOpenChange(false)
@@ -35,7 +38,7 @@ export function EditClassDialog({ vehicleClass, onOpenChange }: EditClassDialogP
 
   return (
     <Dialog open={vehicleClass !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('editClass')}</DialogTitle>
           <DialogDescription>{vehicleClass?.name}</DialogDescription>

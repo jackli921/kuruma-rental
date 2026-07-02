@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type RenderResult, render } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { IntlProvider } from 'use-intl'
+import { vi } from 'vitest'
 import en from '../../messages/en.json'
 
 // Deterministic (not real) rate: 30,000 JPY -> $201, so round-number price fixtures
@@ -19,6 +20,11 @@ const RATES: FxRates = { base: 'JPY', asOf: '2026-06-01', rates: { USD: USD_PER_
  * per-surface tests that pin each surface to the correct JPY field.
  */
 export function renderWithUsdIndicative(ui: ReactElement): RenderResult {
+  // Multi-currency (#1070) ships OFF for the beta MVP, which returns every `format`
+  // as null and hides the note. These per-surface tests exist to prove the wiring
+  // when the feature is ON, so the helper — the single indicative render entry point
+  // — turns the flag on. One chokepoint mirrors the code's one conversion chokepoint.
+  vi.stubEnv('VITE_FEATURE_MULTI_CURRENCY', 'true')
   // Own the one key we read: overwrite the display-currency outright so the result never
   // depends on a value a sibling test left behind (order-independent under any shard).
   // Don't `clear()` — that would wipe unrelated keys a consuming test may have seeded.

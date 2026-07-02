@@ -98,8 +98,9 @@ export class DrizzleReviewRepository implements ReviewRepository {
   // Shared aggregate scan (#1085): SUM(overall) + COUNT(*) per key over published+visible
   // reviews whose key falls in `ids`. Ids with no matching rows stay absent from the Map
   // — the service distinguishes "no reviews yet" from "rated zero" at the call site.
-  // The operator scan uses idx_reviews_operator_published end-to-end; vehicle and class
-  // use the FK-cover single-column indexes (perf follow-up filed; see slice 5 plan).
+  // The operator scan uses idx_reviews_operator_published; vehicle and class use the
+  // partial cover indexes idx_reviews_subject_{vehicle,class}_published (#1220), which
+  // carry `overall` as a trailing key column so this aggregate is an Index Only Scan.
   private async aggregate(
     ids: readonly string[],
     key: PgColumn,

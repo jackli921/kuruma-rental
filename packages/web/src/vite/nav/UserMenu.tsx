@@ -8,8 +8,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { isPlatformAdmin } from '@/lib/platform-roles'
+import { useViewModeContext } from '@/vite/ViewModeProvider'
 import { type Session, signOut } from '@/vite/session'
-import { type ViewMode, setViewMode } from '@/vite/view-mode'
+import type { ViewMode } from '@/vite/view-mode'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useRouter } from '@tanstack/react-router'
 import { ArrowLeftRight, LogOut, Shield } from 'lucide-react'
@@ -37,16 +38,17 @@ export function UserMenu({ session, canSwitchView, viewMode }: UserMenuProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const locale = useLocale()
+  const { setViewMode } = useViewModeContext()
   const { user } = session
 
   const targetMode: ViewMode = viewMode === 'business' ? 'renter' : 'business'
   const switchLabel = viewMode === 'business' ? t('nav.switchToRenter') : t('nav.switchToBusiness')
 
-  // The view lives in a cookie read at render; invalidate re-renders so the new
-  // mode propagates (the SPA equivalent of Next's router.refresh()).
+  // The context setter writes the `kuruma-view` cookie AND updates React state, so
+  // every viewMode consumer (nav tabs, business sidebar) re-renders immediately —
+  // no page reload, unlike the old cookie-write + router.invalidate() (#1274).
   function handleSwitchView() {
     setViewMode(targetMode)
-    router.invalidate()
   }
 
   // After the cookie is cleared, drop the cached session and re-run the route

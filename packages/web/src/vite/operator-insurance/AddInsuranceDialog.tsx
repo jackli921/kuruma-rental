@@ -50,7 +50,7 @@ export function AddInsuranceDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('addOption')}</DialogTitle>
           <DialogDescription>{t('addSubtitle')}</DialogDescription>

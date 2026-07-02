@@ -27,10 +27,6 @@ export function readViewCookie(): string | undefined {
   return match?.slice(COOKIE_NAME.length + 1)
 }
 
-export function getViewMode(role: UserRole | undefined): ViewMode {
-  return resolveViewMode(role, readViewCookie())
-}
-
 /**
  * Persist the chosen view. Unlike the old Next server action this cookie is
  * deliberately NOT httpOnly: the SPA is the only reader, so JS must be able to

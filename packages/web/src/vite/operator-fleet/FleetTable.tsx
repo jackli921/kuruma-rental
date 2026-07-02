@@ -1,3 +1,4 @@
+import { FleetEditButton } from '@/vite/operator-fleet/FleetEditButton'
 import { FleetRowActions } from '@/vite/operator-fleet/FleetRowActions'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import { ExpiryPill, StatusPill, priceLabel } from '@/vite/operator-fleet/cells'
@@ -123,7 +124,10 @@ export function FleetTable({
               </td>
               {canWrite && (
                 <td className="px-4 py-3 text-right">
-                  <FleetRowActions vehicle={v} onEdit={() => onEdit(v)} />
+                  <div className="inline-flex items-start justify-end gap-1">
+                    <FleetEditButton onEdit={() => onEdit(v)} />
+                    <FleetRowActions vehicle={v} onEdit={() => onEdit(v)} />
+                  </div>
                 </td>
               )}
             </tr>

@@ -3,6 +3,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -10,10 +11,18 @@ import {
   unique,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
-import { ADD_ON_STATUSES } from '../enums'
+import { ADD_ON_STATUSES, CATALOG_TEMPLATE_STATUSES } from '../enums'
+import type { LocalizedText, LocalizedTextOverride } from '../i18n/localized-text'
 import { operators } from './auth'
 
 export const addOnStatusEnum = pgEnum('add_on_status', ADD_ON_STATUSES)
+
+// Shared by add_on_templates and (slice 3) insurance_templates — one CREATE TYPE
+// for both platform-owned catalog template tables.
+export const catalogTemplateStatusEnum = pgEnum(
+  'catalog_template_status',
+  CATALOG_TEMPLATE_STATUSES,
+)
 
 // Operator-owned paid add-ons (epic #385, slice #460). Selectable priced items
 // chosen in the booking wizard (baby seat, ETC card…). priceJpy is a FLAT
@@ -34,6 +43,15 @@ export const addOnOptions = pgTable(
       .references(() => operators.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
     description: text('description'),
+    // Catalog i18n (slice 2): the platform template this add-on instances — the
+    // template supplies the localized name. Nullable through PR1 (the backfill
+    // sets every active row); NOT NULL in PR2 (slice 5). onDelete 'restrict'
+    // matches the operators FK convention — a referenced template can't vanish.
+    templateId: text('templateId').references(() => addOnTemplates.id, { onDelete: 'restrict' }),
+    // Operator's reworded description as a PARTIAL locale bag (P1-a override type,
+    // NOT LocalizedText — an operator may author one locale only; deferred MT
+    // fills the remaining keys in place). Nullable: most rows keep the template's.
+    descriptionOverride: jsonb('descriptionOverride').$type<LocalizedTextOverride>(),
     priceJpy: integer('priceJpy').notNull(),
     status: addOnStatusEnum('status').notNull().default('ACTIVE'),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
@@ -49,6 +67,44 @@ export const addOnOptions = pgTable(
     uniqueIndex('add_on_options_active_name_unique')
       .on(table.operatorId, table.name)
       .where(sql`status = 'ACTIVE'`),
+    // Leading FK-cover index (lint-fk-indexes counts only the LEADING column of an
+    // index; PR2's composite would leave templateId trailing and uncounted).
+    index('idx_add_on_options_templateId').on(table.templateId),
+    // Catalog i18n (P1-b): an operator can't hold the same template twice while
+    // ACTIVE. The WHERE predicate is the OPERATOR ROW status (add_on_status), NOT
+    // the template status (which gates picker visibility, a separate axis). Kept
+    // ALONGSIDE active_name_unique through PR1 (expand-contract): a partial unique
+    // on templateId does not catch duplicate NULLs, so null-templateId rows in the
+    // migration-before-code window stay guarded by the name index; active_name_unique
+    // drops with the name column in PR2 (slice 5).
+    uniqueIndex('add_on_options_active_template_unique')
+      .on(table.operatorId, table.templateId)
+      .where(sql`status = 'ACTIVE'`),
     check('add_on_options_price_non_negative', sql`${table.priceJpy} >= 0`),
   ],
+)
+
+// Platform-owned, pre-translated add-on TEMPLATES (catalog i18n). An operator
+// picks a template instead of typing a raw name, so a renter reading in ja/zh
+// sees a translated add-on name rather than the operator's English string. name
+// and description are LocalizedText JSONB {en, ja?, zh?} bundles resolved to the
+// caller locale in the service layer. NO operatorId — the catalog is global,
+// shared across every tenant (a picker, not tenant data). key = slugify(canonical
+// English name); the curated seed and the slice-2 backfill both derive it, so it
+// is the stable join handle between an operator's legacy name and its template.
+export const addOnTemplates = pgTable(
+  'add_on_templates',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    key: text('key').notNull(),
+    name: jsonb('name').$type<LocalizedText>().notNull(),
+    // Nullable: not every template ships a curated description bundle.
+    description: jsonb('description').$type<LocalizedText>(),
+    status: catalogTemplateStatusEnum('status').notNull().default('ACTIVE'),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('add_on_templates_key_unique').on(table.key)],
 )

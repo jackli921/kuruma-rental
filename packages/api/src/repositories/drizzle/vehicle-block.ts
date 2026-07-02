@@ -57,6 +57,7 @@ export class DrizzleVehicleBlockRepository implements VehicleBlockRepository {
     ctx: CallerContext,
     from: Date,
     to: Date,
+    requestedOperatorId?: string,
   ): Promise<VehicleBlock[]> {
     const scope = vehicleBlockReadScope(ctx)
     const conditions: SQL[] = [
@@ -66,6 +67,10 @@ export class DrizzleVehicleBlockRepository implements VehicleBlockRepository {
       conditions.push(eq(vehicleBlocks.operatorId, scope.operatorId))
     } else if (scope.kind === 'none') {
       conditions.push(sql`false`)
+    } else if (requestedOperatorId) {
+      // scope.kind === 'all' (bypass admin): the picker narrow. vehicleBlockReadScope's
+      // `all` is bypass-only (PARTNER pre-branched to none), so this branch is safe.
+      conditions.push(eq(vehicleBlocks.operatorId, requestedOperatorId))
     }
     const rows = await this.db
       .select(vehicleBlockColumns)

@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/dialog'
 import { ClassForm } from '@/vite/operator-classes/ClassForm'
 import { createOperatorClass } from '@/vite/operator-classes/api'
+import { useSession } from '@/vite/session'
 import type { CreateVehicleClassInput } from '@kuruma/shared/validators/vehicle-class'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
@@ -24,10 +25,15 @@ interface AddClassDialogProps {
 export function AddClassDialog({ open, onOpenChange, pickedOperatorId }: AddClassDialogProps) {
   const t = useTranslations('business.classes')
   const queryClient = useQueryClient()
+  // Cookie writes need the double-submit CSRF token echoed in the header (#1304).
+  const csrfToken = useSession().data?.csrfToken ?? ''
 
   const { mutateAsync, isPending, error, reset } = useMutation({
     mutationFn: (data: CreateVehicleClassInput) =>
-      createOperatorClass(pickedOperatorId ? { ...data, operatorId: pickedOperatorId } : data),
+      createOperatorClass(
+        pickedOperatorId ? { ...data, operatorId: pickedOperatorId } : data,
+        csrfToken,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['operator-classes'] })
       onOpenChange(false)
@@ -41,7 +47,7 @@ export function AddClassDialog({ open, onOpenChange, pickedOperatorId }: AddClas
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('addClass')}</DialogTitle>
           <DialogDescription>{t('addSubtitle')}</DialogDescription>

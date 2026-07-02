@@ -1,4 +1,4 @@
-import { isRenterDocumentsEnabled } from '@/vite/config/features'
+import { featureFlagsQueryOptions, resolveFeatureFlag } from '@/vite/config'
 import { DocumentUploadCard } from '@/vite/documents/DocumentUploadCard'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
@@ -8,8 +8,11 @@ export const Route = createFileRoute('/$locale/_renter/documents')({
   // Post-MVP feature, hidden in the beta demo: the instant-book flow doesn't
   // gate on uploaded documents, so this page is orphaned. The nav link is
   // filtered out; this blocks a direct URL too, falling back to search.
-  beforeLoad: ({ params }) => {
-    if (!isRenterDocumentsEnabled()) {
+  // Reads the runtime-toggleable flag (#1322): a dashboard override opens/closes
+  // the route live. resolveFeatureFlag = override ?? build-time env ?? false.
+  beforeLoad: async ({ context, params }) => {
+    const overrides = await context.queryClient.ensureQueryData(featureFlagsQueryOptions())
+    if (!resolveFeatureFlag(overrides, 'RENTER_DOCUMENTS')) {
       throw redirect({ to: '/$locale/search', params: { locale: params.locale } })
     }
   },

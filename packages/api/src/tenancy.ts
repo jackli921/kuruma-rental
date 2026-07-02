@@ -101,8 +101,8 @@ export function applyCrossOperatorReadScope<F extends { operatorId?: string }>(
  * Resolve a bypass-only operator narrowing for an aggregate read (#407, picker
  * slice 4 — dashboard/fleet-overview). An `all`-scope caller (a bypass admin
  * using the operator-context picker) may narrow a cross-operator aggregate to a
- * single operator; every tenant-scoped caller ignores a requested operatorId, so
- * a foreign `?operatorId=` can never widen their scope (the H2 invariant).
+ * single operator; every non-`all` caller drops a requested operatorId, so a
+ * foreign `?operatorId=` can never widen their scope (the H2 invariant).
  *
  * Unlike {@link applyCrossOperatorReadScope}, a missing operatorId is NOT a 400:
  * these reads default to "all operators", so the absence of a pick is the
@@ -111,20 +111,24 @@ export function applyCrossOperatorReadScope<F extends { operatorId?: string }>(
  * lists were strict before the picker; these aggregate reads keep their working
  * no-param contract and only add narrowing.
  *
- * AUTHORITY — this helper is an ECHO, not the scope gate. It reads
- * `operatorReadScope`, which maps every non-operator role (incl. RENTER/PARTNER)
- * to `all`, so it returns the requested id for those roles too. That is only safe
- * because each consumer independently re-gates: the route (MANAGEMENT_READ_ROLES
- * → 403) rejects renter/partner, and the repo re-clamps to its own tenant. A
- * future `bookingReadScope`-private endpoint (slices 5a/5b/6) must NOT trust this
- * id blindly — it must re-clamp with its own scope vocabulary, or the two
- * vocabularies disagree and a private read leaks. Reconcile before then: #1272.
+ * VOCABULARY (#1272) — the caller passes the scope resolver that matches its
+ * read's privacy model, and the id is honored ONLY when that resolver returns
+ * `all`. The aggregate reads pass {@link bookingReadScope} (private-read
+ * vocabulary), under which only a true bypass admin is `all`; renter, partner,
+ * and legacy STAFF/ADMIN map to non-`all` kinds, so their requested id drops
+ * here. This closes the earlier echo trap: the helper used to key off
+ * `operatorReadScope` (catalog vocabulary), which maps every non-operator role to
+ * `all` and so echoed a renter's `?operatorId=` — safe only while the route
+ * 403'd renters, but a latent leak for a future `bookingReadScope`-private
+ * consumer (slices 5a/5b/6) that reused this helper without re-clamping. Now that
+ * consumer passes its own scope resolver, so the vocabularies cannot disagree.
  */
 export function narrowReadToOperator(
   ctx: CallerContext,
   requestedOperatorId: string | undefined,
+  resolveScope: (ctx: CallerContext) => { kind: string },
 ): string | undefined {
-  return operatorReadScope(ctx).kind === 'all' ? requestedOperatorId : undefined
+  return resolveScope(ctx).kind === 'all' ? requestedOperatorId : undefined
 }
 
 /**

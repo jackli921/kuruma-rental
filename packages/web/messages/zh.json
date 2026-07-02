@@ -205,6 +205,20 @@
         "action": "查看车队"
       }
     },
+    "today": {
+      "title": "今日",
+      "pickups": "取车",
+      "returns": "还车",
+      "overdue": "逾期",
+      "emptyPickups": "今日暂无取车安排。",
+      "emptyReturns": "今日暂无还车安排。",
+      "emptyOverdue": "没有逾期车辆。",
+      "markPickedUp": "标记为已取车",
+      "markReturned": "标记为已还车",
+      "walkIn": "到店客户",
+      "noVehicle": "未分配车辆",
+      "actionError": "更新失败，请重试。"
+    },
     "stats": {
       "totalBookings": "总预订数",
       "activeVehicles": "运营中车辆",
@@ -275,7 +289,8 @@
           "floats": {
             "title": "待分配车辆",
             "overdue": "已超时",
-            "empty": "暂无待分配的浮动预订"
+            "empty": "暂无待分配的浮动预订",
+            "overflowLabel": "至少 {limit} 项待分配（仅显示前 {limit} 项）"
           }
         }
       },
@@ -416,6 +431,7 @@
         "pickupLocation": "取车地点",
         "pickupLocationNone": "无取车地点",
         "pickupLocationCurrent": "当前取车地点",
+        "pickupLocationEmptyHint": "请先创建取车地点，这样该车辆才能出现在搜索结果中。",
         "operator": "运营商",
         "operatorPlaceholder": "选择运营商",
         "operatorRequired": "请选择运营商以继续"
@@ -1185,8 +1201,8 @@
       }
     },
     "featured": {
-      "heading": "热门车辆",
-      "subheading": "旅行者的热门之选",
+      "heading": "按类别浏览",
+      "subheading": "找到适合您旅程的车辆",
       "viewAll": "查看全部",
       "currency": "¥{price}",
       "perDay": "天"
@@ -1219,7 +1235,10 @@
     },
     "footer": {
       "copyright": "库鲁马租车 版权所有。",
-      "tagline": "日本大阪租车服务"
+      "tagline": "日本大阪租车服务",
+      "browse": "浏览车辆",
+      "categories": "车辆类别",
+      "signIn": "登录"
     }
   },
   "search": {
@@ -1231,6 +1250,16 @@
     "toLabel": "还车日期与时间",
     "submit": "搜索",
     "classFilterLabel": "车型类别",
+    "results": {
+      "sortLabel": "排序方式",
+      "sort": {
+        "nearest": "推荐",
+        "priceAsc": "价格：从低到高",
+        "priceDesc": "价格：从高到低"
+      },
+      "priceMaxLabel": "每日最高价",
+      "priceMaxPlaceholder": "不限"
+    },
     "picker": {
       "label": "取车与还车",
       "placeholder": "添加日期和时间",
@@ -1253,6 +1282,8 @@
     "turnaround": "两次租赁间隔约{hours}小时",
     "distance": "约{km} km",
     "emptyTurnaroundHint": "车辆在两次租赁之间需要准备时间，紧接着可能无法预订。请尝试选择较晚的取车日期。",
+    "emptyPriceCap": "没有符合您每日价格上限的车辆。",
+    "emptyPriceCapHint": "请提高或清除价格上限即可查看更多门店。",
     "classCount": "{label} {count}辆",
     "seats": "{count}座",
     "luggage": "行李{count}件",
@@ -1303,7 +1334,23 @@
       "governance": "同意治理",
       "customers": "客户",
       "operators": "运营商",
+      "featureFlags": "功能开关",
       "backToSite": "返回网站"
+    },
+    "featureFlags": {
+      "title": "功能开关",
+      "subtitle": "实时切换平台功能。其他用户将在下次加载页面时看到更改。",
+      "colFeature": "功能",
+      "colSource": "来源",
+      "colState": "状态",
+      "overridden": "已覆盖",
+      "default": "默认",
+      "runtimeLive": "实时生效",
+      "runtimeBuildOnly": "仅构建时",
+      "buildOnlyHint": "此开关尚未接入运行时控制层，切换会保存但在其迁移上线前不会生效。",
+      "toggleLabel": "切换{feature}",
+      "loadError": "无法加载功能开关。",
+      "retry": "重试"
     },
     "operators": {
       "title": "运营商",
@@ -1588,6 +1635,9 @@
       "insurance": "保险",
       "confirm": "确认",
       "payment": "支付"
+    },
+    "summary": {
+      "total": "合计"
     },
     "dates": {
       "heading": "您的租赁日期",

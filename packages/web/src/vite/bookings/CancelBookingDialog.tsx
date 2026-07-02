@@ -145,7 +145,12 @@ export function CancelBookingDialog({
           <legend className="text-sm font-medium">{t('reason.legend')}</legend>
           <div className="space-y-1.5">
             {CANCELLATION_REASON_CODES.map((code) => (
-              <label key={code} className="flex cursor-pointer items-center gap-2 text-sm">
+              <label
+                key={code}
+                // >=44px tappable row on touch (was a 16px input in a ~20px row);
+                // desktop density is unchanged on fine pointers (#1301).
+                className="flex cursor-pointer items-center gap-2 text-sm pointer-coarse:min-h-11"
+              >
                 <input
                   type="radio"
                   name="cancel-reason"

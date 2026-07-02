@@ -22,7 +22,12 @@ export interface VehicleBlockRepository {
   /** Fleet-wide blocks whose [startAt, endAt) overlaps [from, to), row-scoped by
    *  `vehicleBlockReadScope(ctx)` — `all` (admin) spans operators, `operator`
    *  filters to the tenant, `none` returns []. Powers the operator calendar read. */
-  findOverlappingInRange(ctx: CallerContext, from: Date, to: Date): Promise<VehicleBlock[]>
+  findOverlappingInRange(
+    ctx: CallerContext,
+    from: Date,
+    to: Date,
+    requestedOperatorId?: string,
+  ): Promise<VehicleBlock[]>
   /** Operator-scoped hard delete (defence-in-depth, must-fix #4): returns the
    *  removed block, or undefined when no block with that id belongs to the
    *  operator (unknown id OR another tenant's block). */

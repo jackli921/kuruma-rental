@@ -1,12 +1,13 @@
 import { localizer } from '@/lib/rbc-localizer'
+import { isCalendarQuickViewEnabled, useFeatureFlag } from '@/vite/config'
 import { CalendarEventChip } from '@/vite/operator-bookings/CalendarEventChip'
 import { CalendarToolbar } from '@/vite/operator-bookings/CalendarToolbar'
 import {
   type CalendarItem,
   type CalendarResource,
   type CalendarView,
-  OPERATOR_VIEWS,
   calendarItemClassName,
+  operatorViews,
 } from '@/vite/operator-bookings/calendar-events'
 import { endOfWeek, startOfWeek } from 'date-fns'
 import { useCallback, useMemo } from 'react'
@@ -58,6 +59,13 @@ export function BookingsCalendar({
 }: BookingsCalendarProps) {
   const t = useTranslations('business.bookings.calendar')
   const culture = locale === 'zh' ? 'zh-CN' : locale
+  // The Timeline option in the switcher follows the runtime-toggleable flag (#1322):
+  // a dashboard override flips it live, falling back to the build-time default.
+  const timelineEnabled = useFeatureFlag('FLEET_TIMELINE')
+  // The booking quick-view chip (#1282) is gated OFF for the beta MVP (#1329);
+  // when off, a booking renders as a plain band like a block. Build-time flag for
+  // now (runtime migration tracked by #1322).
+  const quickViewEnabled = isCalendarQuickViewEnabled()
 
   const toolbarLabel = useMemo(() => {
     const fmt = (opts: Intl.DateTimeFormatOptions) =>
@@ -128,13 +136,13 @@ export function BookingsCalendar({
     () => ({
       toolbar: () => null,
       event: (props: EventProps<CalendarItem>) =>
-        props.event.type === 'booking' ? (
+        props.event.type === 'booking' && quickViewEnabled ? (
           <CalendarEventChip event={props.event} locale={locale} />
         ) : (
           <span className="truncate">{props.event.title}</span>
         ),
     }),
-    [locale],
+    [locale, quickViewEnabled],
   )
 
   const messages = useMemo(
@@ -165,7 +173,7 @@ export function BookingsCalendar({
         view={view}
         onNavigate={handleToolbarNavigate}
         onView={onViewChange}
-        views={OPERATOR_VIEWS}
+        views={operatorViews(timelineEnabled)}
       />
       <Calendar
         localizer={localizer}

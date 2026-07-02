@@ -99,25 +99,44 @@ export class DrizzleFeeScheduleRepository implements FeeScheduleRepository {
     return toFeeSchedule(inserted)
   }
 
-  async update(id: string, data: Partial<FeeSchedule>): Promise<FeeSchedule | undefined> {
+  async update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<FeeSchedule>,
+  ): Promise<FeeSchedule | undefined> {
+    // Fees are private config: reject RENTER/PARTNER at the repo, mirroring the
+    // read path — else operatorReadScope maps them to {kind:'all'} (unscoped).
+    requireManagementRead(ctx)
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     // operatorId is an immutable tenant anchor (#1271): strip it like id so an
     // update payload can never migrate the row to another operator (which the
     // composite FK to vehicleClasses also depends on).
     const { id: _id, createdAt: _createdAt, operatorId: _operatorId, ...fields } = data
+    // #1288: scope the write by tenant so a caller reaching the repo without the
+    // service's findById guard can't mutate another operator's row by id.
+    const conditions = [eq(feeSchedules.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(feeSchedules.operatorId, scope.operatorId))
     const [updated] = await this.db
       .update(feeSchedules)
       .set({ ...fields, updatedAt: sql`now()` })
-      .where(eq(feeSchedules.id, id))
+      .where(and(...conditions))
       .returning()
 
     return updated ? toFeeSchedule(updated) : undefined
   }
 
-  async archive(id: string): Promise<FeeSchedule | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<FeeSchedule | undefined> {
+    requireManagementRead(ctx)
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    // #1288: tenant-scope the archive WHERE (see update()).
+    const conditions = [eq(feeSchedules.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(feeSchedules.operatorId, scope.operatorId))
     const [archived] = await this.db
       .update(feeSchedules)
       .set({ status: 'ARCHIVED', updatedAt: sql`now()` })
-      .where(eq(feeSchedules.id, id))
+      .where(and(...conditions))
       .returning()
 
     return archived ? toFeeSchedule(archived) : undefined

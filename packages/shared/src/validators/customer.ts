@@ -1,11 +1,13 @@
 import { z } from 'zod'
 
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '../i18n/locales'
+
 export const quickCreateCustomerSchema = z
   .object({
     name: z.string().min(1),
     email: z.string().email().optional(),
     phone: z.string().min(1).optional(),
-    language: z.enum(['en', 'ja', 'zh']).default('en'),
+    language: z.enum(SUPPORTED_LOCALES).default(DEFAULT_LOCALE),
   })
   .refine((data) => data.email || data.phone, {
     message: 'At least one of email or phone is required',

@@ -120,7 +120,7 @@ describe('InMemoryVehicleClassRepository', () => {
     it('modifies fields and bumps updatedAt', async () => {
       const created = await repo.create(vehicleClassInput())
 
-      const updated = await repo.update(created.id, { name: 'Premium' })
+      const updated = await repo.update(SYSTEM_CONTEXT, created.id, { name: 'Premium' })
 
       expect(updated).toBeDefined()
       expect(updated!.name).toBe('Premium')
@@ -130,14 +130,14 @@ describe('InMemoryVehicleClassRepository', () => {
     it('preserves id and createdAt', async () => {
       const created = await repo.create(vehicleClassInput())
 
-      const updated = await repo.update(created.id, { name: 'Changed' })
+      const updated = await repo.update(SYSTEM_CONTEXT, created.id, { name: 'Changed' })
 
       expect(updated!.id).toBe(created.id)
       expect(updated!.createdAt).toEqual(created.createdAt)
     })
 
     it('returns undefined for missing id', async () => {
-      const result = await repo.update('nonexistent', { name: 'Nope' })
+      const result = await repo.update(SYSTEM_CONTEXT, 'nonexistent', { name: 'Nope' })
       expect(result).toBeUndefined()
     })
   })
@@ -146,7 +146,7 @@ describe('InMemoryVehicleClassRepository', () => {
     it('sets status to ARCHIVED', async () => {
       const created = await repo.create(vehicleClassInput({ status: 'ACTIVE' }))
 
-      const archived = await repo.archive(created.id)
+      const archived = await repo.archive(SYSTEM_CONTEXT, created.id)
 
       expect(archived).toBeDefined()
       expect(archived!.status).toBe('ARCHIVED')
@@ -154,7 +154,7 @@ describe('InMemoryVehicleClassRepository', () => {
     })
 
     it('returns undefined for missing id', async () => {
-      const result = await repo.archive('nonexistent')
+      const result = await repo.archive(SYSTEM_CONTEXT, 'nonexistent')
       expect(result).toBeUndefined()
     })
   })
@@ -164,9 +164,11 @@ describe('InMemoryVehicleClassRepository', () => {
 // tenant's classes; admins (SYSTEM_CONTEXT) and the anonymous renter catalog
 // (PUBLIC_CONTEXT) see across operators; a tenant-less operator fails closed.
 // Mirrors the cross-operator vehicle isolation in tenancy-guards.test.ts.
-// Reads only: the class-operator write seal is a DB composite FK with no
-// in-memory equivalent, so it is exercised solely in the Drizzle integration
-// block ("...sealed to the vehicle's operator") in tenancy-isolation.test.ts.
+// Cross-tenant WRITE isolation (update/archive no-op) now lives with the other
+// repos' in tenancy-guards.test.ts (#1288). Separately, the class-operator write
+// seal enforced by the DB composite FK (vehicle.classId sealed to the vehicle's
+// operator) has no in-memory equivalent, so it is exercised solely in the
+// Drizzle integration block ("...sealed to the vehicle's operator").
 describe('InMemoryVehicleClassRepository operator-scopes reads', () => {
   const opA = 'op_a'
   const opB = 'op_b'

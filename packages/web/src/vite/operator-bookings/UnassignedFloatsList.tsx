@@ -2,7 +2,11 @@ import { useSession } from '@/vite/session'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
 import { AssignVehicleDialog } from './AssignVehicleDialog'
-import { needsAssignmentQueryOptions, substitutionCandidatesQueryOptions } from './api'
+import {
+  NEEDS_ASSIGNMENT_PAGE_LIMIT,
+  needsAssignmentQueryOptions,
+  substitutionCandidatesQueryOptions,
+} from './api'
 import type { RawOperatorBooking } from './schema'
 
 // #464: per-float row that lazily loads substitution candidates. Candidates are
@@ -54,12 +58,24 @@ function FloatRow({ float, csrfToken }: { float: RawOperatorBooking; csrfToken: 
 // Sorts ACTIVE ("overdue" — pickup window has started) above CONFIRMED so the
 // most urgent floats surface first. Invalidated automatically on a successful
 // assign via AssignVehicleDialog's onSuccess cache invalidation.
-export function UnassignedFloatsList() {
+// #1230 slice 5a: the picked operator is threaded in as a prop (lifted to the
+// route via useOperatorContext) so this leaf stays router-agnostic and unit-
+// testable. undefined = no pick / operator session -> session-scoped read.
+export function UnassignedFloatsList({
+  pickedOperatorId,
+}: { pickedOperatorId?: string | undefined }) {
   const t = useTranslations('business.bookings.calendar.sidebar.floats')
   const session = useSession()
   const csrfToken = session.data?.csrfToken ?? ''
 
-  const { data: floats = [] } = useQuery(needsAssignmentQueryOptions())
+  const { data: floats = [] } = useQuery(needsAssignmentQueryOptions(pickedOperatorId))
+
+  // #1223/#1214: fetchNeedsAssignment pulls one capped page and drops nextCursor, so a
+  // full page means more floats may exist beyond it — the raw count would undercount.
+  // Signal it with a "100+" badge. Exact-100-but-not-capped is an accepted false
+  // positive at this scale (cheap over real pagination, per the issues).
+  const isCapped = floats.length === NEEDS_ASSIGNMENT_PAGE_LIMIT
+  const overflowLabel = t('overflowLabel', { limit: NEEDS_ASSIGNMENT_PAGE_LIMIT })
 
   // ACTIVE (pickup window started = overdue) sorts above CONFIRMED.
   const sorted = [...floats].sort((a, b) => {
@@ -74,10 +90,11 @@ export function UnassignedFloatsList() {
         <h3 className="text-xs font-medium text-muted-foreground">{t('title')}</h3>
         {floats.length > 0 && (
           <output
-            aria-label={`${floats.length} unassigned floats`}
-            className="inline-flex size-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground"
+            aria-label={isCapped ? overflowLabel : `${floats.length} unassigned floats`}
+            title={isCapped ? overflowLabel : undefined}
+            className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground"
           >
-            {floats.length}
+            {isCapped ? `${NEEDS_ASSIGNMENT_PAGE_LIMIT}+` : floats.length}
           </output>
         )}
       </div>

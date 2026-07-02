@@ -53,25 +53,32 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
       }
       if (c.req.query('needsAssignment') === 'true') filters.needsAssignment = true
 
-      // Ownership scoping is handled by CallerContext in the repository layer.
-      // No manual filtering needed here.
+      // #1230 slice 5a: a picker admin may narrow to one operator via ?operatorId=.
+      // The raw param is passed through; the service clamps it via bookingReadScope
+      // so a non-bypass caller's id is dropped and can never widen (H2). Ownership
+      // scoping otherwise stays in the repository layer via CallerContext.
+      const requestedOperatorId = c.req.query('operatorId')
 
       if (expand.has('vehicle') && expand.has('renter')) {
-        const result = await service.findAllWithVehiclesAndRentersPaginated(ctx, filters)
+        const result = await service.findAllWithVehiclesAndRentersPaginated(
+          ctx,
+          filters,
+          requestedOperatorId,
+        )
         return ok(c, result.data, 200, { nextCursor: result.nextCursor })
       }
 
       if (expand.has('vehicle')) {
-        const result = await service.findAllWithVehiclesPaginated(ctx, filters)
+        const result = await service.findAllWithVehiclesPaginated(ctx, filters, requestedOperatorId)
         return ok(c, result.data, 200, { nextCursor: result.nextCursor })
       }
 
       if (expand.has('renter')) {
-        const result = await service.findAllWithRentersPaginated(ctx, filters)
+        const result = await service.findAllWithRentersPaginated(ctx, filters, requestedOperatorId)
         return ok(c, result.data, 200, { nextCursor: result.nextCursor })
       }
 
-      const result = await service.findAllPaginated(ctx, filters)
+      const result = await service.findAllPaginated(ctx, filters, requestedOperatorId)
       return ok(c, result.data, 200, { nextCursor: result.nextCursor })
     })
     .get('/bookings/:id', async (c) => {

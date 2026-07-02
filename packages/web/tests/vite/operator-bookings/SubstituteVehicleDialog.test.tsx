@@ -1,10 +1,6 @@
 import { SubstituteVehicleDialog } from '@/vite/operator-bookings/SubstituteVehicleDialog'
 import * as api from '@/vite/operator-bookings/api'
-import {
-  type SubstitutionCandidate,
-  bookingEventsQueryOptions,
-  operatorBookingDetailQueryOptions,
-} from '@/vite/operator-bookings/api'
+import type { SubstitutionCandidate } from '@/vite/operator-bookings/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -56,7 +52,7 @@ describe('SubstituteVehicleDialog', () => {
     expect(screen.getByRole('option', { name: /OSAKA 5678/ })).toBeInTheDocument()
   })
 
-  it('submits the picked vehicle id + reason + csrf and invalidates the detail and events queries', async () => {
+  it('submits the picked vehicle id + reason + csrf and invalidates the booking + overview caches', async () => {
     const user = userEvent.setup()
     const spy = vi.spyOn(api, 'substituteBooking').mockResolvedValue({} as never)
     const queryClient = new QueryClient()
@@ -71,12 +67,11 @@ describe('SubstituteVehicleDialog', () => {
     await waitFor(() =>
       expect(spy).toHaveBeenCalledWith('bk-1', 'veh-3', 'engine fault', 'csrf-tok'),
     )
-    expect(invalidate).toHaveBeenCalledWith({
-      queryKey: operatorBookingDetailQueryOptions('bk-1').queryKey,
-    })
-    expect(invalidate).toHaveBeenCalledWith({
-      queryKey: bookingEventsQueryOptions('bk-1').queryKey,
-    })
+    // invalidateBookingCaches: the operator-bookings prefix cascade covers detail +
+    // events + calendar (the swap's new vehicle column — #1099 Theme 4 Bug 2), and
+    // the overview prefix refreshes the dashboard today-buckets.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['operator-bookings'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['operator-overview'] })
     // The dialog closes on success (the picker only renders while it is open).
     await waitFor(() => expect(screen.queryByRole('combobox')).not.toBeInTheDocument())
   })

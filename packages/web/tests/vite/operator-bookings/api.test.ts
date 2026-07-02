@@ -251,6 +251,9 @@ describe('fetchNeedsAssignment', () => {
     expect(url.pathname).toBe('/api/bookings')
     expect(url.searchParams.get('needsAssignment')).toBe('true')
     expect(url.searchParams.get('limit')).toBe('100')
+    // #1223: the FloatRow renter label depends on the renter expansion; pin it so a
+    // mutation dropping expand=renter is caught.
+    expect(url.searchParams.get('expand')).toBe('renter')
   })
 })
 
@@ -391,12 +394,13 @@ describe('fetchCalendarBookings', () => {
 })
 
 describe('operatorCalendarQueryOptions', () => {
-  it('keys by the calendar range (from + to)', () => {
+  it('keys by the calendar range (from + to), with a null picked-operator slot by default', () => {
     expect(operatorCalendarQueryOptions('2026-07-01', '2026-07-31').queryKey).toEqual([
       'operator-bookings',
       'calendar',
       '2026-07-01',
       '2026-07-31',
+      null,
     ])
   })
 })
@@ -461,6 +465,7 @@ describe('operatorCalendarVehiclesQueryOptions', () => {
       'operator-bookings',
       'calendar',
       'vehicles',
+      null,
     ])
   })
 })

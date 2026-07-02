@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
 // The view renders typed <Link>s (each row -> confirmation, empty-state CTA ->
@@ -70,6 +70,10 @@ function renderView(
 }
 
 describe('MyBookingsView', () => {
+  // Reviews ships OFF for the beta MVP; the post-trip prompt only shows where the flag is on.
+  beforeEach(() => vi.stubEnv('VITE_FEATURE_REVIEWS', 'true'))
+  afterEach(() => vi.unstubAllEnvs())
+
   it('renders one row per booking with code, vehicle name, status, range, and total', () => {
     renderView([makeRow()])
 
@@ -78,8 +82,11 @@ describe('MyBookingsView', () => {
     expect(within(row).getByText('Toyota Aqua')).toBeInTheDocument()
     expect(within(row).getByText('Confirmed')).toBeInTheDocument()
     expect(within(row).getByText('￥24,000')).toBeInTheDocument()
-    // medium dateStyle, Asia/Tokyo: 01:00Z -> Jul 1; 03 Jul 01:00Z -> Jul 3
-    expect(within(row).getByText(/Jul 1, 2026.*Jul 3, 2026/)).toBeInTheDocument()
+    // medium dateStyle, Asia/Tokyo: 01:00Z -> Jul 1; 03 Jul 01:00Z -> Jul 3. Each
+    // endpoint is its own whitespace-nowrap span (#1301) so the range can wrap at the
+    // separator without overflowing a narrow card — hence two matches, not one.
+    expect(within(row).getByText(/Jul 1, 2026/)).toBeInTheDocument()
+    expect(within(row).getByText(/Jul 3, 2026/)).toBeInTheDocument()
   })
 
   it('links each row to its confirmation page carrying the bookingId', () => {
@@ -128,6 +135,12 @@ describe('MyBookingsView', () => {
 
   it('never shows the review prompt on a non-COMPLETED booking', () => {
     renderView([makeRow({ id: 'bk-9', status: 'CONFIRMED' })], {}, { 'bk-9': [] })
+    expect(screen.queryByRole('button', { name: en.reviews.prompt.cta })).not.toBeInTheDocument()
+  })
+
+  it('never shows the review prompt when the reviews feature is gated off (#1083-1086)', () => {
+    vi.stubEnv('VITE_FEATURE_REVIEWS', undefined)
+    renderView([makeRow({ id: 'bk-9', status: 'COMPLETED' })], {}, { 'bk-9': [] })
     expect(screen.queryByRole('button', { name: en.reviews.prompt.cta })).not.toBeInTheDocument()
   })
 

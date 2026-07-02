@@ -1,5 +1,5 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
-import { isOperatorSettingsEnabled } from '@/vite/config/features'
+import { featureFlagsQueryOptions, resolveFeatureFlag } from '@/vite/config'
 import { canPickOperatorContext, canWriteAsOperatorOwner } from '@/vite/guards'
 import { useOperatorContext } from '@/vite/operator-context'
 import { SettingsForm } from '@/vite/operator-settings/SettingsForm'
@@ -29,8 +29,11 @@ import { useTranslations } from 'use-intl'
 export const Route = createFileRoute('/$locale/_business/manage/settings')({
   // Post-MVP feature (#903), hidden in the beta demo. The nav link is already
   // filtered out; this blocks a direct URL too, falling back to the bookings page.
-  beforeLoad: ({ params }) => {
-    if (!isOperatorSettingsEnabled()) {
+  // Reads the runtime-toggleable flag (#1322): a dashboard override opens/closes the
+  // route live. resolveFeatureFlag = override ?? build-time env ?? false.
+  beforeLoad: async ({ context, params }) => {
+    const overrides = await context.queryClient.ensureQueryData(featureFlagsQueryOptions())
+    if (!resolveFeatureFlag(overrides, 'OPERATOR_SETTINGS')) {
       throw redirect({ to: '/$locale/manage/bookings', params: { locale: params.locale } })
     }
   },

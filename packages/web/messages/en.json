@@ -205,6 +205,20 @@
         "action": "Review fleet"
       }
     },
+    "today": {
+      "title": "Today",
+      "pickups": "Pickups",
+      "returns": "Returns",
+      "overdue": "Overdue",
+      "emptyPickups": "No pickups scheduled today.",
+      "emptyReturns": "No returns scheduled today.",
+      "emptyOverdue": "No overdue vehicles.",
+      "markPickedUp": "Mark picked up",
+      "markReturned": "Mark returned",
+      "walkIn": "Walk-in",
+      "noVehicle": "Vehicle unassigned",
+      "actionError": "Couldn't update the booking. Try again."
+    },
     "stats": {
       "totalBookings": "Total Bookings",
       "activeVehicles": "Active Vehicles",
@@ -275,7 +289,8 @@
           "floats": {
             "title": "Needs Assignment",
             "overdue": "Overdue",
-            "empty": "No floats awaiting assignment"
+            "empty": "No floats awaiting assignment",
+            "overflowLabel": "At least {limit} awaiting assignment (showing the first {limit})"
           }
         }
       },
@@ -416,6 +431,7 @@
         "pickupLocation": "Pickup location",
         "pickupLocationNone": "No pickup location",
         "pickupLocationCurrent": "Current pickup location",
+        "pickupLocationEmptyHint": "Create a pickup location first so this vehicle can appear in search.",
         "operator": "Operator",
         "operatorPlaceholder": "Select an operator",
         "operatorRequired": "Select an operator to continue"
@@ -1185,8 +1201,8 @@
       }
     },
     "featured": {
-      "heading": "Popular vehicles",
-      "subheading": "Hand-picked cars loved by travelers",
+      "heading": "Browse by category",
+      "subheading": "Find the right car for your trip",
       "viewAll": "View all",
       "currency": "¥{price}",
       "perDay": "day"
@@ -1219,7 +1235,10 @@
     },
     "footer": {
       "copyright": "Kuruma Rental. All rights reserved.",
-      "tagline": "Car rental in Osaka, Japan"
+      "tagline": "Car rental in Osaka, Japan",
+      "browse": "Browse cars",
+      "categories": "Vehicle categories",
+      "signIn": "Sign in"
     }
   },
   "search": {
@@ -1231,6 +1250,16 @@
     "toLabel": "Return date & time",
     "submit": "Search",
     "classFilterLabel": "Vehicle class",
+    "results": {
+      "sortLabel": "Sort by",
+      "sort": {
+        "nearest": "Recommended",
+        "priceAsc": "Price: low to high",
+        "priceDesc": "Price: high to low"
+      },
+      "priceMaxLabel": "Max price / day",
+      "priceMaxPlaceholder": "Any"
+    },
     "picker": {
       "label": "Pickup & return",
       "placeholder": "Add dates & times",
@@ -1253,6 +1282,8 @@
     "turnaround": "~{hours}h turnaround between rentals",
     "distance": "~{km} km",
     "emptyTurnaroundHint": "Cars need preparation time between rentals, so they can be unavailable right after another booking. Try a later pickup date.",
+    "emptyPriceCap": "No cars fit your maximum daily price.",
+    "emptyPriceCapHint": "Try raising or clearing the price cap to see more stores.",
     "classCount": "{label} ×{count}",
     "seats": "{count} seats",
     "luggage": "{count, plural, one {# bag} other {# bags}}",
@@ -1303,7 +1334,23 @@
       "governance": "Consent governance",
       "customers": "Customers",
       "operators": "Operators",
+      "featureFlags": "Feature flags",
       "backToSite": "Back to site"
+    },
+    "featureFlags": {
+      "title": "Feature flags",
+      "subtitle": "Toggle platform features live. Changes reach other users on their next page load.",
+      "colFeature": "Feature",
+      "colSource": "Source",
+      "colState": "State",
+      "overridden": "Overridden",
+      "default": "Default",
+      "runtimeLive": "Live",
+      "runtimeBuildOnly": "Build-time only",
+      "buildOnlyHint": "This flag isn't wired to the runtime layer yet; toggling persists but has no effect until its migration ships.",
+      "toggleLabel": "Toggle {feature}",
+      "loadError": "Couldn't load feature flags.",
+      "retry": "Retry"
     },
     "operators": {
       "title": "Operators",
@@ -1588,6 +1635,9 @@
       "insurance": "Insurance",
       "confirm": "Review",
       "payment": "Payment"
+    },
+    "summary": {
+      "total": "Total"
     },
     "dates": {
       "heading": "Your rental dates",

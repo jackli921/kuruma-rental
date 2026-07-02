@@ -86,39 +86,61 @@ export function operatorClassesQueryOptions(
   })
 }
 
+// Every class write is a cookie-authenticated mutation, so the double-submit CSRF
+// guard (api middleware/csrf.ts) requires the session's token echoed in the
+// `X-CSRF-Token` header — omitting it 403s "CSRF token mismatch". Callers read the
+// token from `useSession().data?.csrfToken` (mirrors operator-fleet/fees, #1304).
 async function mutateJson<T>(
   url: string,
   method: 'POST' | 'PATCH',
   body: unknown,
+  csrfToken: string,
   schema?: z.ZodType<T>,
 ): Promise<T> {
   const res = await fetch(url, {
     method,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
     body: JSON.stringify(body),
   })
   return unwrap(res, schema)
 }
 
-export function createOperatorClass(input: CreateVehicleClassInput): Promise<OperatorClass> {
-  return mutateJson(`${getApiBaseUrl()}/vehicle-classes`, 'POST', input, operatorClassSchema)
+export function createOperatorClass(
+  input: CreateVehicleClassInput,
+  csrfToken: string,
+): Promise<OperatorClass> {
+  return mutateJson(
+    `${getApiBaseUrl()}/vehicle-classes`,
+    'POST',
+    input,
+    csrfToken,
+    operatorClassSchema,
+  )
 }
 
 export function updateOperatorClass(
   id: string,
   input: UpdateVehicleClassInput,
+  csrfToken: string,
 ): Promise<OperatorClass> {
-  return mutateJson(`${getApiBaseUrl()}/vehicle-classes/${id}`, 'PATCH', input, operatorClassSchema)
+  return mutateJson(
+    `${getApiBaseUrl()}/vehicle-classes/${id}`,
+    'PATCH',
+    input,
+    csrfToken,
+    operatorClassSchema,
+  )
 }
 
 // API DELETE performs a soft archive (status -> ARCHIVED). Name reflects the
 // semantic, not the HTTP verb. The active-bookings guard is enforced
 // server-side (409), so the UI surfaces that error rather than pre-checking.
-export async function archiveOperatorClass(id: string): Promise<OperatorClass> {
+export async function archiveOperatorClass(id: string, csrfToken: string): Promise<OperatorClass> {
   const res = await fetch(`${getApiBaseUrl()}/vehicle-classes/${id}`, {
     method: 'DELETE',
     credentials: 'include',
+    headers: { 'X-CSRF-Token': csrfToken },
   })
   return unwrap(res, operatorClassSchema)
 }

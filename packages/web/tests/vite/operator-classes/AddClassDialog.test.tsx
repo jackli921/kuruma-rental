@@ -8,6 +8,12 @@ import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
+// The dialog reads the CSRF token from the session and forwards it to the create
+// call so the csrf() middleware admits the cookie write (#1304).
+vi.mock('@/vite/session', () => ({
+  useSession: () => ({ data: { csrfToken: 'test-csrf' } }),
+}))
+
 vi.mock('@/vite/operator-classes/api', () => ({ createOperatorClass: vi.fn() }))
 
 function renderDialog(pickedOperatorId?: string) {
@@ -48,6 +54,8 @@ describe('AddClassDialog', () => {
     expect(vi.mocked(createOperatorClass).mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({ name: 'Compact', slug: 'compact', seats: 5 }),
     )
+    // The CSRF token rides as the second arg (#1304) or the write 403s.
+    expect(vi.mocked(createOperatorClass).mock.calls[0]?.[1]).toBe('test-csrf')
     await waitFor(() => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['operator-classes'] })
       expect(onOpenChange).toHaveBeenCalledWith(false)
