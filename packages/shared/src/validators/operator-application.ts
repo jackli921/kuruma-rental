@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { OPERATOR_APPLICATION_BUSINESS_TYPES, OPERATOR_APPLICATION_FLEET_SIZES } from '../enums'
+import { SUPPORTED_LOCALES } from '../i18n/locales'
 import { httpUrl } from './url'
 
 // Converts empty strings to undefined so optional URL/text fields can skip
@@ -26,8 +27,8 @@ export const operatorApplicationSchema = z.object({
   businessLicenseNumber: z.preprocess(emptyToUndefined, z.string().trim().max(80).optional()),
   businessType: z.enum(OPERATOR_APPLICATION_BUSINESS_TYPES).optional(),
   message: z.preprocess(emptyToUndefined, z.string().trim().max(2000).optional()),
-  // No locales module exists in this package; inlined to keep this file self-contained.
-  submittedLocale: z.enum(['en', 'ja', 'zh']),
+  // Reuse the locale SSoT so this stays in lockstep when a locale is added.
+  submittedLocale: z.enum(SUPPORTED_LOCALES),
   // Anti-spam bot trap — must be absent or empty. Not persisted.
   honeypot: z.string().max(0).optional(),
   // Consent gate — must be explicitly checked (literal true, not just truthy).

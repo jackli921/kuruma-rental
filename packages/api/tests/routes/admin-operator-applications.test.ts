@@ -272,6 +272,25 @@ describe('POST /admin/operator-applications/:id/approve', () => {
     expect((await approve()).status).toBe(409)
   })
 
+  test('unknown application id → 404 (distinct from the 409 already-reviewed path)', async () => {
+    const harness = makeApp()
+    const randomId = '00000000-0000-0000-0000-000000000000'
+    const res = await harness.app.request(`/admin/operator-applications/${randomId}/approve`, {
+      method: 'POST',
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(404)
+  })
+
+  test('malformed (non-uuid) id → 400', async () => {
+    const harness = makeApp()
+    const res = await harness.app.request('/admin/operator-applications/not-a-uuid/approve', {
+      method: 'POST',
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(400)
+  })
+
   test('non-admin (RENTER) cannot approve (403)', async () => {
     const harness = makeApp()
     const { id } = await seedApplication(harness.app)

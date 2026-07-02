@@ -9,8 +9,10 @@ import {
 } from '../pg-errors'
 import type { OperatorRepository, ProviderInviteRepository } from '../repositories/types'
 import { mintInvite } from './invite-mint'
+import { type ProviderInviteAuditEvent, buildProviderInviteRecord } from './provider-invite-record'
 // Re-export so existing importers (tests, etc.) keep working without touching their imports.
 export { INVITE_TTL_MS } from './invite-mint'
+export type { ProviderInviteAuditEvent }
 
 /** Raised when an invite is minted against an operatorId with no matching row.
  *  The route maps this to a 404 so a bad target reads as a client error, not a
@@ -20,13 +22,6 @@ export class OperatorNotFoundError extends Error {
     super(`Operator not found: ${operatorId}`)
     this.name = 'OperatorNotFoundError'
   }
-}
-
-export interface ProviderInviteAuditEvent {
-  readonly type: 'PROVIDER_INVITE_CREATED'
-  readonly invitedByUserId: string
-  readonly operatorId: string
-  readonly email: string
 }
 
 // Injected so the privilege-grant trail is assertable in tests and the service
@@ -83,17 +78,14 @@ export class ProviderInviteService {
       // exactOptionalPropertyTypes: spread only when defined, not as `ttlMs: undefined`
       ...(this.config.ttlMs !== undefined ? { ttlMs: this.config.ttlMs } : {}),
     })
+    const { row, event } = buildProviderInviteRecord(minted, {
+      email: input.email,
+      operatorId: input.operatorId,
+      role: input.role,
+      invitedByUserId,
+    })
     try {
-      await this.repo.create({
-        email: input.email,
-        operatorId: input.operatorId,
-        role: input.role,
-        tokenHash: minted.tokenHash,
-        status: 'PENDING',
-        expiresAt: minted.expiresAt,
-        invitedByUserId,
-        acceptedByUserId: null,
-      })
+      await this.repo.create(row)
     } catch (err) {
       // The owner re-invited an email that already has a live invite. The partial-
       // unique index is the race fence; translate its 23505 to a 409 ConflictError
@@ -107,12 +99,7 @@ export class ProviderInviteService {
       }
       throw err
     }
-    this.recordAudit({
-      type: 'PROVIDER_INVITE_CREATED',
-      invitedByUserId,
-      operatorId: input.operatorId,
-      email: input.email,
-    })
+    this.recordAudit(event)
     return { token: minted.token, inviteUrl: minted.inviteUrl, expiresAt: minted.expiresAt }
   }
 

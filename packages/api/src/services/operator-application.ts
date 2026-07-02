@@ -11,6 +11,7 @@ import type { OperatorApplicationRepository, RunOperatorApproval } from '../repo
 import type { OperatorApplication } from '../stores'
 import { mintInvite } from './invite-mint'
 import type { ProviderInviteAuditEvent } from './provider-invite'
+import { buildProviderInviteRecord } from './provider-invite-record'
 import { resolveUniqueSlug, slugify } from './slug'
 
 // #1277: audit events raised when a platform admin reviews a pending application.
@@ -43,6 +44,11 @@ export type OperatorApplicationAuditEvent =
 // PROVIDER_INVITE_CREATED because approve() emits it when minting the OWNER invite.
 export type RecordOperatorApplicationAudit = (event: OperatorApplicationAuditEvent) => void
 
+export interface OperatorApplicationServiceConfig {
+  /** Public web origin; the minted OWNER invite link is `${webBaseUrl}/provider/invite/<token>`. */
+  readonly webBaseUrl: string
+}
+
 // The honeypot/consent fields are validated + stripped at the route boundary; the
 // service persists only the domain fields (contactEmail already lowercased by zod).
 type SubmitInput = Omit<OperatorApplicationInput, 'honeypot' | 'consent'>
@@ -52,7 +58,7 @@ export class OperatorApplicationService {
     private readonly repo: OperatorApplicationRepository,
     private readonly recordAudit: RecordOperatorApplicationAudit,
     private readonly runApproval: RunOperatorApproval,
-    private readonly webBaseUrl: string,
+    private readonly config: OperatorApplicationServiceConfig,
   ) {}
 
   async list(status?: OperatorApplicationStatus): Promise<OperatorApplication[]> {
@@ -89,16 +95,20 @@ export class OperatorApplicationService {
     // approvals that both pass this read. Email/name are immutable once PENDING, so
     // reading here (outside the tx) is safe.
     const application = await this.repo.findById(id)
-    if (!application || application.status !== 'PENDING') {
+    if (!application) throw new NotFoundError('no application with that id')
+    if (application.status !== 'PENDING') {
       throw new ConflictError('application already reviewed')
     }
     const email = application.contactEmail
-    const minted = mintInvite({ webBaseUrl: this.webBaseUrl })
-    // Collected inside the tx, emitted only after commit (fire-and-forget convention).
-    const events: OperatorApplicationAuditEvent[] = []
-    let result: { operatorId: string; operatorSlug: string }
+    const minted = mintInvite({ webBaseUrl: this.config.webBaseUrl })
+    let outcome: {
+      operatorId: string
+      operatorSlug: string
+      // Collected inside the tx, emitted only after commit (fire-and-forget convention).
+      events: readonly OperatorApplicationAuditEvent[]
+    }
     try {
-      result = await this.runApproval(async (repos) => {
+      outcome = await this.runApproval(async (repos) => {
         // C1 cross-aggregate guard — the applications' unique-email index cannot see
         // an existing membership or a live invite for this email elsewhere.
         const existingUser = await repos.users.findByEmail(email)
@@ -116,16 +126,13 @@ export class OperatorApplicationService {
           slug,
           preAuthHandoffUrl: null,
         })
-        await repos.invites.create({
+        const invite = buildProviderInviteRecord(minted, {
           email,
           operatorId: operator.id,
           role: 'OPERATOR_OWNER',
-          tokenHash: minted.tokenHash,
-          status: 'PENDING',
-          expiresAt: minted.expiresAt,
           invitedByUserId: reviewerUserId,
-          acceptedByUserId: null,
         })
+        await repos.invites.create(invite.row)
         // Atomic claim+link + race fence: undefined => another approval won; the throw
         // rolls back the operator + invite created above (no orphan).
         const claimed = await repos.applications.markApprovedIfPending(
@@ -135,21 +142,19 @@ export class OperatorApplicationService {
           new Date(),
         )
         if (!claimed) throw new ConflictError('application already reviewed')
-        events.push(
-          {
-            type: 'PROVIDER_INVITE_CREATED',
-            invitedByUserId: reviewerUserId,
-            operatorId: operator.id,
-            email,
-          },
-          {
-            type: 'OPERATOR_APPLICATION_APPROVED',
-            actorUserId: reviewerUserId,
-            operatorId: operator.id,
-            applicationId: id,
-          },
-        )
-        return { operatorId: operator.id, operatorSlug: slug }
+        return {
+          operatorId: operator.id,
+          operatorSlug: slug,
+          events: [
+            invite.event,
+            {
+              type: 'OPERATOR_APPLICATION_APPROVED',
+              actorUserId: reviewerUserId,
+              operatorId: operator.id,
+              applicationId: id,
+            },
+          ],
+        }
       })
     } catch (err) {
       // A concurrent approval claimed the slug / invite-email / application first:
@@ -161,8 +166,13 @@ export class OperatorApplicationService {
       }
       throw err
     }
-    for (const e of events) this.recordAudit(e)
-    return { ...result, inviteUrl: minted.inviteUrl, expiresAt: minted.expiresAt }
+    for (const e of outcome.events) this.recordAudit(e)
+    return {
+      operatorId: outcome.operatorId,
+      operatorSlug: outcome.operatorSlug,
+      inviteUrl: minted.inviteUrl,
+      expiresAt: minted.expiresAt,
+    }
   }
 
   async submit(input: SubmitInput): Promise<Pick<OperatorApplication, 'id' | 'status'>> {

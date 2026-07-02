@@ -164,12 +164,9 @@ describe('OperatorApplicationService.approve', () => {
       }) => Promise<T>,
     ) => fn({ users, memberships, invites, operators, applications })
 
-    const service = new OperatorApplicationService(
-      applications,
-      audit,
-      runOperatorApproval,
-      'https://app.example.com',
-    )
+    const service = new OperatorApplicationService(applications, audit, runOperatorApproval, {
+      webBaseUrl: 'https://app.example.com',
+    })
     return {
       service,
       repos: { applications, operators, invites, users, memberships, inviteStore },
@@ -291,5 +288,5 @@ function makeService(
   const stubRunApproval = () => {
     throw new Error('runOperatorApproval called unexpectedly in non-approve test')
   }
-  return new OperatorApplicationService(repo, recordAudit, stubRunApproval, '')
+  return new OperatorApplicationService(repo, recordAudit, stubRunApproval, { webBaseUrl: '' })
 }
