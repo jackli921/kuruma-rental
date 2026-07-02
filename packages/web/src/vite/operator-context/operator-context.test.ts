@@ -1,6 +1,7 @@
 import { renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  OPERATOR_CONTEXT_ROUTE_IDS,
   buildScopeParam,
   parseOperatorSearch,
   useIsOperatorContextRoute,
@@ -107,5 +108,12 @@ describe('useIsOperatorContextRoute', () => {
     ]
     const { result } = renderHook(() => useIsOperatorContextRoute())
     expect(result.current).toBe(true)
+  })
+})
+
+describe('OPERATOR_CONTEXT_ROUTE_IDS', () => {
+  it('treats the fleet list as a picker route but not the by-id detail route (#1264)', () => {
+    expect(OPERATOR_CONTEXT_ROUTE_IDS.has('/$locale/_business/manage/fleet/')).toBe(true)
+    expect(OPERATOR_CONTEXT_ROUTE_IDS.has('/$locale/_business/manage/fleet/$vehicleId')).toBe(false)
   })
 })
