@@ -1,7 +1,7 @@
 import { OperatorBookingsRoute } from '@/routes/$locale/_business/manage/bookings/index'
 import { FeatureFlagsProvider } from '@/vite/config'
 import * as api from '@/vite/operator-bookings/api'
-import { calendarRange, parseCalendarDate } from '@/vite/operator-bookings/calendar-events'
+import { calendarRange, parseCalendarDate } from '@/vite/operator-bookings/calendar-view'
 import { type OperatorLocation, operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
 import type { Session } from '@/vite/session'
 import type { FeatureFlagOverrides } from '@kuruma/shared/feature-flags/registry'

@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import type { CalendarView } from '@/vite/operator-bookings/calendar-events'
+import type { CalendarView } from '@/vite/operator-bookings/calendar-view'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
