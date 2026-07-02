@@ -2,7 +2,7 @@ import { DEFAULT_LOCALE, type Locale, SUPPORTED_LOCALES } from '@kuruma/shared/i
 import type { Context } from 'hono'
 import { z } from 'zod'
 import type { CallerContext } from '../middleware/auth'
-import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
+import { type CrossOperatorRead, type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
 
 // --- Response helpers ---
 
@@ -339,4 +339,36 @@ export function parseDateRange(
   }
 
   return { ok: true, from, to }
+}
+
+/**
+ * Parse the cross-operator read-scope struct that every scoped list read forwards
+ * to its service. Centralized (audit M3 follow-up #1373) so a typo'd query key
+ * can't silently widen or break tenant scoping: `includeAll` is set ONLY on the
+ * exact string "true". The service (`applyCrossOperatorReadScope`) still adjudicates
+ * the struct — a bypass caller naming neither `operatorId` nor `includeAll` is
+ * rejected there — and operator callers auto-scope regardless of any `operatorId`.
+ */
+export function parseCrossOperatorRead(c: Context): CrossOperatorRead {
+  return {
+    operatorId: c.req.query('operatorId'),
+    includeAll: c.req.query('includeAll') === 'true',
+  }
+}
+
+/** The two archivable-list filters shared by the operator config-catalog reads. */
+export type ArchivableFilters = { status?: 'ACTIVE' | 'ARCHIVED'; includeArchived?: boolean }
+
+/**
+ * Parse the `status` (ACTIVE/ARCHIVED only) + `includeArchived` filters shared by
+ * the config-catalog list reads. Unknown `status` values and any `includeArchived`
+ * other than the exact string "true" are ignored, so callers can spread the result
+ * into their route-typed filters object.
+ */
+export function parseArchivableFilters(c: Context): ArchivableFilters {
+  const filters: ArchivableFilters = {}
+  const status = c.req.query('status')
+  if (status === 'ACTIVE' || status === 'ARCHIVED') filters.status = status
+  if (c.req.query('includeArchived') === 'true') filters.includeArchived = true
+  return filters
 }
