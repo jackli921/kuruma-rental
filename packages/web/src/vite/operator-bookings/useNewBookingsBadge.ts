@@ -18,7 +18,7 @@ import { useMemo } from 'react'
 // BusinessSidebar) get the narrowed count with no caller changes.
 export function useNewBookingsBadge({ enabled }: { enabled: boolean }): { count: number } {
   const pickedOperatorId = useOptionalPickedOperatorId()
-  const { data: lastSeenAt } = useQuery(lastSeenQueryOptions())
+  const { data: lastSeenAt } = useQuery(lastSeenQueryOptions(pickedOperatorId))
   const { data: bookings } = useQuery(newOrderBookingsQueryOptions(enabled, pickedOperatorId))
 
   const count = useMemo(
