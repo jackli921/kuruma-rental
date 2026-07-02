@@ -144,16 +144,39 @@ describe.skipIf(!NEON_URL)('operator approval transaction atomicity (#1387)', ()
     // invite INSERT run for real, then the claim reports the row already
     // reviewed (undefined) — the exact signal a concurrent approval winning the
     // race produces. The service throws, which must roll the whole tx back.
+    //
+    // The swapped claim also probes the tx before returning: the service runs
+    // markApprovedIfPending AFTER invites.create, so at claim time the pending
+    // invite must already be visible on this tx connection. Capturing that turns
+    // the post-rollback "no phantom invite" check below into a real rollback
+    // assertion — without it, a future reorder that ran the claim BEFORE
+    // invites.create would never insert the invite, and the empty-check would
+    // pass vacuously rather than proving the write was rolled back.
     const realRun = createDrizzleOperatorApproval(runTx)
+    let inviteVisibleInTxAtClaim = false
     const failingClaimRun: RunOperatorApproval = (fn) =>
       realRun((repos) =>
-        fn({ ...repos, applications: { markApprovedIfPending: async () => undefined } }),
+        fn({
+          ...repos,
+          applications: {
+            markApprovedIfPending: async () => {
+              const live = await repos.invites.findPendingByEmail(email)
+              inviteVisibleInTxAtClaim = live !== undefined
+              return undefined
+            },
+          },
+        }),
       )
 
     const service = new OperatorApplicationService(repo, noopAudit, failingClaimRun, {
       webBaseUrl: WEB_BASE_URL,
     })
     await expect(service.approve(app.id, reviewerId)).rejects.toThrow('already reviewed')
+
+    // The invite INSERT genuinely executed inside the tx (its row was visible on
+    // the tx connection when the claim ran) — so the phantom-invite assertion
+    // below proves rollback, not a write that never happened. See the probe above.
+    expect(inviteVisibleInTxAtClaim).toBe(true)
 
     // The operator + invite created inside the tx are gone (rolled back), so no
     // orphan operator and no phantom invite that would corrupt later C1 checks.
