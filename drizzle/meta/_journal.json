@@ -680,6 +680,13 @@
       "when": 1782929681806,
       "tag": "0096_add_review_subject_cover_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1783030190614,
+      "tag": "0097_catalog_insurance_templates",
+      "breakpoints": true
     }
   ]
 }
