@@ -47,8 +47,8 @@ export function createAdminOperatorApplicationRoutes(service: OperatorApplicatio
       return ok(c, rows)
     })
     .post('/admin/operator-applications/:id/reject', async (c) => {
-      const ctx = toCallerContext(requireUser(c))
-      requirePlatformAdmin(ctx)
+      const user = requireUser(c)
+      requirePlatformAdmin(toCallerContext(user))
 
       const idr = parseId(c)
       if (!idr.ok) return idr.response
@@ -62,18 +62,18 @@ export function createAdminOperatorApplicationRoutes(service: OperatorApplicatio
       if (!parsed.ok) return parsed.response
 
       // NotFoundError (missing or non-PENDING id) propagates to the global onError → 404.
-      const row = await service.reject(idr.id, requireUser(c).id, parsed.data.rejectionReason)
+      const row = await service.reject(idr.id, user.id, parsed.data.rejectionReason)
       return ok(c, row)
     })
     .post('/admin/operator-applications/:id/approve', async (c) => {
-      const ctx = toCallerContext(requireUser(c))
-      requirePlatformAdmin(ctx)
+      const user = requireUser(c)
+      requirePlatformAdmin(toCallerContext(user))
 
       const idr = parseId(c)
       if (!idr.ok) return idr.response
       // NotFoundError (unknown id) → 404. ConflictError (already reviewed / C1 email-in-use /
       // concurrent race) → 409. No request body: approval takes no reviewer input.
-      const result = await service.approve(idr.id, requireUser(c).id)
+      const result = await service.approve(idr.id, user.id)
       return ok(c, {
         operatorId: result.operatorId,
         inviteUrl: result.inviteUrl,
