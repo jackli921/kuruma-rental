@@ -40,6 +40,21 @@ describe('fetchAddOns', () => {
     )
     await expect(fetchAddOns('gone')).rejects.toThrow('Storefront not found')
   })
+
+  // Catalog i18n slice 2 (#1315): the storefront add-ons endpoint resolves the
+  // picked template name/description to `?locale=`, so the renter wizard threads
+  // its route locale. (Absent locale ⇒ server default EN, asserted by the exact
+  // URL in the first case above.)
+  it('appends the caller locale so the server resolves add-on names to it', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchAddOns('loc-1', 'ja')
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/storefronts/loc-1/add-ons?locale=ja', {
+      credentials: 'include',
+    })
+  })
 })
 
 describe('fetchInsuranceOptions', () => {

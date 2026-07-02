@@ -9,7 +9,7 @@ import {
   calendarRange,
   operatorViews,
   shiftCalendarDate,
-} from '@/vite/operator-bookings/calendar-events'
+} from '@/vite/operator-bookings/calendar-view'
 import {
   bookingIdFromTimelineItem,
   buildTimelineLayout,
