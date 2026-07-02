@@ -9,7 +9,7 @@ export class InMemoryAddOnRepository implements AddOnRepository {
   private readonly store: Map<string, AddOn>
   // Mirrors the Drizzle LEFT JOIN add_on_templates (M4): the curated catalog the
   // reads enrich rows against. Optional + curated default so every existing
-  // `new InMemoryAddOnRepository()` keeps compiling; composition passes the same
+  // no-arg constructor call keeps compiling; composition passes the same
   // store the template repo uses so the list and the picker agree.
   private readonly templateStore: Map<string, AddOnTemplate>
 

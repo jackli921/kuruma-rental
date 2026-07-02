@@ -67,7 +67,9 @@ describe('Add-on routes — operator CRUD', () => {
     expect(res.status).toBe(201)
     const { data } = await res.json()
     expect(data.operatorId).toBe(OP_A)
-    expect(data.name).toBe('Baby Seat')
+    // Catalog i18n (slice 2): responses carry the resolved template name. A
+    // legacy free-text create (templateId null) resolves back to the name column.
+    expect(data.resolvedName).toBe('Baby Seat')
     expect(data.priceJpy).toBe(1500)
     expect(data.status).toBe('ACTIVE')
   })

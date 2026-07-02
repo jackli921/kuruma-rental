@@ -1,3 +1,4 @@
+import { seedId } from '@kuruma/shared/db/seed-id'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { PUBLIC_CONTEXT, SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryAddOnRepository } from '../repositories/in-memory/add-on'
@@ -539,7 +540,7 @@ describe('getAddOns', () => {
       priceJpy: 1500,
     })
 
-    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id)
+    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id, 'en')
 
     if (!result.ok) throw new Error('expected ok result')
     expect(result.data).toEqual([
@@ -560,7 +561,7 @@ describe('getAddOns', () => {
     const loc = await makeLocation({ operatorId: op.id })
     await makeAddOn({ operatorId: op.id, name: 'Baby Seat', priceJpy: 1500 })
 
-    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id)
+    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id, 'en')
 
     if (!result.ok) throw new Error('expected ok result')
     expect(result.data).toHaveLength(1)
@@ -572,6 +573,27 @@ describe('getAddOns', () => {
     ])
   })
 
+  it('resolves a templated add-on name/description to the renter locale (#385)', async () => {
+    // The default in-memory repo seeds the curated template catalog, so an add-on
+    // referencing tmpl_child_seat carries the ja/zh bundles at read time.
+    const op = await makeOperator('Op A', 'op-a')
+    const loc = await makeLocation({ operatorId: op.id })
+    await makeAddOn({
+      operatorId: op.id,
+      name: 'Child seat', // legacy column — must NOT win over the template
+      templateId: seedId('tmpl_child_seat'),
+      priceJpy: 1500,
+    })
+
+    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id, 'ja')
+
+    if (!result.ok) throw new Error('expected ok result')
+    expect(result.data[0]?.name).toBe('チャイルドシート')
+    expect(result.data[0]?.description).toBe(
+      '後ろ向きまたはブースターシート。受け取り時に取り付けます。',
+    )
+  })
+
   it('excludes ARCHIVED add-ons', async () => {
     const op = await makeOperator('Op A', 'op-a')
     const loc = await makeLocation({ operatorId: op.id })
@@ -579,7 +601,7 @@ describe('getAddOns', () => {
     const archived = await makeAddOn({ operatorId: op.id, name: 'Old Seat', priceJpy: 800 })
     await addOnRepo.archive(SYSTEM_CONTEXT, archived.id)
 
-    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id)
+    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id, 'en')
 
     if (!result.ok) throw new Error('expected ok result')
     expect(result.data.map((o) => o.name)).toEqual(['Active Seat'])
@@ -592,7 +614,7 @@ describe('getAddOns', () => {
     await makeAddOn({ operatorId: opA.id, name: 'A-Seat', priceJpy: 1000 })
     await makeAddOn({ operatorId: opB.id, name: 'B-Seat', priceJpy: 2000 })
 
-    const result = await service.getAddOns(PUBLIC_CONTEXT, locA.id)
+    const result = await service.getAddOns(PUBLIC_CONTEXT, locA.id, 'en')
 
     if (!result.ok) throw new Error('expected ok result')
     expect(result.data.map((o) => o.name)).toEqual(['A-Seat'])
@@ -602,14 +624,14 @@ describe('getAddOns', () => {
     const op = await makeOperator('Op A', 'op-a')
     const loc = await makeLocation({ operatorId: op.id })
 
-    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id)
+    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id, 'en')
 
     if (!result.ok) throw new Error('expected ok result')
     expect(result.data).toEqual([])
   })
 
   it('404s for an unknown location', async () => {
-    const result = await service.getAddOns(PUBLIC_CONTEXT, crypto.randomUUID())
+    const result = await service.getAddOns(PUBLIC_CONTEXT, crypto.randomUUID(), 'en')
     expect(result).toEqual({ ok: false, error: 'Storefront not found', status: 404 })
   })
 
@@ -618,7 +640,7 @@ describe('getAddOns', () => {
     const loc = await makeLocation({ operatorId: op.id })
     await locationRepo.archive(SYSTEM_CONTEXT, loc.id)
 
-    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id)
+    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id, 'en')
     expect(result).toEqual({ ok: false, error: 'Storefront not found', status: 404 })
   })
 })
