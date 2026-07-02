@@ -21,7 +21,9 @@ import {
   cachePublic,
   fail,
   ok,
+  parseArchivableFilters,
   parseBody,
+  parseCrossOperatorRead,
   parseDateRange,
   parseId,
   stripUndefined,
@@ -105,19 +107,8 @@ export function createVehicleClassRoutes(
         // non-operator 'all' scope would leak every tenant's classes + archived
         // rows to any cookie-authed caller hitting the source-agnostic API.
         requireManagementRead(ctx)
-        const filters: VehicleClassFilters = {}
-        const status = c.req.query('status')
-        if (status === 'ACTIVE' || status === 'ARCHIVED') filters.status = status
-        const includeArchived = c.req.query('includeArchived') === 'true'
-        if (includeArchived) filters.includeArchived = true
-        const classes = await service.findAll(
-          ctx,
-          {
-            operatorId: c.req.query('operatorId'),
-            includeAll: c.req.query('includeAll') === 'true',
-          },
-          filters,
-        )
+        const filters: VehicleClassFilters = { ...parseArchivableFilters(c) }
+        const classes = await service.findAll(ctx, parseCrossOperatorRead(c), filters)
         return ok(c, classes)
       })
       .get('/vehicle-classes/:id', async (c) => {
