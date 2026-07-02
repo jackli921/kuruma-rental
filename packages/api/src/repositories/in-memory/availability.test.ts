@@ -405,6 +405,20 @@ describe('InMemoryAvailabilityRepository.countClassDemand (#464)', () => {
     await makeBooking({ status: 'ACTIVE' })
     expect(await demand()).toBe(1)
   })
+
+  it('drops a soft-deactivated operator’s bookings from demand — guarantee in the data (#1268)', async () => {
+    const op = await operatorRepo.create({
+      name: 'Fade Cars',
+      slug: 'fade-demand',
+      preAuthHandoffUrl: null,
+    })
+    await makeBooking({ operatorId: op.id })
+    const forOp = () =>
+      availabilityRepo.countClassDemand(op.id, 'class_compact', 'loc_osaka', FROM, TO)
+    expect(await forOp()).toBe(1)
+    await operatorRepo.update(op.id, { deactivatedAt: new Date(), updatedAt: new Date() })
+    expect(await forOp()).toBe(0)
+  })
 })
 
 // #464 slice 2d.2: countClassCapacity is the road-legal supply side of the
@@ -489,6 +503,42 @@ describe('InMemoryAvailabilityRepository.countClassCapacity (#464 slice 2d.2)', 
     const v = await makeVehicle({})
     await makeBlock(v.id, new Date('2026-08-01T15:00:00Z'), new Date('2026-08-01T18:00:00Z'))
     expect(await capacity()).toBe(2)
+  })
+
+  it('drops a soft-deactivated operator’s cars from capacity — guarantee in the data (#1268)', async () => {
+    const op = await operatorRepo.create({
+      name: 'Fade Cars',
+      slug: 'fade-capacity',
+      preAuthHandoffUrl: null,
+    })
+    await makeVehicle({ operatorId: op.id })
+    const forOp = () =>
+      availabilityRepo.countClassCapacity(op.id, 'class_compact', 'loc_osaka', FROM, TO, TO)
+    expect(await forOp()).toBe(1)
+    await operatorRepo.update(op.id, { deactivatedAt: new Date(), updatedAt: new Date() })
+    expect(await forOp()).toBe(0)
+  })
+})
+
+// #1268: the targeted-lookup seam. A caller holding a known vehicleId must not
+// learn a deactivated operator's car is available; it reads as not_found, mirroring
+// the findAvailableVehicles NOT EXISTS(operators … deactivatedAt) exclusion.
+describe('InMemoryAvailabilityRepository.checkVehicleAvailability — operator deactivation (#1268)', () => {
+  it('returns undefined (not_found) for a soft-deactivated operator’s vehicle', async () => {
+    const op = await operatorRepo.create({
+      name: 'Fade Cars',
+      slug: 'fade-check',
+      preAuthHandoffUrl: null,
+    })
+    const v = await makeVehicle({ operatorId: op.id })
+    expect(await availabilityRepo.checkVehicleAvailability(v.id, FROM, TO)).toBeDefined()
+    await operatorRepo.update(op.id, { deactivatedAt: new Date(), updatedAt: new Date() })
+    expect(await availabilityRepo.checkVehicleAvailability(v.id, FROM, TO)).toBeUndefined()
+  })
+
+  it('keeps a vehicle whose operator record is absent (orphan — parity with the NOT EXISTS seam)', async () => {
+    const v = await makeVehicle({ operatorId: 'op_ghost' })
+    expect(await availabilityRepo.checkVehicleAvailability(v.id, FROM, TO)).toBeDefined()
   })
 })
 

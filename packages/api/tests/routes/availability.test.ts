@@ -346,6 +346,39 @@ describe('Availability Routes', () => {
       expect((await res.json()).error).toBe('vehicleId must be a valid uuid')
     })
 
+    // #1268: a targeted lookup by a known vehicleId (e.g. cached before the operator
+    // was deactivated) must not leak a soft-deactivated operator's car — it reads as
+    // not_found, mirroring the #1224 exclusion at the findAvailableVehicles seam.
+    it('returns 404 for a vehicle whose operator is soft-deactivated (#1268)', async () => {
+      const gone = await operatorRepo.create({
+        name: 'Gone Rentals',
+        slug: 'gone-rentals',
+        preAuthHandoffUrl: null,
+      })
+      const vehicle = await createTestVehicle({ name: 'Hidden Car', operatorId: gone.id })
+      await operatorRepo.update(gone.id, { deactivatedAt: new Date(), updatedAt: new Date() })
+
+      const res = await app.request(
+        `/availability/${vehicle.id}?from=2026-06-01T10:00:00Z&to=2026-06-01T14:00:00Z`,
+      )
+
+      expect(res.status).toBe(404)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('Vehicle not found')
+    })
+
+    it('keeps a vehicle whose operator record is absent (orphan — parity with the NOT EXISTS seam)', async () => {
+      const vehicle = await createTestVehicle({ name: 'Orphan Car', operatorId: 'op_ghost' })
+
+      const res = await app.request(
+        `/availability/${vehicle.id}?from=2026-06-01T10:00:00Z&to=2026-06-01T14:00:00Z`,
+      )
+
+      expect(res.status).toBe(200)
+      expect((await res.json()).data.vehicle.id).toBe(vehicle.id)
+    })
+
     it('strips conflict details for RENTER role', async () => {
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
