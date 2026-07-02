@@ -10,6 +10,7 @@ import {
   createVehicle,
   deleteVehiclePhoto,
   fetchOperatorFleet,
+  fetchPickupLocationOptions,
   fetchVehicleClassOptions,
   fetchVehicleDetail,
   operatorFleetQueryOptions,
@@ -17,6 +18,7 @@ import {
   updateVehicle,
   updateVehicleStatus,
   uploadVehiclePhotos,
+  vehicleClassOptionsQueryOptions,
   vehicleDetailQueryOptions,
   vehicleRowFromDetail,
 } from '@/vite/operator-fleet/api'
@@ -326,6 +328,54 @@ describe('fetchVehicleClassOptions', () => {
     expect(parsed.pathname).toBe('/api/vehicle-classes/manage')
     expect(parsed.searchParams.get('includeAll')).toBe('true')
     expect((init as RequestInit).credentials).toBe('include')
+  })
+
+  it('scopes the class read to the picked operator (#1264)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    await fetchVehicleClassOptions('op_9')
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicle-classes/manage')
+    expect(parsed.searchParams.get('operatorId')).toBe('op_9')
+    expect(parsed.searchParams.has('includeAll')).toBe(false)
+  })
+})
+
+describe('vehicleClassOptionsQueryOptions (#1264 key parity)', () => {
+  it('keys by "all" when unpicked', () => {
+    expect(vehicleClassOptionsQueryOptions().queryKey).toEqual([
+      'operator-fleet',
+      'class-options',
+      'all',
+    ])
+  })
+  it('keys by the picked operator', () => {
+    expect(vehicleClassOptionsQueryOptions('op_9').queryKey).toEqual([
+      'operator-fleet',
+      'class-options',
+      'op_9',
+    ])
+  })
+})
+
+describe('fetchPickupLocationOptions (#1264 scoping)', () => {
+  it('keeps includeArchived and opts into includeAll when unpicked', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    await fetchPickupLocationOptions()
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/locations')
+    expect(parsed.searchParams.get('includeArchived')).toBe('true')
+    expect(parsed.searchParams.get('includeAll')).toBe('true')
+  })
+  it('scopes to the picked operator (keeps includeArchived, drops includeAll)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    await fetchPickupLocationOptions('op_9')
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.searchParams.get('includeArchived')).toBe('true')
+    expect(parsed.searchParams.get('operatorId')).toBe('op_9')
+    expect(parsed.searchParams.has('includeAll')).toBe(false)
   })
 })
 
