@@ -33,22 +33,3 @@ export interface OperatorAddOnData {
   priceJpy: number
   status: AddOnStatus
 }
-
-/**
- * @deprecated Transitional pre-i18n shape. The API now returns
- * {@link OperatorAddOnData}; this interface only keeps the web add-on client
- * compiling until phase 4 migrates it (which removes this export). Do not add new
- * consumers.
- */
-export interface AddOnData {
-  id: string
-  operatorId: string
-  name: string
-  description: string | null
-  priceJpy: number
-  status: AddOnStatus
-  /** ISO 8601 (UTC). */
-  createdAt: string
-  /** ISO 8601 (UTC). */
-  updatedAt: string
-}

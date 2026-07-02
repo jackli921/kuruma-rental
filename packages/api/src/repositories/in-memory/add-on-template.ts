@@ -20,4 +20,8 @@ export class InMemoryAddOnTemplateRepository implements AddOnTemplateRepository 
   async findActive(): Promise<AddOnTemplate[]> {
     return [...this.store.values()].filter((t) => t.status === 'ACTIVE')
   }
+
+  async findById(id: string): Promise<AddOnTemplate | undefined> {
+    return this.store.get(id)
+  }
 }

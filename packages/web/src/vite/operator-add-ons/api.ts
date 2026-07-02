@@ -2,7 +2,9 @@ import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import { type WithOperatorId, buildScopeParam } from '@/vite/operator-context'
 import { ADD_ON_STATUSES } from '@kuruma/shared/enums'
-import type { AddOnData } from '@kuruma/shared/types/add-on'
+import { DEFAULT_LOCALE, type Locale } from '@kuruma/shared/i18n/locales'
+import { localizedTextOverrideSchema } from '@kuruma/shared/i18n/localized-text'
+import type { OperatorAddOnData } from '@kuruma/shared/types/add-on'
 import type { CreateAddOnInput, UpdateAddOnInput } from '@kuruma/shared/validators/add-on'
 import { queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
@@ -15,45 +17,53 @@ import { z } from 'zod'
 // it) — it only satisfies the bypass-role 400 guard for PLATFORM_ADMIN / legacy
 // STAFF/ADMIN sessions (the #529 lesson). Canonical write types come from
 // @kuruma/shared so the form stays in lockstep with the Zod validators.
+//
+// Catalog i18n (slice 2): the server resolves the picked template name/description
+// to `?locale=`, so every read threads the caller locale and keys the cache by it
+// (a /zh read must not serve a cached /en label).
 
-export type { CreateAddOnInput, UpdateAddOnInput }
+export type { CreateAddOnInput, UpdateAddOnInput, OperatorAddOnData }
 
-// JSON-serialized AddOn — dates arrive as ISO strings. Pinned to the shared wire
-// DTO with `satisfies` (#847) so a producer-side field drift fails to compile
-// here, not silently as a runtime ParseError. The API row type is fenced to the
-// same DTO in api `wire-contract.test.ts`, closing the seam at both ends.
+// The wire DTO the operator add-on routes return. Pinned to the shared type with
+// `satisfies` (#847) so a producer-side field drift fails to compile here, not
+// silently as a runtime ParseError. The API row type is fenced to the same DTO in
+// api `wire-contract.test.ts`, closing the seam at both ends.
 const addOnSchema = z.object({
   id: z.string(),
   operatorId: z.string(),
-  name: z.string(),
-  description: z.string().nullable(),
+  templateId: z.string().nullable(),
+  resolvedName: z.string(),
+  resolvedDescription: z.string().nullable(),
+  descriptionOverride: localizedTextOverrideSchema.nullable(),
   priceJpy: z.number(),
   status: z.enum(ADD_ON_STATUSES),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-}) satisfies z.ZodType<AddOnData>
-export type { AddOnData }
+}) satisfies z.ZodType<OperatorAddOnData>
 
 export const ADDON_QUERY_KEY = ['operator-add-ons'] as const
 
 // Management always lists archived rows too (badged in the UI). The scope param
 // is `operatorId=<picked>` when an admin has picked a tenant, else `includeAll=true`
 // (the bypass-role read default; an operator session ignores it and auto-scopes).
-export async function fetchAddOns(pickedOperatorId?: string): Promise<AddOnData[]> {
+export async function fetchAddOns(
+  pickedOperatorId?: string,
+  locale?: Locale,
+): Promise<OperatorAddOnData[]> {
+  const localeParam = locale ? `&locale=${locale}` : ''
   const res = await fetch(
-    `${getApiBaseUrl()}/add-ons?includeArchived=true&${buildScopeParam(pickedOperatorId)}`,
+    `${getApiBaseUrl()}/add-ons?includeArchived=true&${buildScopeParam(pickedOperatorId)}${localeParam}`,
     { credentials: 'include' },
   )
   return unwrap(res, addOnSchema.array())
 }
 
-// The picked operator id is part of the cache key so switching context refetches
-// (and never serves another tenant's cached list). Optional param keeps any
-// no-arg caller working.
-export function addOnsQueryOptions(pickedOperatorId?: string) {
+// The picked operator id AND the locale are part of the cache key so switching
+// context or language refetches (and never serves another tenant's or another
+// locale's cached list). Optional params keep any no-arg caller working.
+export function addOnsQueryOptions(pickedOperatorId?: string, locale?: Locale) {
+  const resolvedLocale = locale ?? DEFAULT_LOCALE
   return queryOptions({
-    queryKey: [...ADDON_QUERY_KEY, pickedOperatorId ?? 'all'] as const,
-    queryFn: () => fetchAddOns(pickedOperatorId),
+    queryKey: [...ADDON_QUERY_KEY, pickedOperatorId ?? 'all', resolvedLocale] as const,
+    queryFn: () => fetchAddOns(pickedOperatorId, resolvedLocale),
   })
 }
 
@@ -69,7 +79,7 @@ async function writeJson(
   method: 'POST' | 'PATCH',
   body: unknown,
   csrfToken: string,
-): Promise<AddOnData> {
+): Promise<OperatorAddOnData> {
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method,
     credentials: 'include',
@@ -85,7 +95,7 @@ async function writeJson(
 export async function createAddOn(
   input: WithOperatorId<CreateAddOnInput>,
   csrfToken: string,
-): Promise<AddOnData> {
+): Promise<OperatorAddOnData> {
   return writeJson('/add-ons', 'POST', input, csrfToken)
 }
 
@@ -93,13 +103,13 @@ export async function updateAddOn(
   id: string,
   input: UpdateAddOnInput,
   csrfToken: string,
-): Promise<AddOnData> {
+): Promise<OperatorAddOnData> {
   return writeJson(`/add-ons/${encodeURIComponent(id)}`, 'PATCH', input, csrfToken)
 }
 
 // Soft-archive (DELETE flips status to ARCHIVED). No body — the CSRF header still
 // rides along because a cookie-authed DELETE is a mutation the guard protects.
-export async function archiveAddOn(id: string, csrfToken: string): Promise<AddOnData> {
+export async function archiveAddOn(id: string, csrfToken: string): Promise<OperatorAddOnData> {
   const res = await fetch(`${getApiBaseUrl()}/add-ons/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     credentials: 'include',

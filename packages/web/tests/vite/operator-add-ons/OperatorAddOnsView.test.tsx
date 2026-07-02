@@ -43,13 +43,21 @@ const readOnlyScope: OperatorScope = {
   operatorNameById: new Map(),
 }
 
+// The Add dialog reads the UI locale and fetches the template picker on open, so
+// the mock must supply useLocale and fetch must return a (valid, empty) picker.
 vi.mock('use-intl', () => ({
   useTranslations: () => (key: string) => key,
+  useLocale: () => 'en',
 }))
 
 vi.mock('@/vite/session', () => ({
   useSession: () => ({ data: { csrfToken: 'test-csrf' } }),
 }))
+
+vi.stubGlobal(
+  'fetch',
+  vi.fn(async () => new Response(JSON.stringify({ success: true, data: [] }), { status: 200 })),
+)
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -59,12 +67,12 @@ function wrapper({ children }: { children: ReactNode }) {
 const addOn = {
   id: 'addon_1',
   operatorId: 'op_1',
-  name: 'Child seat',
-  description: 'For toddlers',
+  templateId: 'tmpl_1',
+  resolvedName: 'Child seat',
+  resolvedDescription: 'For toddlers',
+  descriptionOverride: null,
   priceJpy: 1500,
   status: 'ACTIVE' as const,
-  createdAt: '2026-01-01T00:00:00Z',
-  updatedAt: '2026-01-01T00:00:00Z',
 }
 
 afterEach(() => cleanup())
@@ -85,8 +93,8 @@ describe('OperatorAddOnsView', () => {
   })
 
   it('sorts add-ons by name ascending', () => {
-    const b = { ...addOn, id: 'b', name: 'Bike rack' }
-    const z = { ...addOn, id: 'z', name: 'Wi-Fi router' }
+    const b = { ...addOn, id: 'b', resolvedName: 'Bike rack' }
+    const z = { ...addOn, id: 'z', resolvedName: 'Wi-Fi router' }
     render(<OperatorAddOnsView addOns={[z, b]} scope={writeScope} />, { wrapper })
     const headings = screen.getAllByRole('heading').map((h) => h.textContent)
     expect(headings).toEqual(['Bike rack', 'Wi-Fi router'])
@@ -96,15 +104,20 @@ describe('OperatorAddOnsView', () => {
     const user = userEvent.setup()
     render(<OperatorAddOnsView addOns={[]} scope={writeScope} />, { wrapper })
 
-    expect(screen.queryByLabelText('form.name')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('form.template')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'addOption' }))
 
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByLabelText('form.name')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('form.template')).toBeInTheDocument()
   })
 
   it('disables the archive action for an already-archived add-on', () => {
-    const archived = { ...addOn, id: 'arch', name: 'Old extra', status: 'ARCHIVED' as const }
+    const archived = {
+      ...addOn,
+      id: 'arch',
+      resolvedName: 'Old extra',
+      status: 'ARCHIVED' as const,
+    }
     render(<OperatorAddOnsView addOns={[archived]} scope={writeScope} />, { wrapper })
     expect(screen.getByRole('button', { name: 'archiveAction' })).toBeDisabled()
   })

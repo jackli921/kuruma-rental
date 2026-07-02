@@ -1,8 +1,14 @@
 import type { Locale } from '@kuruma/shared/i18n/locales'
+import type { LocalizedTextOverride } from '@kuruma/shared/i18n/localized-text'
 import type { OperatorAddOnData } from '@kuruma/shared/types/add-on'
 import type { CallerContext } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
-import type { AddOn, AddOnFilters, AddOnRepository, AddOnWithTemplate } from '../repositories/types'
+import type {
+  AddOnFilters,
+  AddOnRepository,
+  AddOnTemplateRepository,
+  AddOnWithTemplate,
+} from '../repositories/types'
 import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
 import { resolveAddOnDescription, resolveAddOnName } from './add-on-resolve'
 
@@ -11,18 +17,35 @@ export type AddOnResult =
   | { ok: false; error: string; status: number }
 
 /**
+ * Catalog i18n (slice 2): a create picks a platform TEMPLATE (which supplies the
+ * localized name) + an optional description override + a price. The operatorId is
+ * resolved by the route (resolveOperatorIdForWrite); the service resolves the
+ * template's en name for the still-NOT-NULL `name` column and dup-checks on
+ * templateId, not free text.
+ */
+export type AddOnCreate = {
+  operatorId: string
+  templateId: string
+  descriptionOverride: LocalizedTextOverride | null
+  priceJpy: number
+}
+
+/**
  * The writable surface of an add-on PATCH. Owned by the service so a route passes
  * an intent DTO instead of the persistence entity (#1213 — routes never import
- * from ../stores). Server-derived columns (id/operatorId/timestamps) are absent.
- * Catalog i18n (slice 2): the free-text `name`/`description` write path stays here
- * through the PR1 window; Phase 3 swaps it for the templateId picker.
+ * from ../stores). The template (an add-on's identity) is fixed at create, so an
+ * edit only touches the price and the description override.
  */
-export type AddOnUpdate = Partial<Pick<AddOn, 'name' | 'description' | 'priceJpy'>>
+export type AddOnUpdate = {
+  priceJpy?: number
+  descriptionOverride?: LocalizedTextOverride | null
+}
 
-const DUPLICATE_NAME_MESSAGE = 'An add-on with this name already exists'
+const DUPLICATE_TEMPLATE_MESSAGE = 'You already offer this add-on'
+const UNKNOWN_TEMPLATE_MESSAGE = 'Unknown or unavailable add-on template'
 const NOT_FOUND_MESSAGE = 'Add-on not found'
 
-const isDuplicateName = (err: unknown): boolean => pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION
+const isUniqueViolation = (err: unknown): boolean => pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION
 
 /**
  * Project a joined read row to the operator wire DTO, resolving the template
@@ -44,7 +67,10 @@ function toOperatorAddOn(row: AddOnWithTemplate, locale: Locale): OperatorAddOnD
 }
 
 export class AddOnService {
-  constructor(private readonly repo: AddOnRepository) {}
+  constructor(
+    private readonly repo: AddOnRepository,
+    private readonly templateRepo: AddOnTemplateRepository,
+  ) {}
 
   async findAll(
     ctx: CallerContext,
@@ -67,26 +93,45 @@ export class AddOnService {
 
   /**
    * `data.operatorId` is resolved by the route (resolveOperatorIdForWrite), so
-   * the service stays auth-mechanism-agnostic. Name is unique per operator among
-   * ACTIVE rows only; the pre-check yields a friendly 409, the DB partial unique
-   * index is the real seal. The response resolves to the caller locale.
+   * the service stays auth-mechanism-agnostic. The template supplies the name:
+   * we resolve its en value for the still-NOT-NULL `name` column (PR1 window) and
+   * dup-check on templateId among the operator's ACTIVE rows. The picker excludes
+   * already-offered templates, so the 409 is only a race backstop; the DB partial
+   * unique index (operatorId, templateId WHERE ACTIVE) is the real seal.
    */
-  async create(
-    _ctx: CallerContext,
-    data: Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'>,
-    locale: Locale,
-  ): Promise<AddOnResult> {
-    const duplicate = await this.repo.findActiveByOperatorAndName(data.operatorId, data.name)
-    if (duplicate) return { ok: false, error: DUPLICATE_NAME_MESSAGE, status: 409 }
+  async create(_ctx: CallerContext, data: AddOnCreate, locale: Locale): Promise<AddOnResult> {
+    // Only an ACTIVE template may be newly offered (a retired one is never in the
+    // picker). An unknown/archived id is a client error, not a 500 FK violation.
+    const template = await this.templateRepo.findById(data.templateId)
+    if (!template || template.status !== 'ACTIVE') {
+      return { ok: false, error: UNKNOWN_TEMPLATE_MESSAGE, status: 400 }
+    }
 
-    // The pre-check is a UX nicety; the partial unique index is the real seal.
-    // A concurrent insert can win the race after the check passes, so map the
-    // resulting unique-violation to the same friendly 409 instead of a 500.
+    const duplicate = await this.repo.findActiveByOperatorAndTemplate(
+      data.operatorId,
+      data.templateId,
+    )
+    if (duplicate) return { ok: false, error: DUPLICATE_TEMPLATE_MESSAGE, status: 409 }
+
     try {
-      const option = await this.repo.create(data)
+      const option = await this.repo.create({
+        operatorId: data.operatorId,
+        // The template owns the localized name; the column carries its en value as
+        // a legacy fallback until slice 5 drops it.
+        name: template.name.en,
+        description: null,
+        templateId: data.templateId,
+        descriptionOverride: data.descriptionOverride,
+        priceJpy: data.priceJpy,
+        status: 'ACTIVE',
+      })
       return { ok: true, option: toOperatorAddOn(option, locale) }
     } catch (err) {
-      if (isDuplicateName(err)) return { ok: false, error: DUPLICATE_NAME_MESSAGE, status: 409 }
+      // A concurrent insert can win the race after the pre-check passes; map the
+      // resulting unique-violation to the same friendly 409 instead of a 500.
+      if (isUniqueViolation(err)) {
+        return { ok: false, error: DUPLICATE_TEMPLATE_MESSAGE, status: 409 }
+      }
       throw err
     }
   }
@@ -103,25 +148,11 @@ export class AddOnService {
     const existing = await this.repo.findById(ctx, id)
     if (!existing) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
 
-    if (data.name !== undefined && data.name !== existing.name) {
-      const duplicate = await this.repo.findActiveByOperatorAndName(existing.operatorId, data.name)
-      // Exclude the current row: a no-name-change edit can't self-collide, and
-      // an ACTIVE duplicate under another id is a real clash.
-      if (duplicate && duplicate.id !== id) {
-        return { ok: false, error: DUPLICATE_NAME_MESSAGE, status: 409 }
-      }
-    }
-
-    try {
-      const updated = await this.repo.update(ctx, id, data)
-      if (!updated) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
-      return { ok: true, option: toOperatorAddOn(updated, locale) }
-    } catch (err) {
-      // Same lost-race seal as create: a concurrent rename onto this name maps
-      // to a friendly 409 rather than surfacing the raw unique-violation.
-      if (isDuplicateName(err)) return { ok: false, error: DUPLICATE_NAME_MESSAGE, status: 409 }
-      throw err
-    }
+    // Only price + description override are editable — the template (the add-on's
+    // identity) is fixed, so there is no name-uniqueness clash to guard here.
+    const updated = await this.repo.update(ctx, id, data)
+    if (!updated) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
+    return { ok: true, option: toOperatorAddOn(updated, locale) }
   }
 
   async archive(ctx: CallerContext, id: string, locale: Locale): Promise<AddOnResult> {

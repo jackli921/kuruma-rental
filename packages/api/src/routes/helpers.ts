@@ -272,6 +272,24 @@ export async function parseScopedCreate<T>(
   return { ok: true, data: parsed.data, operatorId: await resolveWriteOperatorId(ctx) }
 }
 
+/**
+ * Resolve the single operator a scoped read targets. An operator caller is
+ * clamped to its OWN tenant (any `?operatorId` they pass is ignored — no
+ * cross-tenant inference); a bypass caller (PLATFORM_ADMIN / legacy staff) may
+ * name one via `?operatorId`, and `undefined` means an unscoped platform read.
+ * A `none` scope (operator role with no operatorId) also reads unscoped. Used by
+ * the add-on-template picker's already-offered exclusion (catalog i18n P1-3).
+ */
+export function resolveReadOperatorTarget(
+  ctx: CallerContext,
+  rawOperatorId?: string,
+): string | undefined {
+  const scope = operatorReadScope(ctx)
+  if (scope.kind === 'operator') return scope.operatorId
+  if (scope.kind === 'all') return rawOperatorId
+  return undefined
+}
+
 type DateRangeRequired = { ok: true; from: Date; to: Date }
 type DateRangeOptional = { ok: true; from: Date | undefined; to: Date | undefined }
 type DateRangeFailure = { ok: false; response: Response }

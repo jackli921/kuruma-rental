@@ -774,8 +774,8 @@
         "price": "{price} per booking"
       },
       "form": {
-        "name": "Add-on name",
-        "namePlaceholder": "e.g. Child seat",
+        "template": "Add-on",
+        "templatePlaceholder": "Select an add-on",
         "description": "Description",
         "descriptionPlaceholder": "e.g. Rear-facing child seat for toddlers.",
         "price": "Price (yen)",

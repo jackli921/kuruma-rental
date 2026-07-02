@@ -273,6 +273,13 @@ export interface AddOnRepository {
  */
 export interface AddOnTemplateRepository {
   findActive(): Promise<AddOnTemplate[]>
+  /**
+   * Look up ONE template by id — the write-path primitive (catalog i18n slice 2):
+   * a create resolves the picked template's en name for the still-NOT-NULL `name`
+   * column. NOT status-filtered (returns ARCHIVED too); the create service applies
+   * the ACTIVE-only policy. Undefined when no row matches.
+   */
+  findById(id: string): Promise<AddOnTemplate | undefined>
 }
 
 // #521 provider authorization. Not ctx-scoped: the admin endpoint

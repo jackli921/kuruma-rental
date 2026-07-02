@@ -10,19 +10,23 @@ import { describe, expect, it, vi } from 'vitest'
 const loader = Route.options.loader as (args: {
   context: { queryClient: { ensureQueryData: ReturnType<typeof vi.fn> } }
   deps: { operator: string | undefined }
+  params: { locale: string }
 }) => Promise<unknown>
 
 describe('add-ons route loader', () => {
-  it('prefetches the operator-add-ons list query scoped to the picked operator', async () => {
+  it('prefetches the operator-add-ons list query scoped to the picked operator and locale', async () => {
     const ensureQueryData = vi.fn().mockResolvedValue([])
     await loader({
       context: { queryClient: { ensureQueryData } },
       deps: { operator: 'op_9' },
+      params: { locale: 'ja' },
     })
 
     expect(ensureQueryData).toHaveBeenCalledTimes(1)
     const options = ensureQueryData.mock.calls[0][0] as { queryKey: unknown }
-    expect(options.queryKey).toEqual(['operator-add-ons', 'op_9'])
+    // Catalog i18n (slice 2): the locale is part of the key so /ja never serves a
+    // cached /en label.
+    expect(options.queryKey).toEqual(['operator-add-ons', 'op_9', 'ja'])
   })
 })
 
