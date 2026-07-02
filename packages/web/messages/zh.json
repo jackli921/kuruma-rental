@@ -775,8 +775,8 @@
         "price": "每次预订 {price}"
       },
       "form": {
-        "name": "附加项目名称",
-        "namePlaceholder": "例如：儿童座椅",
+        "template": "附加项目",
+        "templatePlaceholder": "选择附加项目",
         "description": "描述",
         "descriptionPlaceholder": "例如：适合幼儿的后向式儿童座椅。",
         "price": "价格（日元）",

@@ -17,17 +17,28 @@ export class DrizzleAddOnTemplateRepository implements AddOnTemplateRepository {
 
   async findActive(): Promise<AddOnTemplate[]> {
     return this.db
-      .select({
-        id: addOnTemplates.id,
-        key: addOnTemplates.key,
-        name: addOnTemplates.name,
-        description: addOnTemplates.description,
-        status: addOnTemplates.status,
-        createdAt: addOnTemplates.createdAt,
-        updatedAt: addOnTemplates.updatedAt,
-      })
+      .select(TEMPLATE_COLUMNS)
       .from(addOnTemplates)
       .where(eq(addOnTemplates.status, 'ACTIVE'))
       .orderBy(asc(addOnTemplates.key))
   }
+
+  async findById(id: string): Promise<AddOnTemplate | undefined> {
+    const [row] = await this.db
+      .select(TEMPLATE_COLUMNS)
+      .from(addOnTemplates)
+      .where(eq(addOnTemplates.id, id))
+      .limit(1)
+    return row
+  }
 }
+
+const TEMPLATE_COLUMNS = {
+  id: addOnTemplates.id,
+  key: addOnTemplates.key,
+  name: addOnTemplates.name,
+  description: addOnTemplates.description,
+  status: addOnTemplates.status,
+  createdAt: addOnTemplates.createdAt,
+  updatedAt: addOnTemplates.updatedAt,
+} as const

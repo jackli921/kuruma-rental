@@ -775,8 +775,8 @@
         "price": "1予約あたり {price}"
       },
       "form": {
-        "name": "オプション名",
-        "namePlaceholder": "例：チャイルドシート",
+        "template": "オプション",
+        "templatePlaceholder": "オプションを選択",
         "description": "説明",
         "descriptionPlaceholder": "例：幼児向けの後ろ向きチャイルドシート。",
         "price": "料金（円）",

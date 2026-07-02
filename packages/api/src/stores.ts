@@ -38,7 +38,7 @@ import type {
   VehicleBlockKind,
   VehicleClassStatus,
 } from '@kuruma/shared/enums'
-import type { LocalizedText } from '@kuruma/shared/i18n/localized-text'
+import type { LocalizedText, LocalizedTextOverride } from '@kuruma/shared/i18n/localized-text'
 import type { ComplianceAlertBand, ComplianceDocumentType } from '@kuruma/shared/lib/compliance'
 import type { DocumentSnapshot } from '@kuruma/shared/lib/consent-canonical'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
@@ -416,10 +416,35 @@ export interface AddOn {
   operatorId: string
   name: string
   description: string | null
+  /**
+   * Catalog i18n (slice 2): the platform template this add-on instances — the
+   * template supplies the localized name. Nullable through PR1 (the backfill
+   * stamps every active row; NOT NULL in PR2/slice 5). Legacy null-templateId
+   * rows fall back to the `name` column at resolution.
+   */
+  templateId: string | null
+  /**
+   * Operator's reworded description as a PARTIAL locale bag (P1-a override, NOT
+   * LocalizedText — one locale may be authored alone). Null keeps the template's.
+   */
+  descriptionOverride: LocalizedTextOverride | null
   priceJpy: number
   status: AddOnStatus
   createdAt: Date
   updatedAt: Date
+}
+
+/**
+ * The joined READ shape (Q2): an `AddOn` row enriched with its template's
+ * localized name/description bundles from the LEFT JOIN add_on_templates. `AddOn`
+ * stays the persistence/write entity; this is what the repo reads return so the
+ * service can resolve a caller-locale label. Both bundles are null for a legacy
+ * null-templateId row (PR1 window) — resolution falls back to the `name`/
+ * `description` columns then.
+ */
+export interface AddOnWithTemplate extends AddOn {
+  templateName: LocalizedText | null
+  templateDescription: LocalizedText | null
 }
 
 /**

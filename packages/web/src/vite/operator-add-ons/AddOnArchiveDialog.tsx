@@ -6,14 +6,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ADDON_QUERY_KEY, type AddOnData, archiveAddOn } from '@/vite/operator-add-ons/api'
+import { ADDON_QUERY_KEY, type OperatorAddOnData, archiveAddOn } from '@/vite/operator-add-ons/api'
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
 import { useTranslations } from 'use-intl'
 
 interface AddOnArchiveDialogProps {
-  addOn: AddOnData | null
+  addOn: OperatorAddOnData | null
   onOpenChange: (open: boolean) => void
 }
 
@@ -42,7 +42,7 @@ export function AddOnArchiveDialog({ addOn, onOpenChange }: AddOnArchiveDialogPr
     <Dialog open={addOn !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('archiveTitle', { name: addOn?.name ?? '' })}</DialogTitle>
+          <DialogTitle>{t('archiveTitle', { name: addOn?.resolvedName ?? '' })}</DialogTitle>
           <DialogDescription>{t('archiveDescription')}</DialogDescription>
         </DialogHeader>
 

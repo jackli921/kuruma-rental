@@ -25,12 +25,12 @@ afterEach(() => fetchMock.mockReset())
 const addOn = {
   id: 'addon_1',
   operatorId: 'op_1',
-  name: 'Child seat',
-  description: null,
+  templateId: 'tmpl_1',
+  resolvedName: 'Child seat',
+  resolvedDescription: null,
+  descriptionOverride: null,
   priceJpy: 1500,
   status: 'ACTIVE' as const,
-  createdAt: '2026-01-01T00:00:00Z',
-  updatedAt: '2026-01-01T00:00:00Z',
 }
 
 describe('fetchAddOns', () => {
@@ -61,6 +61,13 @@ describe('fetchAddOns', () => {
     expect(url).toContain('includeArchived=true')
   })
 
+  it('appends the caller locale so the server resolves template names to it (#385)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [] }))
+    await fetchAddOns(undefined, 'ja')
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('locale=ja')
+  })
+
   it('throws an ApiError carrying the status on a failure envelope', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: false, error: 'Forbidden' }, 403))
     await expect(fetchAddOns()).rejects.toThrow('Forbidden')
@@ -78,7 +85,7 @@ describe('createAddOn', () => {
   it('POSTs the body to /api/add-ons with the CSRF + JSON headers and unwraps the row', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: addOn }, 201))
 
-    const input = { name: 'Child seat', description: null, priceJpy: 1500 }
+    const input = { templateId: 'tmpl_1', descriptionOverride: null, priceJpy: 1500 }
     const result = await createAddOn(input, 'csrf-7')
 
     expect(result).toEqual(addOn)
@@ -90,13 +97,13 @@ describe('createAddOn', () => {
     expect(JSON.parse(init.body as string)).toEqual(input)
   })
 
-  it('propagates a 409 duplicate-name failure as an ApiError', async () => {
+  it('propagates a 409 duplicate-template failure as an ApiError', async () => {
     fetchMock.mockResolvedValue(
-      jsonResponse({ success: false, error: 'An add-on with this name already exists' }, 409),
+      jsonResponse({ success: false, error: 'You already offer this add-on' }, 409),
     )
-    await expect(createAddOn({ name: 'dupe', priceJpy: 1 }, 'csrf')).rejects.toThrow(
-      'already exists',
-    )
+    await expect(
+      createAddOn({ templateId: 'tmpl_1', descriptionOverride: null, priceJpy: 1 }, 'csrf'),
+    ).rejects.toThrow('You already offer this add-on')
   })
 })
 
@@ -116,7 +123,7 @@ describe('updateAddOn', () => {
 
   it('encodes the id into the path', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: addOn }))
-    await updateAddOn('a/b', { name: 'x' }, 'csrf')
+    await updateAddOn('a/b', { priceJpy: 1 }, 'csrf')
     const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/add-ons/a%2Fb')
   })
@@ -147,7 +154,9 @@ describe('addOnsQueryOptions', () => {
     // cached list. A prefix invalidate (invalidateQueries({ queryKey: ADDON_QUERY_KEY }))
     // still clears all scopes.
     expect(ADDON_QUERY_KEY).toEqual(['operator-add-ons'])
-    expect(addOnsQueryOptions().queryKey).toEqual(['operator-add-ons', 'all'])
-    expect(addOnsQueryOptions('op_9').queryKey).toEqual(['operator-add-ons', 'op_9'])
+    // The key trails with the locale (default 'en') so switching language refetches.
+    expect(addOnsQueryOptions().queryKey).toEqual(['operator-add-ons', 'all', 'en'])
+    expect(addOnsQueryOptions('op_9').queryKey).toEqual(['operator-add-ons', 'op_9', 'en'])
+    expect(addOnsQueryOptions('op_9', 'ja').queryKey).toEqual(['operator-add-ons', 'op_9', 'ja'])
   })
 })
