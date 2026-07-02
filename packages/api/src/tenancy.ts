@@ -1,4 +1,5 @@
 import type { BookingSource } from '@kuruma/shared/enums'
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import {
   type CallerContext,
   ForbiddenError,
@@ -230,6 +231,31 @@ export function assertFleetWriteWithinOperator(
   if (!actingOperatorId) return { kind: 'operator-required' }
   if (actingOperatorId !== targetOperatorId) return { kind: 'not-in-scope' }
   return null
+}
+
+/**
+ * Map a {@link FleetWriteDenial} to the shape a fleet-write service returns
+ * (#1260). Shared by every operator-portal write (bookings, blocks, vehicles) so
+ * the refusal contract is identical everywhere:
+ * - operator-required -> 422 carrying the same OPERATOR_REQUIRED code the global
+ *   OperatorRequiredError emits, so the web can discriminate "pick an operator".
+ * - not-in-scope      -> 404 with the CALLER's own not-found message: from the
+ *   acting operator's tenant the target simply does not exist (no existence
+ *   oracle), so a booking's 404 reads 'Booking not found', a vehicle's 'Vehicle
+ *   not found', indistinguishable from a truly-unknown id.
+ */
+export function fleetWriteDenialResult(
+  denial: FleetWriteDenial,
+  notFoundError: string,
+): { ok: false; status: 422 | 404; error: string; code?: ErrorCode } {
+  return denial.kind === 'operator-required'
+    ? {
+        ok: false,
+        status: 422,
+        error: 'operatorId is required: specify the operator to act as',
+        code: 'OPERATOR_REQUIRED',
+      }
+    : { ok: false, status: 404, error: notFoundError }
 }
 
 /**

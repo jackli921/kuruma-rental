@@ -1322,7 +1322,9 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/status`, {
+      // #1260: the default app is a PLATFORM_ADMIN (bypass); it must bind the
+      // write to the booking's operator via ?operatorId= or the guard 422s it.
+      const res = await app.request(`/bookings/${created.data.id}/status?operatorId=${OPERATOR}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'ACTIVE' }),
@@ -1336,11 +1338,52 @@ describe('Booking Routes', () => {
       expect(body.data.id).toBe(created.data.id)
     })
 
-    it('rejects invalid transition CONFIRMED to COMPLETED', async () => {
+    // #1260: the route reads ?operatorId= and passes it as the acting operator; a
+    // bypass admin that names none is refused BEFORE the transition, carrying the
+    // OPERATOR_REQUIRED code so the web can prompt "pick an operator".
+    it('rejects a bypass admin that named no acting operator with 422 OPERATOR_REQUIRED', async () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
       const res = await app.request(`/bookings/${created.data.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ACTIVE' }),
+      })
+
+      expect(res.status).toBe(422)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.code).toBe('OPERATOR_REQUIRED')
+    })
+
+    // Acting as the WRONG operator is a 404 with the same 'Booking not found'
+    // message a truly-unknown id returns — no cross-tenant existence oracle.
+    it('returns 404 (no oracle) when the admin acts as an operator that does not own the booking', async () => {
+      const WRONG_OPERATOR = '00000000-0000-4000-8000-0000000000c2'
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(
+        `/bookings/${created.data.id}/status?operatorId=${WRONG_OPERATOR}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'ACTIVE' }),
+        },
+      )
+
+      expect(res.status).toBe(404)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('Booking not found')
+    })
+
+    it('rejects invalid transition CONFIRMED to COMPLETED', async () => {
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/status?operatorId=${OPERATOR}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'COMPLETED' }),
@@ -1359,7 +1402,7 @@ describe('Booking Routes', () => {
 
       await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
 
-      const res = await app.request(`/bookings/${created.data.id}/status`, {
+      const res = await app.request(`/bookings/${created.data.id}/status?operatorId=${OPERATOR}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'ACTIVE' }),
@@ -1498,12 +1541,12 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      await app.request(`/bookings/${created.data.id}/status`, {
+      await app.request(`/bookings/${created.data.id}/status?operatorId=${OPERATOR}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'ACTIVE' }),
       })
-      await app.request(`/bookings/${created.data.id}/status`, {
+      await app.request(`/bookings/${created.data.id}/status?operatorId=${OPERATOR}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'COMPLETED' }),

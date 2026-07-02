@@ -200,8 +200,9 @@ export class BookingService {
     ctx: CallerContext,
     bookingId: string,
     newStatus: BookingStatus,
+    actingOperatorId?: string,
   ): Promise<StatusTransitionResult> {
-    return this.lifecycle.updateStatus(ctx, bookingId, newStatus)
+    return this.lifecycle.updateStatus(ctx, bookingId, newStatus, actingOperatorId)
   }
 
   cancel(

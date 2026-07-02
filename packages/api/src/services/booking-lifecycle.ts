@@ -15,6 +15,7 @@ import type {
   VehicleRepository,
 } from '../repositories/types'
 import type { Booking, Vehicle } from '../stores'
+import { assertFleetWriteWithinOperator, fleetWriteDenialResult } from '../tenancy'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
 import { composeBookingTotal, rentalDays } from './booking-pricing-helpers'
 import type { CancelResult, StatusTransitionResult, SubstituteResult } from './booking-types'
@@ -408,11 +409,17 @@ export class BookingLifecycleService {
     ctx: CallerContext,
     bookingId: string,
     newStatus: BookingStatus,
+    actingOperatorId?: string,
   ): Promise<StatusTransitionResult> {
     const booking = await this.bookingRepo.findById(ctx, bookingId)
     if (!booking) {
       return { ok: false, status: 404, error: 'Booking not found' }
     }
+
+    // #1260: a bypass admin reads every operator's bookings, so bind this write
+    // to the operator it picked — no pick -> 422, wrong pick -> 404 (no oracle).
+    const denial = assertFleetWriteWithinOperator(ctx, booking.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, 'Booking not found')
 
     const allowedTransitions = VALID_BOOKING_TRANSITIONS[booking.status] ?? []
     if (!allowedTransitions.includes(newStatus)) {
