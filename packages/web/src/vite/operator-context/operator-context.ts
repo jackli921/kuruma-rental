@@ -100,6 +100,7 @@ export const OPERATOR_CONTEXT_ROUTE_IDS: ReadonlySet<string> = new Set([
   '/$locale/_business/manage/bookings/', // slice 5a — bookings reads narrow to picked operator
   '/$locale/_business/manage/classes',
   '/$locale/_business/manage/fees',
+  '/$locale/_business/manage/fleet/', // slice 4 residual (#1264) — list reads narrow; detail is by-id, intentionally NOT registered
   '/$locale/_business/manage/insurance',
   '/$locale/_business/manage/locations',
   '/$locale/_business/manage/settings', // slice 2 — picker honored on settings

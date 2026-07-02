@@ -270,6 +270,16 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
     .post('/bookings/:id/cancel', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
+      // #1367: a PARTNER (Trip.com) books but does not MANAGE the order — it is
+      // excluded from /status, /substitute and /events for the same reason.
+      // /cancel has no role gate (renter self-cancel is a renter-facing feature),
+      // so exclude the PARTNER explicitly: its `partner` read scope resolves any
+      // TRIP_COM-sourced booking across operators, which the operator-binding
+      // guard cannot clamp (a channel is not one operator). authz: booking-authz.md
+      if (ctx.role === 'PARTNER') {
+        return fail(c, 'Partners cannot cancel bookings', 403)
+      }
+
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
 

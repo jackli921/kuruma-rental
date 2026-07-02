@@ -14,6 +14,8 @@ interface VehicleDetailProps {
   // False for bypass roles (no operatorId): the page is read-only — no Edit,
   // no photo management — mirroring the fleet list (#598). [[shell-guard-vs-action-authz]]
   readonly canWrite: boolean
+  /** Picked operator (create scope); edit scopes to the vehicle's own operator (#1264). */
+  readonly pickedOperatorId?: string | undefined
 }
 
 const HOURS_PER_DAY = 24
@@ -24,7 +26,7 @@ const HOURS_PER_DAY = 24
 // operator oversight without the heavy calendar dep. Presentation (status / price)
 // reuses the shared fleet cells; the edit affordance reuses EditVehicleSheet via
 // `vehicleRowFromDetail` so there is no second fetch.
-export function VehicleDetail({ detail, locale, canWrite }: VehicleDetailProps) {
+export function VehicleDetail({ detail, locale, canWrite, pickedOperatorId }: VehicleDetailProps) {
   const t = useTranslations('business.vehicles.detail')
   const tFleet = useTranslations('business.vehicles.fleet')
   const [editOpen, setEditOpen] = useState(false)
@@ -159,6 +161,7 @@ export function VehicleDetail({ detail, locale, canWrite }: VehicleDetailProps) 
           vehicle={row}
           onOpenChange={setEditOpen}
           onSaved={() => setEditOpen(false)}
+          pickedOperatorId={pickedOperatorId}
         />
       ) : (
         photos.length > 0 && (
