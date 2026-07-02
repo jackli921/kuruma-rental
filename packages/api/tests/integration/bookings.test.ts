@@ -783,3 +783,34 @@ describe('POST /bookings/:id/cancel acting-operator binding (#1260, Drizzle)', (
     expect((await res.json()).data.status).toBe('CANCELLED')
   })
 })
+
+// #1367: a PARTNER's `partner` read scope resolves any TRIP_COM-sourced booking
+// across operators, so without a route gate it could cancel one it merely
+// sourced (the operator-binding guard clears PARTNER — a channel is not one
+// operator). /cancel now excludes PARTNER outright.
+describe('POST /bookings/:id/cancel PARTNER exclusion (#1367, Drizzle)', () => {
+  const adminCtx = { userId: 'admin-1367', role: 'PLATFORM_ADMIN' as const, bypassScope: true }
+  let app: ReturnType<typeof createApp>
+  let partnerHeaders: Record<string, string>
+
+  beforeAll(async () => {
+    setupAuthEnv()
+    app = createApp({ bookingRepo, vehicleRepo })
+    partnerHeaders = await authHeaders({ sub: crypto.randomUUID(), role: 'PARTNER' })
+  })
+
+  it('forbids a PARTNER from cancelling a TRIP_COM-sourced booking it can read (403)', async () => {
+    const booking = await seedBooking({ status: 'CONFIRMED', source: 'TRIP_COM' })
+    createdBookingIds.push(booking.id)
+
+    const res = await app.request(`/bookings/${booking.id}/cancel`, {
+      method: 'POST',
+      headers: partnerHeaders,
+    })
+
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toBe('Partners cannot cancel bookings')
+    // The booking was NOT cancelled — still CONFIRMED (no refund fired).
+    expect((await bookingRepo.findById(adminCtx, booking.id))?.status).toBe('CONFIRMED')
+  })
+})
