@@ -3,14 +3,14 @@ import { AddAddOnDialog } from '@/vite/operator-add-ons/AddAddOnDialog'
 import { AddOnArchiveDialog } from '@/vite/operator-add-ons/AddOnArchiveDialog'
 import { AddOnRow } from '@/vite/operator-add-ons/AddOnRow'
 import { EditAddOnDialog } from '@/vite/operator-add-ons/EditAddOnDialog'
-import type { AddOnData } from '@/vite/operator-add-ons/api'
+import type { OperatorAddOnData } from '@/vite/operator-add-ons/api'
 import type { OperatorScope } from '@/vite/operator-context'
 import { PackagePlus, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'use-intl'
 
 interface OperatorAddOnsViewProps {
-  readonly addOns: readonly AddOnData[]
+  readonly addOns: readonly OperatorAddOnData[]
   readonly scope: OperatorScope
 }
 
@@ -28,11 +28,14 @@ export function OperatorAddOnsView({ addOns, scope }: OperatorAddOnsViewProps) {
   const { pickedOperatorId, canWrite, showOperator, operatorNameById } = scope
   const t = useTranslations('business.addOns')
   const [showAdd, setShowAdd] = useState(false)
-  const [editing, setEditing] = useState<AddOnData | null>(null)
-  const [archiving, setArchiving] = useState<AddOnData | null>(null)
+  const [editing, setEditing] = useState<OperatorAddOnData | null>(null)
+  const [archiving, setArchiving] = useState<OperatorAddOnData | null>(null)
 
-  // API already returns name-asc, but defend against drift.
-  const sorted = useMemo(() => [...addOns].sort((a, b) => a.name.localeCompare(b.name)), [addOns])
+  // API already returns resolved-name-asc, but defend against drift.
+  const sorted = useMemo(
+    () => [...addOns].sort((a, b) => a.resolvedName.localeCompare(b.resolvedName)),
+    [addOns],
+  )
 
   return (
     <div className="space-y-6">

@@ -30,6 +30,12 @@ import './fleet-timeline-theme.css'
 // pure buildTimelineLayout; this shell only maps that shape to the lib's props and
 // owns its toolbar (FC/IS — the core decides, this renders). The booking-status
 // palette is applied via STATUS_CLASS on each bar (themed in fleet-timeline-theme.css).
+//
+// react-calendar-timeline is pinned to 0.30.0-beta.18 ON PURPOSE (#1330): no stable release
+// supports React 19 (0.28.0, the last stable, is React 16/17 era), so this pre-release is the
+// newest version that exists. Do NOT widen the exact pin or "downgrade to stable". Known a11y
+// gap: the bars are mouse-only (no keyboard/ARIA) — #1349 gates flipping VITE_FEATURE_FLEET_TIMELINE
+// on for GA. Full rationale: docs/2026-07-02-fleet-timeline-lib-pin.md.
 
 interface FleetTimelineProps {
   readonly rows: readonly CalendarBookingRow[]

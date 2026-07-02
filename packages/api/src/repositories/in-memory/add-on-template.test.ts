@@ -48,3 +48,23 @@ describe('InMemoryAddOnTemplateRepository.findActive', () => {
     expect(templates.map((t) => t.key)).toEqual(['child_seat'])
   })
 })
+
+describe('InMemoryAddOnTemplateRepository.findById', () => {
+  it('returns the template for a known id, including ARCHIVED ones', async () => {
+    const store = new Map<string, AddOnTemplate>([
+      ['a', row({ id: 'a', key: 'child_seat', status: 'ACTIVE' })],
+      ['b', row({ id: 'b', key: 'etc_card', status: 'ARCHIVED' })],
+    ])
+    const repo = new InMemoryAddOnTemplateRepository(store)
+
+    expect(await repo.findById('a')).toMatchObject({ id: 'a', key: 'child_seat' })
+    // findById is the write-path lookup (resolve the en name for the column); it
+    // does NOT filter on status — the create service decides ACTIVE-only.
+    expect(await repo.findById('b')).toMatchObject({ id: 'b', status: 'ARCHIVED' })
+  })
+
+  it('returns undefined for an unknown id', async () => {
+    const repo = new InMemoryAddOnTemplateRepository(new Map())
+    expect(await repo.findById('missing')).toBeUndefined()
+  })
+})

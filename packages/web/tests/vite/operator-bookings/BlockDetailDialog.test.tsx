@@ -90,9 +90,10 @@ describe('BlockDetailDialog', () => {
     expect(screen.getByText('Bay 3 lift')).not.toBeNull()
   })
 
-  it('requires a confirm click, then deletes, invalidates the cache, and closes', async () => {
+  it('requires a confirm click, then deletes (forwarding the picked operator), invalidates the cache, and closes', async () => {
     deleteBlockMock.mockResolvedValue(BLOCK)
-    const { onClose, invalidate } = setup()
+    // #1260: a picker admin's delete binds to the operator it is acting as.
+    const { onClose, invalidate } = setup({ pickedOperatorId: 'op-7' })
 
     // First click arms the confirm — no API call yet.
     fireEvent.click(screen.getByRole('button', { name: T.deleteAction }))
@@ -102,7 +103,7 @@ describe('BlockDetailDialog', () => {
     // Second click performs the hard delete against the block's vehicle + id.
     fireEvent.click(screen.getByRole('button', { name: T.deleteAction }))
     await waitFor(() => expect(onClose).toHaveBeenCalled())
-    expect(deleteBlockMock).toHaveBeenCalledWith('veh-2', 'blk-1', 'csrf-1')
+    expect(deleteBlockMock).toHaveBeenCalledWith('veh-2', 'blk-1', 'csrf-1', 'op-7')
     expect(invalidate).toHaveBeenCalledWith({ queryKey: OPERATOR_BOOKINGS_KEY })
   })
 

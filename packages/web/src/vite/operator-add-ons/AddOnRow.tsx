@@ -1,17 +1,17 @@
 import { Button } from '@/components/ui/button'
 import { formatJpy } from '@/lib/format'
 import { AddOnStatusBadge } from '@/vite/operator-add-ons/AddOnStatusBadge'
-import type { AddOnData } from '@/vite/operator-add-ons/api'
+import type { OperatorAddOnData } from '@/vite/operator-add-ons/api'
 import { OperatorBadge } from '@/vite/operator-context'
 import { Coins, Pencil, Trash2 } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
 interface AddOnRowProps {
-  addOn: AddOnData
+  addOn: OperatorAddOnData
   canWrite: boolean
   operatorName?: string | undefined
-  onEdit: (a: AddOnData) => void
-  onArchive: (a: AddOnData) => void
+  onEdit: (a: OperatorAddOnData) => void
+  onArchive: (a: OperatorAddOnData) => void
 }
 
 export function AddOnRow({ addOn: a, canWrite, operatorName, onEdit, onArchive }: AddOnRowProps) {
@@ -22,12 +22,12 @@ export function AddOnRow({ addOn: a, canWrite, operatorName, onEdit, onArchive }
     <div className="border border-border rounded-lg p-4 flex items-start gap-4 hover:bg-accent/30 transition-colors">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="text-lg font-medium truncate">{a.name}</h3>
+          <h3 className="text-lg font-medium truncate">{a.resolvedName}</h3>
           <AddOnStatusBadge status={a.status} />
           <OperatorBadge name={operatorName} />
         </div>
-        {a.description && (
-          <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{a.description}</p>
+        {a.resolvedDescription && (
+          <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{a.resolvedDescription}</p>
         )}
 
         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">

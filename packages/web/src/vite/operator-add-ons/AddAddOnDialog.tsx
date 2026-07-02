@@ -5,19 +5,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { DEFAULT_LOCALE, isLocale } from '@/vite/i18n/locale'
 import { AddOnForm } from '@/vite/operator-add-ons/AddOnForm'
 import { ADDON_QUERY_KEY, type CreateAddOnInput, createAddOn } from '@/vite/operator-add-ons/api'
+import { setLocaleSlot } from '@/vite/operator-add-ons/description-override'
+import { addOnTemplatesQueryOptions } from '@/vite/operator-add-ons/templates-api'
 import type { WithOperatorId } from '@/vite/operator-context'
 import { useSession } from '@/vite/session'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useTranslations } from 'use-intl'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocale, useTranslations } from 'use-intl'
 
 interface AddAddOnDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   // Set when a platform admin has picked a tenant. Merged into the create body so
   // the server's platformAdminCreateAddOnSchema (which requires operatorId) is
-  // satisfied; an operator session leaves this undefined and is auto-scoped.
+  // satisfied; an operator session leaves this undefined and is auto-scoped. It
+  // also scopes the template picker's already-offered exclusion to that tenant.
   pickedOperatorId?: string | undefined
 }
 
@@ -25,6 +29,15 @@ export function AddAddOnDialog({ open, onOpenChange, pickedOperatorId }: AddAddO
   const t = useTranslations('business.addOns')
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
+  const rawLocale = useLocale()
+  const locale = isLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE
+
+  // Only fetch the picker while the dialog is open; the server resolves each name
+  // to `locale` and drops templates this operator already offers.
+  const { data: templates } = useQuery({
+    ...addOnTemplatesQueryOptions(locale, pickedOperatorId),
+    enabled: open,
+  })
 
   const { mutateAsync, isPending, error, reset } = useMutation({
     mutationFn: (data: WithOperatorId<CreateAddOnInput>) => createAddOn(data, csrfToken),
@@ -52,8 +65,15 @@ export function AddAddOnDialog({ open, onOpenChange, pickedOperatorId }: AddAddO
           </p>
         )}
         <AddOnForm
+          mode="create"
+          templates={templates ?? []}
           onSubmit={async (data) => {
-            await mutateAsync(pickedOperatorId ? { ...data, operatorId: pickedOperatorId } : data)
+            const body: CreateAddOnInput = {
+              templateId: data.templateId,
+              priceJpy: data.priceJpy,
+              descriptionOverride: setLocaleSlot(null, locale, data.description),
+            }
+            await mutateAsync(pickedOperatorId ? { ...body, operatorId: pickedOperatorId } : body)
           }}
           onCancel={() => handleOpenChange(false)}
           isSubmitting={isPending}

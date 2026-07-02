@@ -8,17 +8,38 @@ import type {
   VehicleBlockRepository,
   VehicleRepository,
 } from '../repositories/types'
-import { narrowReadToOperator, vehicleBlockReadScope } from '../tenancy'
+import {
+  assertFleetWriteWithinOperator,
+  narrowReadToOperator,
+  vehicleBlockReadScope,
+} from '../tenancy'
 
 export type VehicleBlockResult =
   | { ok: true; block: VehicleBlock }
   | { ok: false; error: string; status: number; code?: ErrorCode }
 
 const VEHICLE_NOT_FOUND_MESSAGE = 'Vehicle not found'
+const OPERATOR_REQUIRED_MESSAGE = 'operatorId is required: specify the operator to act as'
 const BLOCK_NOT_FOUND_MESSAGE = 'Block not found'
 const OVERLAP_MESSAGE = 'This vehicle is already blocked for an overlapping window'
 const BOOKING_CONFLICT_MESSAGE =
   'This vehicle has a confirmed or active booking in the requested window'
+
+// #1260: map the acting-operator-binding denial to the service result. A missing
+// pick is a 422 carrying the same OPERATOR_REQUIRED code the global
+// OperatorRequiredError emits (so the web can discriminate it); a mismatch is a
+// 404 — from the acting operator's fleet the vehicle does not exist (no oracle).
+function denyFleetWrite(
+  ctx: CallerContext,
+  targetOperatorId: string,
+  actingOperatorId: string | undefined,
+): VehicleBlockResult | undefined {
+  const denial = assertFleetWriteWithinOperator(ctx, targetOperatorId, actingOperatorId)
+  if (!denial) return undefined
+  return denial.kind === 'operator-required'
+    ? { ok: false, error: OPERATOR_REQUIRED_MESSAGE, status: 422, code: 'OPERATOR_REQUIRED' }
+    : { ok: false, error: VEHICLE_NOT_FOUND_MESSAGE, status: 404 }
+}
 
 // The GiST EXCLUDE is named `vehicle_blocks_no_overlap`; match the name (not the
 // bare 23P01) so a block-vs-block clash is told apart from any other exclusion.
@@ -52,11 +73,17 @@ export class VehicleBlockService {
     ctx: CallerContext,
     vehicleId: string,
     input: CreateVehicleBlockInput,
+    actingOperatorId?: string,
   ): Promise<VehicleBlockResult> {
     requireFleetWriteScope(ctx)
 
     const vehicle = await this.vehicleRepo.findById(ctx, vehicleId)
     if (!vehicle) return { ok: false, error: VEHICLE_NOT_FOUND_MESSAGE, status: 404 }
+
+    // #1260: an admin/legacy caller resolves vehicles across all operators, so bind
+    // the write to the operator it picked before deriving operatorId from the vehicle.
+    const denied = denyFleetWrite(ctx, vehicle.operatorId, actingOperatorId)
+    if (denied) return denied
 
     // #1196: reject a block that would silently take a car off the calendar while
     // a CONFIRMED/ACTIVE booking still holds it — the reverse of the booking→block
@@ -112,6 +139,7 @@ export class VehicleBlockService {
     ctx: CallerContext,
     vehicleId: string,
     blockId: string,
+    actingOperatorId?: string,
   ): Promise<VehicleBlockResult> {
     requireFleetWriteScope(ctx)
 
@@ -120,6 +148,10 @@ export class VehicleBlockService {
     // unknown vehicleId → 404 before any write is attempted.
     const vehicle = await this.vehicleRepo.findById(ctx, vehicleId)
     if (!vehicle) return { ok: false, error: VEHICLE_NOT_FOUND_MESSAGE, status: 404 }
+
+    // #1260: bind an admin/legacy delete to the operator it picked (see createBlock).
+    const denied = denyFleetWrite(ctx, vehicle.operatorId, actingOperatorId)
+    if (denied) return denied
 
     const removed = await this.vehicleBlockRepo.delete(blockId, vehicle.operatorId)
     if (!removed) return { ok: false, error: BLOCK_NOT_FOUND_MESSAGE, status: 404 }

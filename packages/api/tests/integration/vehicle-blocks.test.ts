@@ -302,10 +302,13 @@ describe('VehicleBlockService against Postgres', () => {
   }
 
   it('persists a block with operatorId derived from the vehicle', async () => {
+    // #1260: an admin/bypass caller (SYSTEM_CONTEXT is PLATFORM_ADMIN) must name the
+    // operator it is acting as; here it acts as the vehicle's owning operator.
     const result = await service.createBlock(
       SYSTEM_CONTEXT,
       vehicleA,
       input(hours(200), hours(208)),
+      BEST_CAR_RENTAL_OPERATOR_ID,
     )
 
     expect(result.ok).toBe(true)
@@ -317,7 +320,12 @@ describe('VehicleBlockService against Postgres', () => {
   })
 
   it('maps the GiST 23P01 to 409 VEHICLE_BLOCK_OVERLAP on an overlapping window', async () => {
-    const first = await service.createBlock(SYSTEM_CONTEXT, vehicleA, input(hours(300), hours(320)))
+    const first = await service.createBlock(
+      SYSTEM_CONTEXT,
+      vehicleA,
+      input(hours(300), hours(320)),
+      BEST_CAR_RENTAL_OPERATOR_ID,
+    )
     if (!first.ok) throw new Error('setup block should have been created')
     createdBlockIds.push(first.block.id)
 
@@ -325,6 +333,7 @@ describe('VehicleBlockService against Postgres', () => {
       SYSTEM_CONTEXT,
       vehicleA,
       input(hours(310), hours(330)),
+      BEST_CAR_RENTAL_OPERATOR_ID,
     )
 
     expect(overlap).toMatchObject({ ok: false, status: 409, code: 'VEHICLE_BLOCK_OVERLAP' })

@@ -21,10 +21,13 @@ export interface BlockDetailDialogProps {
   /** Resolved by the route from the block's `resourceId` (the calendar item carries
    *  only the vehicle id, never an enriched name). */
   readonly vehicleName: string | null
-  /** Operator-session viewers manage blocks; a platform-admin preview is read-only
-   *  (the API admits an admin write, so this affordance gate is the boundary). */
+  /** Operator-session viewers manage blocks; a platform-admin manages blocks only
+   *  within the operator it has picked (canManage folds that in). */
   readonly canManage: boolean
   readonly csrfToken: string
+  /** #1260: the picked operator a platform-admin is acting as; the delete binds to
+   *  it server-side. Undefined for a tenant operator (its own scope binds it). */
+  readonly pickedOperatorId?: string | undefined
   readonly locale: string
 }
 
@@ -39,6 +42,7 @@ export function BlockDetailDialog({
   vehicleName,
   canManage,
   csrfToken,
+  pickedOperatorId,
   locale,
 }: BlockDetailDialogProps) {
   const t = useTranslations('bookings.operator.blocks')
@@ -48,7 +52,7 @@ export function BlockDetailDialog({
   const mutation = useMutation({
     mutationFn: () => {
       if (!block) throw new Error('no block selected')
-      return deleteBlock(block.resourceId, block.id, csrfToken)
+      return deleteBlock(block.resourceId, block.id, csrfToken, pickedOperatorId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: OPERATOR_BOOKINGS_KEY })

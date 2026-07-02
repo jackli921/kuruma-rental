@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CallerContext } from './middleware/auth'
 import {
+  assertFleetWriteWithinOperator,
   bookingReadScope,
   narrowReadToOperator,
   operatorReadScope,
@@ -124,6 +125,50 @@ describe('narrowReadToOperator', () => {
     // reads pass bookingReadScope precisely so renter/partner ids drop.
     const renter: CallerContext = { userId: 'r1', role: 'RENTER' }
     expect(narrowReadToOperator(renter, 'op-target', operatorReadScope)).toBe('op-target')
+  })
+})
+
+describe('assertFleetWriteWithinOperator (#1260)', () => {
+  // A tenant operator is already clamped to its own tenant by the repo read
+  // scope (findById returns undefined for a foreign vehicle), so a fleet write
+  // needs no acting-operator binding — a stray acting id is simply ignored.
+  it('allows a tenant operator regardless of the acting operatorId', () => {
+    const op: CallerContext = { userId: 'u1', role: 'OPERATOR_OWNER', operatorId: 'op-self' }
+    expect(assertFleetWriteWithinOperator(op, 'op-self', undefined)).toBeNull()
+    expect(assertFleetWriteWithinOperator(op, 'op-self', 'op-other')).toBeNull()
+    expect(assertFleetWriteWithinOperator(op, 'op-self', 'op-self')).toBeNull()
+  })
+
+  it('requires a bypass admin to name the operator it is acting as', () => {
+    const admin: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+    expect(assertFleetWriteWithinOperator(admin, 'op-A', undefined)).toEqual({
+      kind: 'operator-required',
+    })
+  })
+
+  it('rejects an admin whose acting operator does not own the target (no existence oracle)', () => {
+    const admin: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+    expect(assertFleetWriteWithinOperator(admin, 'op-A', 'op-B')).toEqual({ kind: 'not-in-scope' })
+  })
+
+  it('allows an admin acting as the operator that owns the target', () => {
+    const admin: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+    expect(assertFleetWriteWithinOperator(admin, 'op-A', 'op-A')).toBeNull()
+  })
+
+  it('guards legacy STAFF/ADMIN identically — the hole is !isOperatorRole, not bypassScope', () => {
+    // #487 dropped legacy STAFF/ADMIN from SCOPE_BYPASS_ROLES, but operatorReadScope
+    // still maps them to `all`, so findById resolves ANY vehicle for them too. Keying
+    // this guard on bypassScope would leave them able to write cross-tenant.
+    const staff: CallerContext = { userId: 's1', role: 'STAFF', bypassScope: false }
+    const legacyAdmin: CallerContext = { userId: 'a1', role: 'ADMIN', bypassScope: false }
+    expect(assertFleetWriteWithinOperator(staff, 'op-A', undefined)).toEqual({
+      kind: 'operator-required',
+    })
+    expect(assertFleetWriteWithinOperator(legacyAdmin, 'op-A', 'op-B')).toEqual({
+      kind: 'not-in-scope',
+    })
+    expect(assertFleetWriteWithinOperator(staff, 'op-A', 'op-A')).toBeNull()
   })
 })
 
