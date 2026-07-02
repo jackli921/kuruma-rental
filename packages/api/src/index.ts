@@ -31,6 +31,7 @@ import { createAddOnRoutes } from './routes/add-ons'
 import { createAdminRoutes } from './routes/admin'
 import { createAdminBookingRoutes } from './routes/admin-bookings'
 import { createAdminConsentRoutes } from './routes/admin-consent'
+import { createAdminOperatorApplicationRoutes } from './routes/admin-operator-applications'
 import { createAdminOperatorRoutes } from './routes/admin-operators'
 import { createAdminOverviewRoutes } from './routes/admin-overview'
 import { createAdminRevenueRoutes } from './routes/admin-revenue'
@@ -50,6 +51,7 @@ import { createLocationRoutes } from './routes/locations'
 import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
 import { createNotificationRoutes } from './routes/notifications'
+import { createOperatorApplicationRoutes } from './routes/operator-applications'
 import { createOperatorTeamRoutes } from './routes/operator-team'
 import { createOperatorRoutes } from './routes/operators'
 import { createOverviewRoutes } from './routes/overview'
@@ -102,6 +104,7 @@ import { NotificationService } from './services/notification'
 import { NotificationDispatcher } from './services/notification-dispatcher'
 import { NotificationRetryService } from './services/notification-retry'
 import { OperatorService } from './services/operator'
+import { OperatorApplicationService } from './services/operator-application'
 import { createOperatorGrantService } from './services/operator-grant'
 import {
   makeResolveOperatorRecipients,
@@ -168,6 +171,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     paymentAnomalyRepo,
     providerInviteRepo,
     operatorMembershipRepo,
+    operatorApplicationRepo,
     auditLogRepo,
     bookingEventRepo,
     reviewRepo,
@@ -177,6 +181,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     complianceAlertLogRepo,
     runInTransaction,
     runOperatorGrant,
+    runOperatorApproval,
     photosPublicUrl,
     googleAuthRuntime,
   } = repos
@@ -191,6 +196,11 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const publicCatalogLimiter =
     overrides?.publicCatalogLimiter ??
     ((globalThis as Record<string, unknown>).PUBLIC_CATALOG_LIMITER as RateLimitBinding | undefined)
+  const operatorApplicationLimiter =
+    overrides?.operatorApplicationLimiter ??
+    ((globalThis as Record<string, unknown>).OPERATOR_APPLICATION_LIMITER as
+      | RateLimitBinding
+      | undefined)
 
   const translationProvider = createTranslationProvider()
 
@@ -237,6 +247,12 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorRepo,
     { webBaseUrl },
     recordAudit,
+  )
+  const operatorApplicationService = new OperatorApplicationService(
+    operatorApplicationRepo,
+    recordAudit,
+    runOperatorApproval,
+    { webBaseUrl },
   )
   // #904: operator self-service team page. Reuses providerInviteService to mint
   // (so the audit trail + TTL stay single-sourced); reads invites + members
@@ -530,6 +546,10 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     )
     .route('/', createFlatSearchRoutes(flatSearchService, publicCatalogLimiter))
     .route('/', createProviderInviteRoutes(providerInviteService, publicCatalogLimiter))
+    .route(
+      '/',
+      createOperatorApplicationRoutes(operatorApplicationService, operatorApplicationLimiter),
+    )
     .route('/', createRegionRoutes(regionRepo))
     .route('/', createFxRoutes(fxRateProvider))
     .route('/', createVehicleRoutes(vehicleService, maintenanceService))
@@ -553,6 +573,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createAdminRevenueRoutes(adminRevenueService))
     .route('/', createAdminBookingRoutes(adminBookingService))
     .route('/', createAdminOperatorRoutes(operatorService, operatorSummaryService))
+    .route('/', createAdminOperatorApplicationRoutes(operatorApplicationService))
     .route('/', createFeatureFlagsRoutes(featureFlagsService))
     .route('/', createAdminOverviewRoutes(adminOverviewService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))

@@ -18,6 +18,7 @@ import type {
   MaintenanceLogRepository,
   MessageRepository,
   NotificationLogRepository,
+  OperatorApplicationRepository,
   OperatorMembershipRepository,
   OperatorRepository,
   OverviewRepository,
@@ -87,6 +88,7 @@ export type AppOverrides = {
   consentRepo?: ConsentRepository
   reviewRepo?: ReviewRepository
   featureFlagRepo?: FeatureFlagRepository
+  operatorApplicationRepo?: OperatorApplicationRepository
   // Inject a fake outbound email port in tests; absent ⇒ the env-resolved
   // Resend/dev-stub/sentinel (resolveEmailSender). Shared by the booking
   // dispatcher and the #916 compliance digest.
@@ -104,6 +106,7 @@ export type AppOverrides = {
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
+  operatorApplicationLimiter?: RateLimitBinding
   // Over-limit ⇒ the geocoder skips the lookup (#574). Inject a deny-binding in
   // tests; absent ⇒ the globalThis-resolved GEOCODE_LIMITER (or unthrottled dev).
   geocodeLimiter?: RateLimitBinding

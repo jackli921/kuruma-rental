@@ -905,6 +905,35 @@
       "label": "运营商",
       "all": "所有运营商",
       "badge": "运营商：{name}"
+    },
+    "register": {
+      "title": "在Kuruma上登记您的业务",
+      "subtitle": "告诉我们您的租车业务情况。我们会审核每一份申请。",
+      "form": {
+        "businessName": "企业名称",
+        "contactName": "联系人姓名",
+        "contactEmail": "电子邮箱",
+        "contactPhone": "联系电话",
+        "serviceArea": "服务区域（城市/都道府县）",
+        "fleetSize": "预估车队规模",
+        "website": "网站（选填）",
+        "licenseNumber": "营业执照号码（选填）",
+        "businessType": "业务类型（选填）",
+        "message": "其他说明（选填）",
+        "consent": "我同意接受有关申请的联系",
+        "submit": "提交申请",
+        "submitting": "提交中...",
+        "individual": "个人",
+        "company": "公司"
+      },
+      "errors": {
+        "generic": "无法提交您的申请，请重试。",
+        "duplicate": "该邮箱已存在申请或账户。"
+      },
+      "success": {
+        "title": "申请已收到",
+        "body": "感谢您 - 我们将发邮件至 {email} 与您联系。"
+      }
     }
   },
   "messaging": {
@@ -1232,7 +1261,8 @@
     "cta": {
       "heading": "准备探索日本了吗？",
       "description": "浏览车队，几分钟内预订。取车前72小时免费取消。",
-      "button": "找到您的车"
+      "button": "找到您的车",
+      "operatorCta": "登记您的业务"
     },
     "footer": {
       "copyright": "库鲁马租车 版权所有。",
@@ -1336,7 +1366,36 @@
       "customers": "客户",
       "operators": "运营商",
       "featureFlags": "功能开关",
-      "backToSite": "返回网站"
+      "backToSite": "返回网站",
+      "applications": "申请"
+    },
+    "applications": {
+      "title": "运营商申请",
+      "subtitle": "审核并处理新运营商的入驻申请。",
+      "empty": "暂无待审核的申请。",
+      "contactLabel": "联系人",
+      "emailLabel": "电子邮箱",
+      "phoneLabel": "电话",
+      "serviceAreaLabel": "服务区域",
+      "fleetSizeLabel": "预计车队规模",
+      "businessTypeLabel": "经营类型",
+      "websiteLabel": "网站",
+      "messageLabel": "留言",
+      "submittedLabel": "提交日期",
+      "reasonLabel": "拒绝原因",
+      "reject": "拒绝",
+      "error": "无法记录拒绝操作，请重试。",
+      "approve": "批准",
+      "approving": "批准中…",
+      "inviteReadyLabel": "邀请链接",
+      "inviteReadyHint": "将此一次性链接发送给运营商以完成入驻。",
+      "copy": "复制",
+      "copied": "已复制",
+      "approved": "已批准",
+      "alreadyReviewed": "该申请已被审核，或该邮箱已归属某运营商。",
+      "approveFailed": "无法批准该申请，请重试。",
+      "loadError": "无法加载申请队列。",
+      "retry": "重试"
     },
     "featureFlags": {
       "title": "功能开关",

@@ -69,8 +69,10 @@ const EXPECTED_KEY_MAP: Record<keyof Repos, true> = {
   consentRepo: true,
   reviewRepo: true,
   featureFlagRepo: true,
+  operatorApplicationRepo: true,
   runInTransaction: true,
   runOperatorGrant: true,
+  runOperatorApproval: true,
   photosPublicUrl: true,
   googleAuthRuntime: true,
 }

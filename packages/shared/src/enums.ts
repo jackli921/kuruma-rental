@@ -122,6 +122,15 @@ export type OperatorRole = (typeof OPERATOR_ROLES)[number]
 export const OPERATOR_MEMBERSHIP_STATUSES = ['ACTIVE', 'REVOKED'] as const
 export type OperatorMembershipStatus = (typeof OPERATOR_MEMBERSHIP_STATUSES)[number]
 
+export const OPERATOR_APPLICATION_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const
+export type OperatorApplicationStatus = (typeof OPERATOR_APPLICATION_STATUSES)[number]
+
+export const OPERATOR_APPLICATION_FLEET_SIZES = ['1-5', '6-20', '21-50', '50+'] as const
+export type OperatorApplicationFleetSize = (typeof OPERATOR_APPLICATION_FLEET_SIZES)[number]
+
+export const OPERATOR_APPLICATION_BUSINESS_TYPES = ['INDIVIDUAL', 'COMPANY'] as const
+export type OperatorApplicationBusinessType = (typeof OPERATOR_APPLICATION_BUSINESS_TYPES)[number]
+
 // #904: REVOKED appended last — ALTER TYPE ADD VALUE appends positionally and
 // enums.test.ts pins order contractually. An owner-revoked invite is terminal,
 // distinct from ACCEPTED; listByOperator (PENDING-only) drops it off the team page.

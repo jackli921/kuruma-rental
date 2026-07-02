@@ -299,6 +299,10 @@ export interface ProviderInviteRepository {
    *  so a tenant can only revoke its own actionable invites; returns the updated row,
    *  or undefined when nothing matched (already accepted/revoked, or another tenant's). */
   revoke(id: string, operatorId: string): Promise<ProviderInvite | undefined>
+  /** #1277 C1 guard: the live (PENDING) invite for an email, if any — across ALL
+   *  operators (an email already invited anywhere blocks a fresh operator grant).
+   *  Returns undefined when none is live. */
+  findPendingByEmail(email: string): Promise<ProviderInvite | undefined>
 }
 
 // #521. `findActiveByUserId` is served by the partial-unique-active index
@@ -708,8 +712,10 @@ export type {
 // live in ./types-transactions to keep this barrel under the file-size cap
 // (#978); re-exported here so callers' imports don't change.
 export type {
+  OperatorApprovalRepos,
   OperatorGrantRepos,
   RunInTransaction,
+  RunOperatorApproval,
   RunOperatorGrant,
   TransactionRepos,
 } from './types-transactions'
@@ -779,3 +785,7 @@ export type {
   OperatorOverview,
   OverviewRepository,
 } from './types-overview'
+
+// #1277: self-serve operator registration data access lives in its own module
+// to keep this barrel under the file-size cap; re-exported for callers.
+export type { OperatorApplicationRepository } from './types-operator-application'

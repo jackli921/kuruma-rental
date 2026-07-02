@@ -1,5 +1,6 @@
 import type { FleetFilterState } from '@/lib/fleet-filters'
 import { formatVehicleRate } from '@/lib/format'
+import type { OperatorScope } from '@/vite/operator-context'
 import { OperatorFleetView } from '@/vite/operator-fleet/OperatorFleetView'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -91,15 +92,25 @@ function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVe
   }
 }
 
+// The operator-context scope the route derives (picked id, write gate, all-mode
+// labeling). Defaults to a writable, single-operator scope (canWrite, no labels)
+// — the read-only / all-mode cases override it per test.
+const writableScope: OperatorScope = {
+  pickedOperatorId: undefined,
+  canWrite: true,
+  showOperator: false,
+  operatorNameById: new Map(),
+}
+
 function renderView(
   vehicles: OperatorFleetVehicle[],
   classOptions: ReadonlyArray<{ id: string; name: string }> = [],
-  canWrite = true,
+  scope: OperatorScope = writableScope,
   initialFilters: FleetFilterState = {},
 ) {
   // The route prefetches class options and passes them down as a prop, so the
   // grid groups synchronously with no fetch of its own — the test mirrors that
-  // by handing classOptions straight to the view. canWrite defaults to true (the
+  // by handing classOptions straight to the view. scope defaults to writable (the
   // operator case); the read-only bypass case is covered by OperatorFleetRoute.test.
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -108,7 +119,7 @@ function renderView(
         <OperatorFleetView
           vehicles={vehicles}
           classOptions={classOptions}
-          canWrite={canWrite}
+          scope={scope}
           locale="en"
           initialFilters={initialFilters}
         />
@@ -296,7 +307,7 @@ describe('OperatorFleetView', () => {
     renderView(
       [vehicle({ id: 'a', name: 'Toyota Aqua', classId: 'c1' })],
       [{ id: 'c1', name: 'Compact' }],
-      false,
+      { ...writableScope, canWrite: false },
     )
 
     await user.click(screen.getByRole('button', { name: en.gridView }))
@@ -320,7 +331,7 @@ describe('OperatorFleetView', () => {
         }),
       ],
       [],
-      true,
+      writableScope,
       { expiringSoon: true },
     )
     expect(screen.getByText('Expiring Car')).toBeInTheDocument()
@@ -402,11 +413,23 @@ describe('OperatorFleetView', () => {
     renderView(
       [vehicle({ id: 'a', name: 'Aqua', classId: 'c1' })],
       [{ id: 'c1', name: 'Compact' }],
-      false,
+      { ...writableScope, canWrite: false },
     )
     await user.click(screen.getByRole('button', { name: en.gridView }))
 
     expect(screen.queryByRole('checkbox', { name: bulk.selectAll })).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: 'Select all Compact' })).not.toBeInTheDocument()
+  })
+
+  it('labels each row with its operator in all-mode (#1264)', () => {
+    const scope: OperatorScope = {
+      pickedOperatorId: undefined,
+      canWrite: false,
+      showOperator: true,
+      operatorNameById: new Map([['op-1', 'Sakura Mobility']]),
+    }
+    // Default row (table) view: the badge renders next to the vehicle name.
+    renderView([vehicle({ id: 'a', name: 'Car A', operatorId: 'op-1' })], [], scope)
+    expect(screen.getByText('Sakura Mobility')).toBeInTheDocument()
   })
 })

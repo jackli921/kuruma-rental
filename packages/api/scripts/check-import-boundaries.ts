@@ -104,13 +104,16 @@ export function checkContent(rel: string, content: string): Violation[] {
   // nothing else may. Keep these the only entries allowed to wire concretes.
   const isCompositionRoot = rel === 'index.ts' || rel.startsWith('composition/')
   const isHelpers = rel === 'routes/helpers.ts'
-  // The two transaction factories are the one sanctioned place outside the
-  // composition root to construct concrete repos. They must rebind every repo to
-  // the per-call neon-serverless tx connection (#493), which index.ts cannot do
-  // per call. Everything else under repositories/drizzle stays construction-free (#721).
+  // The transaction factories are the one sanctioned place outside the composition
+  // root to construct concrete repos. They must rebind every repo to the per-call
+  // neon-serverless tx connection (#493), which index.ts cannot do per call. Each
+  // is individually vetted (not a *-transaction.ts glob) so the sanction stays a
+  // deliberate allowlist. Everything else under repositories/drizzle stays
+  // construction-free (#721).
   const isTxFactory =
     rel === 'repositories/drizzle/transaction.ts' ||
-    rel === 'repositories/drizzle/operator-grant-transaction.ts'
+    rel === 'repositories/drizzle/operator-grant-transaction.ts' ||
+    rel === 'repositories/drizzle/operator-approval-transaction.ts'
   // Routes→repositories carve-out (#692): the lone sanctioned thin-read tier.
   // Rationale and the route set live at SANCTIONED_THIN_READ_ROUTES (top).
   const isSanctionedThinReadRoute = SANCTIONED_THIN_READ_ROUTES.has(rel)

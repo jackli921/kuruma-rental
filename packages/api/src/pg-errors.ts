@@ -109,6 +109,14 @@ export const REVIEWS_SUBJECT_CONSTRAINT = 'reviews_subject_per_booking_unique'
  */
 export const PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT = 'provider_invites_pending_email_unique'
 
+/**
+ * Partial unique index on operator_applications(contactEmail) WHERE status in
+ * ('PENDING','APPROVED') (#1277). At most one LIVE application per email; a
+ * REJECTED row frees the slot so a rejected applicant can re-apply. A 23505 on
+ * this name means a duplicate live application → translated to a 409.
+ */
+export const OPERATOR_APPLICATION_EMAIL_CONSTRAINT = 'operator_applications_live_email_unique'
+
 /** Extract the Postgres error code from an unknown thrown value, or null.
  *
  * Drizzle + postgres-js wraps the raw PostgresError inside `err.cause`,
