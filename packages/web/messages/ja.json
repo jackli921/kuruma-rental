@@ -1446,7 +1446,8 @@
       "retry": "再試行",
       "action": {
         "edit": "編集",
-        "editNamed": "{name}を編集"
+        "editNamed": "{name}を編集",
+        "create": "新規テンプレート"
       },
       "edit": {
         "title": "テンプレートを編集",
@@ -1458,6 +1459,12 @@
         "save": "保存",
         "saving": "保存中…",
         "cancel": "キャンセル"
+      },
+      "create": {
+        "title": "新規テンプレート",
+        "description": "カタログにテンプレートを追加します。英語名は必須で、キーはそこから生成されます。",
+        "submit": "作成",
+        "submitting": "作成中…"
       }
     },
     "featureFlags": {

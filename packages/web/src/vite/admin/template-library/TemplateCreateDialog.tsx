@@ -8,34 +8,33 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useSession } from '@/vite/session'
-import type { TemplateAdminRow } from '@kuruma/shared/types/template-admin'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 import { TemplateFormFields } from './TemplateFormFields'
-import { TEMPLATE_LIBRARY_QUERY_KEY, type TemplateCatalog, updateTemplate } from './api'
-import { type TemplateForm, buildTemplatePatch, formFromRow } from './patch-form'
+import { TEMPLATE_LIBRARY_QUERY_KEY, type TemplateCatalog, createTemplate } from './api'
+import { type TemplateForm, buildTemplateCreate, emptyTemplateForm } from './patch-form'
 
-interface TemplateEditDialogProps {
+interface TemplateCreateDialogProps {
   readonly catalog: TemplateCatalog
-  readonly row: TemplateAdminRow | null
+  readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
 }
 
 /**
- * Curate one template (#1319 slice 2). Self-contained like the operator dialogs:
- * owns the CSRF token, the mutation, and the cache invalidation. A single Save
- * both translates the name/description bundles AND promotes/archives via the
- * status select — promoting a backfill-minted ARCHIVED, en-only row is: add ja/zh,
- * switch status to Active, Save. Keyed by row so the form resets per template.
+ * Mint a new template into the active catalog (#1319 slice 3). Self-contained
+ * like {@link TemplateEditDialog}: owns the CSRF token, the mutation, and the
+ * cache invalidation. Reuses {@link TemplateFormFields} so create + edit share
+ * one field layout. `key`ing the inner form by catalog + open resets it between
+ * opens; the server derives the `key` and 409s a duplicate (surfaced inline).
  */
-export function TemplateEditDialog({ catalog, row, onOpenChange }: TemplateEditDialogProps) {
+export function TemplateCreateDialog({ catalog, open, onOpenChange }: TemplateCreateDialogProps) {
   const t = useTranslations('admin.templateLibrary')
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
 
   const { mutate, isPending, error } = useMutation({
-    mutationFn: updateTemplate,
+    mutationFn: createTemplate,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: TEMPLATE_LIBRARY_QUERY_KEY })
       onOpenChange(false)
@@ -43,27 +42,27 @@ export function TemplateEditDialog({ catalog, row, onOpenChange }: TemplateEditD
   })
 
   return (
-    <Dialog open={row !== null} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('edit.title')}</DialogTitle>
-          <DialogDescription>{t('edit.description')}</DialogDescription>
+          <DialogTitle>{t('create.title')}</DialogTitle>
+          <DialogDescription>{t('create.description')}</DialogDescription>
         </DialogHeader>
         {error && (
           <p className="px-1 text-destructive text-sm">
             {error instanceof Error ? error.message : String(error)}
           </p>
         )}
-        {row && (
-          <EditForm
-            key={row.id}
+        {open && (
+          <CreateForm
+            key={catalog}
             t={t}
-            row={row}
             isSubmitting={isPending}
             onCancel={() => onOpenChange(false)}
-            onSubmit={(form) =>
-              mutate({ catalog, id: row.id, patch: buildTemplatePatch(form), csrfToken })
-            }
+            onSubmit={(form) => {
+              const body = buildTemplateCreate(form)
+              if (body) mutate({ catalog, body, csrfToken })
+            }}
           />
         )}
       </DialogContent>
@@ -71,20 +70,18 @@ export function TemplateEditDialog({ catalog, row, onOpenChange }: TemplateEditD
   )
 }
 
-function EditForm({
+function CreateForm({
   t,
-  row,
   isSubmitting,
   onCancel,
   onSubmit,
 }: {
   readonly t: (key: string) => string
-  readonly row: TemplateAdminRow
   readonly isSubmitting: boolean
   readonly onCancel: () => void
   readonly onSubmit: (form: TemplateForm) => void
 }) {
-  const [form, setForm] = useState<TemplateForm>(() => formFromRow(row))
+  const [form, setForm] = useState<TemplateForm>(() => emptyTemplateForm())
   const nameMissing = form.name.en.trim() === ''
 
   return (
@@ -104,7 +101,7 @@ function EditForm({
           {t('edit.cancel')}
         </Button>
         <Button type="submit" disabled={isSubmitting || nameMissing}>
-          {isSubmitting ? t('edit.saving') : t('edit.save')}
+          {isSubmitting ? t('create.submitting') : t('create.submit')}
         </Button>
       </DialogFooter>
     </form>

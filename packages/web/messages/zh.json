@@ -1446,7 +1446,8 @@
       "retry": "重试",
       "action": {
         "edit": "编辑",
-        "editNamed": "编辑{name}"
+        "editNamed": "编辑{name}",
+        "create": "新建模板"
       },
       "edit": {
         "title": "编辑模板",
@@ -1458,6 +1459,12 @@
         "save": "保存",
         "saving": "保存中…",
         "cancel": "取消"
+      },
+      "create": {
+        "title": "新建模板",
+        "description": "向目录添加模板。英文名称为必填项，键将据此生成。",
+        "submit": "创建",
+        "submitting": "创建中…"
       }
     },
     "featureFlags": {

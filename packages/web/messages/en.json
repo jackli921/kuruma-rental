@@ -1446,7 +1446,8 @@
       "retry": "Retry",
       "action": {
         "edit": "Edit",
-        "editNamed": "Edit {name}"
+        "editNamed": "Edit {name}",
+        "create": "New template"
       },
       "edit": {
         "title": "Edit template",
@@ -1458,6 +1459,12 @@
         "save": "Save",
         "saving": "Saving…",
         "cancel": "Cancel"
+      },
+      "create": {
+        "title": "New template",
+        "description": "Add a template to the catalog. The English name is required; the key is generated from it.",
+        "submit": "Create",
+        "submitting": "Creating…"
       }
     },
     "featureFlags": {

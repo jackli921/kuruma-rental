@@ -56,3 +56,20 @@ export const templatePatchSchema = z
   })
 
 export type TemplatePatch = z.infer<typeof templatePatchSchema>
+
+/**
+ * `POST /admin/templates/{add-ons,insurance}` body (#1319 slice 3). Unlike the
+ * patch, `name` is REQUIRED (a new template must carry its en fallback) and the
+ * client never sends `key` — the service derives it from `slugify(name.en)` so a
+ * seed key and an admin-created key follow the same rule (a duplicate key is a
+ * 409, the same seal the DB's `*_templates_key_unique` enforces). `description`
+ * defaults to null (no description) and `status` to ACTIVE (an admin curates
+ * intentionally; the ARCHIVED rows come from the backfill, not this path).
+ */
+export const templateCreateSchema = z.object({
+  name: localizedTextSchema,
+  description: localizedTextSchema.nullable().default(null),
+  status: z.enum(CATALOG_TEMPLATE_STATUSES).default('ACTIVE'),
+})
+
+export type TemplateCreate = z.infer<typeof templateCreateSchema>
