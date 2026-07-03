@@ -32,3 +32,24 @@ export const templateLibraryResponseSchema = z.object({
 })
 
 export type TemplateLibraryResponse = z.infer<typeof templateLibraryResponseSchema>
+
+/**
+ * `PATCH /admin/templates/{add-ons,insurance}/:id` body (#1319 slice 2). One
+ * partial covers BOTH admin write intents: translate/curate (`name` /
+ * `description` bundles) and promote/archive (`status`) — promote is just
+ * `{ status: 'ACTIVE' }` on a backfill-minted ARCHIVED row. Every field optional,
+ * but `.refine` rejects an empty body so a no-op PATCH is a 400, not a silent
+ * write. `name` keeps the en-required `localizedTextSchema` invariant (a template
+ * must always carry its fallback); `description` is nullable to clear it.
+ */
+export const templatePatchSchema = z
+  .object({
+    name: localizedTextSchema.optional(),
+    description: localizedTextSchema.nullable().optional(),
+    status: z.enum(CATALOG_TEMPLATE_STATUSES).optional(),
+  })
+  .refine((patch) => Object.values(patch).some((v) => v !== undefined), {
+    message: 'at least one of name, description, status is required',
+  })
+
+export type TemplatePatch = z.infer<typeof templatePatchSchema>

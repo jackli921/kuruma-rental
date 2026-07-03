@@ -1409,11 +1409,27 @@
       "colKey": "キー",
       "colStatus": "ステータス",
       "colTranslations": "翻訳",
+      "colActions": "操作",
       "active": "有効",
       "archived": "アーカイブ済み",
       "empty": "このカタログにはまだテンプレートがありません。",
       "loadError": "テンプレートライブラリを読み込めませんでした。",
-      "retry": "再試行"
+      "retry": "再試行",
+      "action": {
+        "edit": "編集",
+        "editNamed": "{name}を編集"
+      },
+      "edit": {
+        "title": "テンプレートを編集",
+        "description": "各言語を翻訳してからステータスを設定します。バックフィルで作成されたテンプレートは、有効に切り替えると公開されます。",
+        "nameSection": "名称",
+        "descriptionSection": "説明",
+        "statusLabel": "ステータス",
+        "nameEnRequired": "英語名は必須です。",
+        "save": "保存",
+        "saving": "保存中…",
+        "cancel": "キャンセル"
+      }
     },
     "featureFlags": {
       "title": "機能フラグ",

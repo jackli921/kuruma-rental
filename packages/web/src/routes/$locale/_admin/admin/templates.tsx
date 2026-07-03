@@ -4,10 +4,10 @@ import { useQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
-// Platform-admin template library (#1319), slice 1: read-only. The `_admin` parent
-// layout already gates on platform-admin membership, so this owns only the data —
-// prefetch both catalogs and render the tabbed table. Curation (translate, promote,
-// merge) lands in later slices.
+// Platform-admin template library (#1319). The `_admin` parent layout already
+// gates on platform-admin membership, so this owns only the data — prefetch both
+// catalogs and render the tabbed table. Slice 2 adds per-row translate + promote
+// (via the view's edit dialog); create + merge synonyms lands in slice 3.
 export const Route = createFileRoute('/$locale/_admin/admin/templates')({
   loader: ({ context }) => context.queryClient.ensureQueryData(templateLibraryQueryOptions()),
   pendingComponent: PageSkeleton,

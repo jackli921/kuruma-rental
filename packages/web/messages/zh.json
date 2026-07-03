@@ -1409,11 +1409,27 @@
       "colKey": "键",
       "colStatus": "状态",
       "colTranslations": "翻译",
+      "colActions": "操作",
       "active": "启用",
       "archived": "已归档",
       "empty": "此目录中暂无模板。",
       "loadError": "无法加载模板库。",
-      "retry": "重试"
+      "retry": "重试",
+      "action": {
+        "edit": "编辑",
+        "editNamed": "编辑{name}"
+      },
+      "edit": {
+        "title": "编辑模板",
+        "description": "先翻译各语言，再设置状态。将回填生成的模板切换为启用即可发布。",
+        "nameSection": "名称",
+        "descriptionSection": "说明",
+        "statusLabel": "状态",
+        "nameEnRequired": "英文名称为必填项。",
+        "save": "保存",
+        "saving": "保存中…",
+        "cancel": "取消"
+      }
     },
     "featureFlags": {
       "title": "功能开关",
