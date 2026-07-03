@@ -5,9 +5,10 @@ import {
   type PaymentAnomalyStatusFilter,
   paymentAnomaliesQueryOptions,
 } from '@/vite/admin/anomalies/api'
+import { RouteRetryError } from '@/vite/route-error'
 import type { PaymentAnomalyView } from '@kuruma/shared/types/payment-anomaly'
 import { useQuery } from '@tanstack/react-query'
-import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
+import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 
@@ -71,17 +72,11 @@ function AnomaliesRoute() {
 
 function AnomaliesError(_props: ErrorComponentProps) {
   const t = useTranslations('admin.anomalies')
-  const router = useRouter()
   return (
-    <div className="mx-auto max-w-3xl px-4 py-20 text-center sm:px-6 lg:px-8">
-      <p className="text-lg text-muted-foreground">{t('loadError')}</p>
-      <button
-        type="button"
-        onClick={() => router.invalidate()}
-        className="mt-4 inline-flex items-center rounded-lg border border-border px-4 py-2 font-medium text-sm hover:bg-muted/50"
-      >
-        {t('retry')}
-      </button>
-    </div>
+    <RouteRetryError
+      message={t('loadError')}
+      retryLabel={t('retry')}
+      className="mx-auto max-w-3xl px-4 py-20 text-center sm:px-6 lg:px-8"
+    />
   )
 }
