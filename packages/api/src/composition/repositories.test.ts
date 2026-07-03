@@ -52,6 +52,7 @@ const EXPECTED_KEY_MAP: Record<keyof Repos, true> = {
   insuranceOptionRepo: true,
   addOnRepo: true,
   addOnTemplateRepo: true,
+  insuranceTemplateRepo: true,
   feeScheduleRepo: true,
   classRatePlanRepo: true,
   notificationLogRepo: true,

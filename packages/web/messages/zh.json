@@ -1365,6 +1365,7 @@
       "governance": "同意治理",
       "customers": "客户",
       "operators": "运营商",
+      "templates": "模板库",
       "featureFlags": "功能开关",
       "backToSite": "返回网站",
       "applications": "申请"
@@ -1395,6 +1396,23 @@
       "alreadyReviewed": "该申请已被审核，或该邮箱已归属某运营商。",
       "approveFailed": "无法批准该申请，请重试。",
       "loadError": "无法加载申请队列。",
+      "retry": "重试"
+    },
+    "templateLibrary": {
+      "title": "模板库",
+      "subtitle": "管理所有运营商可选用的平台级附加服务和保险模板。",
+      "tab": {
+        "addOns": "附加服务 ({count})",
+        "insurance": "保险 ({count})"
+      },
+      "colName": "名称",
+      "colKey": "键",
+      "colStatus": "状态",
+      "colTranslations": "翻译",
+      "active": "启用",
+      "archived": "已归档",
+      "empty": "此目录中暂无模板。",
+      "loadError": "无法加载模板库。",
       "retry": "重试"
     },
     "featureFlags": {
