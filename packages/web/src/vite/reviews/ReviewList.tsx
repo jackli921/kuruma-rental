@@ -1,0 +1,60 @@
+import { useFeatureFlag } from '@/vite/config'
+import { StarDisplay } from '@/vite/reviews/StarDisplay'
+import type { PublicReviewDto } from '@/vite/reviews/api'
+import { useFormatter, useTranslations } from 'use-intl'
+
+interface ReviewListProps {
+  readonly reviews: readonly PublicReviewDto[]
+}
+
+// Public review list (review-display slice, #1067). Flag-gated like RatingBadge so no
+// review text surfaces until reviews go live. Reviewer identity is intentionally
+// anonymous ("Verified renter") — the epic non-goal forbids public renter profiles.
+export function ReviewList({ reviews }: ReviewListProps) {
+  const t = useTranslations('reviews.list')
+  const tDim = useTranslations('reviews.form.dimension')
+  const format = useFormatter()
+  const reviewsEnabled = useFeatureFlag('REVIEWS')
+
+  if (!reviewsEnabled) return null
+
+  return (
+    <section aria-labelledby="reviews-heading" className="mt-12">
+      <h2 id="reviews-heading" className="mb-4 text-xl font-semibold tracking-tight">
+        {t('heading')}
+      </h2>
+      {reviews.length === 0 ? (
+        <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
+      ) : (
+        <ul className="space-y-6">
+          {reviews.map((r) => (
+            <li key={r.id} className="border-b pb-6 last:border-b-0">
+              <div className="flex items-center justify-between gap-3">
+                <StarDisplay value={r.overall} label={t('overallAria', { n: r.overall })} />
+                <span className="text-sm text-muted-foreground">
+                  {format.dateTime(new Date(r.publishedAt), {
+                    year: 'numeric',
+                    month: 'short',
+                    timeZone: 'Asia/Tokyo',
+                  })}
+                </span>
+              </div>
+              <p className="mt-1 text-sm font-medium text-muted-foreground">{t('reviewer')}</p>
+              {r.comment ? <p className="mt-2 whitespace-pre-line">{r.comment}</p> : null}
+              {Object.keys(r.subRatings).length > 0 ? (
+                <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                  {Object.entries(r.subRatings).map(([dim, stars]) => (
+                    <div key={dim} className="flex items-center gap-2">
+                      <dt className="text-muted-foreground">{tDim(dim)}</dt>
+                      <dd>{t('dimensionValue', { n: stars })}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}

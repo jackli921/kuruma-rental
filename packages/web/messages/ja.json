@@ -1875,6 +1875,13 @@
       "rating": "★ {avg}({count}件)",
       "noReviews": "レビューはまだありません",
       "ratingAria": "{avg}つ星、{count}件のレビュー"
+    },
+    "list": {
+      "heading": "レビュー",
+      "empty": "まだレビューはありません",
+      "reviewer": "認証済みの利用者",
+      "overallAria": "5つ星中{n}つ星",
+      "dimensionValue": "{n}/5"
     }
   },
   "currency": {
