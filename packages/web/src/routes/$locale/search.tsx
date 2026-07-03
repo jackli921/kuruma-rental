@@ -1,5 +1,6 @@
 import { resolveRegionAnchor, resolveSlugToRegionId } from '@/vite/regions/region-lookup'
 import { regionsQueryOptions } from '@/vite/regions/regions-api'
+import { RouteRetryError } from '@/vite/route-error'
 import { SearchMap } from '@/vite/search/SearchMap'
 import { fetchSearchResults } from '@/vite/search/api'
 import { isSearchMapEnabled } from '@/vite/search/flags'
@@ -14,12 +15,7 @@ import {
 } from '@/vite/storefronts/params'
 import { type SortOption, parsePriceMax, parseSort } from '@/vite/storefronts/sort'
 import { useQuery } from '@tanstack/react-query'
-import {
-  type ErrorComponentProps,
-  createFileRoute,
-  redirect,
-  useRouter,
-} from '@tanstack/react-router'
+import { type ErrorComponentProps, createFileRoute, redirect } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
 // All optional (`?: T | undefined`): callers (StorefrontCard, the search form)
@@ -124,19 +120,13 @@ export const Route = createFileRoute('/$locale/search')({
 // as every other loader-bearing route (#841 review).
 function SearchError(_props: ErrorComponentProps) {
   const t = useTranslations('search')
-  const router = useRouter()
   return (
     <main className="flex-1 px-4 py-20 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl text-center">
-        <p className="text-lg text-muted-foreground">{t('loadError')}</p>
-        <button
-          type="button"
-          onClick={() => router.invalidate()}
-          className="mt-4 inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted/50"
-        >
-          {t('retry')}
-        </button>
-      </div>
+      <RouteRetryError
+        message={t('loadError')}
+        retryLabel={t('retry')}
+        className="mx-auto max-w-7xl text-center"
+      />
     </main>
   )
 }
