@@ -110,7 +110,7 @@ describe('OperatorTeamService.inviteStaff', () => {
 
   it('refuses a caller with no operatorId (e.g. PLATFORM_ADMIN) — never mints against undefined', async () => {
     await expect(service.inviteStaff(ADMIN_CTX, { email: 'new@x.com' })).rejects.toThrow(
-      ForbiddenError,
+      OperatorRequiredError,
     )
   })
 })
@@ -238,9 +238,9 @@ describe('OperatorTeamService.revokeInvite', () => {
     expect(await service.listInvites(OWNER_CTX)).toHaveLength(1)
   })
 
-  it('refuses a caller with no operatorId (403)', async () => {
+  it('refuses a caller with no operatorId (422)', async () => {
     const id = await seedInvite('op_1', 'h_mine')
-    await expect(service.revokeInvite(ADMIN_CTX, id)).rejects.toThrow(ForbiddenError)
+    await expect(service.revokeInvite(ADMIN_CTX, id)).rejects.toThrow(OperatorRequiredError)
   })
 
   it('cannot revoke another tenant invite (404) — the target stays pending', async () => {
@@ -317,9 +317,11 @@ describe('OperatorTeamService.deactivateMember', () => {
     expect(await projectionOf('u_staffm')).toEqual({ role: 'OPERATOR_STAFF', operatorId: 'op_1' })
   })
 
-  it('refuses a caller with no operatorId (e.g. PLATFORM_ADMIN) (403)', async () => {
+  it('refuses a caller with no operatorId (e.g. PLATFORM_ADMIN) (422)', async () => {
     const staffId = await seedMember('u_staffm', 'OPERATOR_STAFF')
-    await expect(service.deactivateMember(ADMIN_CTX, staffId)).rejects.toThrow(ForbiddenError)
+    await expect(service.deactivateMember(ADMIN_CTX, staffId)).rejects.toThrow(
+      OperatorRequiredError,
+    )
   })
 
   it('cannot deactivate another tenant member (404) — target stays active', async () => {
@@ -350,5 +352,66 @@ describe('OperatorTeamService.deactivateMember', () => {
 
     expect((await service.listMembers(OWNER_CTX)).map((m) => m.userId)).toEqual(['u_owner'])
     expect(await projectionOf('u_owner2')).toEqual({ role: 'RENTER', operatorId: null })
+  })
+})
+
+describe('OperatorTeamService writes as a picked operator (#1230)', () => {
+  it('inviteStaff: a PLATFORM_ADMIN mints under the PICKED operator, stamping the admin as inviter', async () => {
+    await service.inviteStaff(ADMIN_CTX, { email: 'new@op2.com' }, 'op_2')
+    const stored = await inviteRepo.listByOperator('op_2')
+    expect(stored).toHaveLength(1)
+    expect(stored[0]?.operatorId).toBe('op_2')
+    expect(stored[0]?.invitedByUserId).toBe('u_admin')
+  })
+
+  it('revokeInvite: a PLATFORM_ADMIN revokes within the picked tenant and cannot touch another', async () => {
+    const mine = await inviteRepo.create({
+      email: 'target@op2.com',
+      operatorId: 'op_2',
+      role: 'OPERATOR_STAFF',
+      tokenHash: 'h_op2',
+      status: 'PENDING',
+      expiresAt: FUTURE,
+      invitedByUserId: 'u_owner',
+      acceptedByUserId: null,
+    })
+    await inviteRepo.create({
+      email: 'safe@op1.com',
+      operatorId: 'op_1',
+      role: 'OPERATOR_STAFF',
+      tokenHash: 'h_op1',
+      status: 'PENDING',
+      expiresAt: FUTURE,
+      invitedByUserId: 'u_owner',
+      acceptedByUserId: null,
+    })
+    await service.revokeInvite(ADMIN_CTX, mine.id, 'op_2')
+    expect(await inviteRepo.listByOperator('op_2')).toHaveLength(0)
+    // the picked scope cannot reach op_1 — its invite stays pending
+    expect(await inviteRepo.listByOperator('op_1')).toHaveLength(1)
+  })
+
+  it('deactivateMember: a PLATFORM_ADMIN deactivates within the picked tenant and the audit names the picked operator + admin actor', async () => {
+    await membershipRepo.create({
+      userId: 'u_owner',
+      operatorId: 'op_2',
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+    })
+    const staff = await membershipRepo.create({
+      userId: 'u_staffm',
+      operatorId: 'op_2',
+      role: 'OPERATOR_STAFF',
+      status: 'ACTIVE',
+    })
+    await service.deactivateMember(ADMIN_CTX, staff.id, 'op_2')
+    expect(recordedAudits).toEqual([
+      {
+        type: 'OPERATOR_MEMBER_DEACTIVATED',
+        operatorId: 'op_2',
+        actorUserId: 'u_admin',
+        targetUserId: 'u_staffm',
+      },
+    ])
   })
 })

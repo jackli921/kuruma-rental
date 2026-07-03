@@ -1,11 +1,6 @@
 import type { OperatorInviteData, OperatorMemberData } from '@kuruma/shared/types/operator-team'
 import type { CallerContext } from '../auth/context'
-import {
-  ConflictError,
-  ForbiddenError,
-  NotFoundError,
-  requireOperatorOwnerWrite,
-} from '../auth/guards'
+import { ConflictError, NotFoundError, requireOperatorOwnerWrite } from '../auth/guards'
 import type {
   OperatorMembershipRepository,
   ProviderInviteRepository,
@@ -50,9 +45,13 @@ export class OperatorTeamService {
     private readonly recordAudit: RecordOperatorMemberDeactivatedAudit,
   ) {}
 
-  async inviteStaff(ctx: CallerContext, input: { email: string }): Promise<CreatedInvite> {
+  async inviteStaff(
+    ctx: CallerContext,
+    input: { email: string },
+    inputOperatorId?: string,
+  ): Promise<CreatedInvite> {
     requireOperatorOwnerWrite(ctx)
-    const operatorId = this.requireOwnOperator(ctx)
+    const operatorId = resolveTeamOperatorId(ctx, inputOperatorId)
     return this.inviteService.createInvite(
       { email: input.email, operatorId, role: 'OPERATOR_STAFF' },
       ctx.userId,
@@ -82,9 +81,9 @@ export class OperatorTeamService {
    * unknown id reads as `undefined` from the scoped repo and surfaces as a 404 —
    * never a 403 that would confirm the invite exists elsewhere.
    */
-  async revokeInvite(ctx: CallerContext, id: string): Promise<void> {
+  async revokeInvite(ctx: CallerContext, id: string, inputOperatorId?: string): Promise<void> {
     requireOperatorOwnerWrite(ctx)
-    const operatorId = this.requireOwnOperator(ctx)
+    const operatorId = resolveTeamOperatorId(ctx, inputOperatorId)
     const revoked = await this.invites.revoke(id, operatorId)
     if (!revoked) throw new NotFoundError('invite not found')
   }
@@ -105,9 +104,9 @@ export class OperatorTeamService {
    * member keeps access until their token expires; see the #904 session-revocation
    * follow-up.
    */
-  async deactivateMember(ctx: CallerContext, id: string): Promise<void> {
+  async deactivateMember(ctx: CallerContext, id: string, inputOperatorId?: string): Promise<void> {
     requireOperatorOwnerWrite(ctx)
-    const operatorId = this.requireOwnOperator(ctx)
+    const operatorId = resolveTeamOperatorId(ctx, inputOperatorId)
     const members = await this.memberships.findActiveByOperator(operatorId)
     const target = members.find((m) => m.id === id)
     if (!target) throw new NotFoundError('member not found')
@@ -129,17 +128,6 @@ export class OperatorTeamService {
         targetUserId: target.userId,
       })
     }
-  }
-
-  /**
-   * `requireOperatorScope` only fails OPERATOR_* roles missing an operatorId; a
-   * PLATFORM_ADMIN (not an OPERATOR_* role) slips through with no tenant. The
-   * `/me` surface is operator-only, so seal the absent tenant here rather than
-   * letting it reach the repo as `listByOperator(undefined)`.
-   */
-  private requireOwnOperator(ctx: CallerContext): string {
-    if (!ctx.operatorId) throw new ForbiddenError('operator scope required')
-    return ctx.operatorId
   }
 }
 
