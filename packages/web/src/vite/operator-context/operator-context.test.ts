@@ -96,7 +96,12 @@ describe('useIsOperatorContextRoute', () => {
   })
 
   it('is false on an unscoped business route that does not honor ?operator', () => {
-    h.matches = [{ routeId: '/$locale/_business' }, { routeId: '/$locale/_business/manage/team' }]
+    // The fleet by-id detail is intentionally NOT registered (#1264) — a stable
+    // example of a business route the picker does not honor.
+    h.matches = [
+      { routeId: '/$locale/_business' },
+      { routeId: '/$locale/_business/manage/fleet/$vehicleId' },
+    ]
     const { result } = renderHook(() => useIsOperatorContextRoute())
     expect(result.current).toBe(false)
   })
@@ -106,6 +111,12 @@ describe('useIsOperatorContextRoute', () => {
       { routeId: '/$locale/_business' },
       { routeId: '/$locale/_business/manage/settings' },
     ]
+    const { result } = renderHook(() => useIsOperatorContextRoute())
+    expect(result.current).toBe(true)
+  })
+
+  it('is true on the team route (slice 6 honors ?operator, #1230)', () => {
+    h.matches = [{ routeId: '/$locale/_business' }, { routeId: '/$locale/_business/manage/team' }]
     const { result } = renderHook(() => useIsOperatorContextRoute())
     expect(result.current).toBe(true)
   })
