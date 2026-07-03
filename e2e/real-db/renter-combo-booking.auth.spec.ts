@@ -64,6 +64,25 @@ const WINDOW_END = new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth() + 2
 const FROM = `${isoDate(WINDOW_START)}T10:00`
 const TO = `${isoDate(WINDOW_END)}T10:00`
 
+// Acceptance #2: a combo is "priced off the class rate plan (no per-vehicle rate)".
+// The Kei plan for Namba (crp_best_kei_namba) charges ¥6,000/day
+// (seed-data/class-rate-plans.ts). The window above is 15th 10:00 -> 17th 10:00 JST
+// = exactly 48h, and combos bill in whole rental days (rentalDays = ceil(48h/24h) = 2,
+// lib/pricing.ts booking-creation.ts:577). No insurance/add-on is selected in the
+// wizard below, so composeBookingTotal leaves total == base == 2 x ¥6,000 = ¥12,000.
+const CLASS_DAY_RATE_JPY = 6_000
+const RENTAL_DAYS = 2
+const EXPECTED_TOTAL_JPY = CLASS_DAY_RATE_JPY * RENTAL_DAYS
+// The exact rendered figure — mirrors lib/format.ts formatJpy (ja-JP / JPY / no minor
+// unit): "￥12,000". Deriving it via the same Intl config guarantees byte-identity with
+// what the confirmation DOM renders, so a mispricing (0 / NaN / wrong plan) can't pass.
+const yenFmt = new Intl.NumberFormat('ja-JP', {
+  style: 'currency',
+  currency: 'JPY',
+  maximumFractionDigits: 0,
+})
+const EXPECTED_TOTAL_YEN = yenFmt.format(EXPECTED_TOTAL_JPY)
+
 test.describe('renter class-combo booking journey (real DB)', () => {
   test.afterAll(cleanupFutureComboBookings)
 
@@ -90,7 +109,9 @@ test.describe('renter class-combo booking journey (real DB)', () => {
 
     await test.step('2. the store page lists this operator and its "Class deals" section', async () => {
       await expect(renter).toHaveURL(new RegExp(`/storefronts/${UUID}\\?from=.+&to=.+`))
-      await expect(renter.getByRole('heading', { name: STORE_NAME, level: 1 })).toBeVisible()
+      await expect(
+        renter.getByRole('heading', { name: STORE_NAME, level: 1, exact: true }),
+      ).toBeVisible()
       await expect(renter.getByText(OPERATOR_NAME).first()).toBeVisible()
       await expect(renter.getByRole('heading', { name: 'Class deals', level: 2 })).toBeVisible()
     })
@@ -158,6 +179,21 @@ test.describe('renter class-combo booking journey (real DB)', () => {
       // before pickup — the acceptance sentence for a floating combo booking.
       await expect(renter.getByText(CLASS_LABEL)).toBeVisible()
       await expect(renter.getByText('A specific car will be assigned before pickup.')).toBeVisible()
+
+      // Acceptance #2 — the money path. The price-breakdown <dl> (the only one on the
+      // confirmation, BookingConfirmationView.tsx) renders one <dd> per row. With no
+      // insurance/add-on selected the rows are exactly [base, total], and a combo prices
+      // off the class rate plan alone, so both read ¥12,000 (2 days x ¥6,000/day). The
+      // count-of-2 fails a stray per-vehicle rate or an unexpected insurance/add-on line;
+      // the exact-yen strings fail a mispricing (0 / NaN / wrong plan) — none ship green.
+      const priceCells = renter.locator('dl').first().locator('dd')
+      await expect(priceCells).toHaveCount(2)
+      // The base cell is the exact rendered yen (formatJpy, no trailing note).
+      await expect(priceCells.nth(0)).toHaveText(EXPECTED_TOTAL_YEN)
+      // The total cell leads with the authoritative yen; an optional indicative "≈ $x"
+      // note (#1070 multi-currency, enabled in this lane) may trail it, so match the yen
+      // as a scoped substring — the ¥ glyph anchors it, so no wrong total can satisfy it.
+      await expect(priceCells.nth(1)).toContainText(EXPECTED_TOTAL_YEN)
     })
 
     await test.step('6. operator assigns a car; the renter then sees the concrete vehicle', async () => {
