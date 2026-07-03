@@ -12,10 +12,11 @@ import {
   toCallerContext,
 } from '../middleware/auth'
 import type { InsuranceOptionFilters } from '../services/filters'
-import type { InsuranceOptionService, InsuranceOptionUpdate } from '../services/insurance-option'
+import type { InsuranceOptionService } from '../services/insurance-option'
 import type { ResolveWriteOperatorId } from '../tenancy'
 import {
   fail,
+  failResult,
   ok,
   parseArchivableFilters,
   parseBody,
@@ -82,7 +83,7 @@ export function createInsuranceOptionRoutes(
         deductibleJpy: d.deductibleJpy ?? null,
         status: 'ACTIVE',
       })
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.option, 201)
     })
     .patch('/insurance-options/:id', async (c) => {
@@ -98,9 +99,9 @@ export function createInsuranceOptionRoutes(
       const result = await service.update(
         toCallerContext(user),
         idResult.id,
-        stripUndefined(parsed.data) as InsuranceOptionUpdate,
+        stripUndefined(parsed.data),
       )
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.option)
     })
     .delete('/insurance-options/:id', async (c) => {
@@ -111,7 +112,7 @@ export function createInsuranceOptionRoutes(
       if (!idResult.ok) return idResult.response
 
       const result = await service.archive(toCallerContext(user), idResult.id)
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.option)
     })
 }
