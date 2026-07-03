@@ -1,6 +1,7 @@
 import { insuranceTemplates } from '@kuruma/shared/db/schema'
 import { inArray } from 'drizzle-orm'
 import { afterAll, describe, expect, it } from 'vitest'
+import { PG_ERROR, pgErrorCode } from '../../src/pg-errors'
 import { DrizzleInsuranceTemplateRepository } from '../../src/repositories/drizzle'
 import { db } from './setup'
 
@@ -116,5 +117,48 @@ describe('DrizzleInsuranceTemplateRepository.update', () => {
   it('returns undefined for an unknown id, writing nothing', async () => {
     const repo = new DrizzleInsuranceTemplateRepository(db)
     expect(await repo.update(crypto.randomUUID(), { status: 'ACTIVE' })).toBeUndefined()
+  })
+})
+
+describe('DrizzleInsuranceTemplateRepository.create', () => {
+  const CREATE_KEY = `test_ins_create_${uniq}`
+  afterAll(async () => {
+    await db.delete(insuranceTemplates).where(inArray(insuranceTemplates.key, [CREATE_KEY]))
+  })
+
+  it('inserts a template with DB-defaulted id + timestamps, persisting the bundles', async () => {
+    const repo = new DrizzleInsuranceTemplateRepository(db)
+
+    const created = await repo.create({
+      key: CREATE_KEY,
+      name: { en: 'Premium cover', ja: 'プレミアム' },
+      description: { en: 'Zero deductible.' },
+      status: 'ACTIVE',
+    })
+
+    expect(created.id).toMatch(/[0-9a-f-]{36}/)
+    expect(created.name).toEqual({ en: 'Premium cover', ja: 'プレミアム' })
+    // Re-read proves the row landed, not just the returning() projection.
+    const reread = await repo.findById(created.id)
+    expect(reread?.key).toBe(CREATE_KEY)
+    expect(reread?.description).toEqual({ en: 'Zero deductible.' })
+  })
+
+  it('rejects a duplicate key with a real-PG 23505 that pgErrorCode reads (driver parity)', async () => {
+    const repo = new DrizzleInsuranceTemplateRepository(db)
+    const input = {
+      key: CREATE_KEY,
+      name: { en: 'Premium cover' },
+      description: null,
+      status: 'ACTIVE' as const,
+    }
+    await repo.create(input).catch(() => {}) // ensure the row exists (idempotent w/ prior test)
+
+    const err = await repo.create(input).then(
+      () => null,
+      (e: unknown) => e,
+    )
+    expect(err).not.toBeNull()
+    expect(pgErrorCode(err)).toBe(PG_ERROR.UNIQUE_VIOLATION)
   })
 })

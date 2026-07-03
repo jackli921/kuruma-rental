@@ -1,6 +1,7 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IndicativeNote } from '@/vite/currency'
+import { formatFromPriceLabel, preferredRateJpy } from '@/vite/pricing-label'
 import { type AggregateEntry, RatingBadge } from '@/vite/reviews'
 import { PhotoGallery } from '@/vite/storefronts/PhotoGallery'
 import type { AvailableVehicleData } from '@/vite/storefronts/api'
@@ -48,13 +49,8 @@ export function AvailableVehicleCard({
   const locale = useLocale()
   const transmissionLabel = vehicle.transmission === 'AUTO' ? t('auto') : t('manual')
 
-  const priceLabel =
-    vehicle.dailyRateJpy != null
-      ? t('fromDaily', { price: vehicle.dailyRateJpy.toLocaleString('en-US') })
-      : vehicle.hourlyRateJpy != null
-        ? t('fromHourly', { price: vehicle.hourlyRateJpy.toLocaleString('en-US') })
-        : t('noPrice')
-  const fromPriceJpy = vehicle.dailyRateJpy ?? vehicle.hourlyRateJpy ?? null
+  const priceLabel = formatFromPriceLabel(vehicle.dailyRateJpy, vehicle.hourlyRateJpy, t)
+  const fromPriceJpy = preferredRateJpy(vehicle.dailyRateJpy, vehicle.hourlyRateJpy)
 
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">

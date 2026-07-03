@@ -1,7 +1,11 @@
-import type { CatalogTemplateStatus } from '@kuruma/shared/enums'
+import { CATALOG_TEMPLATE_STATUSES, type CatalogTemplateStatus } from '@kuruma/shared/enums'
 import type { Locale } from '@kuruma/shared/i18n/locales'
 import type { LocalizedText } from '@kuruma/shared/i18n/localized-text'
-import type { TemplateAdminRow, TemplatePatch } from '@kuruma/shared/types/template-admin'
+import type {
+  TemplateAdminRow,
+  TemplateCreate,
+  TemplatePatch,
+} from '@kuruma/shared/types/template-admin'
 
 /** One text field per supported locale (always a string, never undefined — a
  *  controlled input's value). Absent bundle locales render as empty strings. */
@@ -11,6 +15,13 @@ export interface TemplateForm {
   name: BundleForm
   description: BundleForm
   status: CatalogTemplateStatus
+}
+
+/** Narrow a raw `<select>` value to a catalog status. The options are exactly
+ *  CATALOG_TEMPLATE_STATUSES so an unknown value never arises in practice — this
+ *  keeps the onChange handler assertion-free (type guard over `as`). */
+export function isCatalogTemplateStatus(value: string): value is CatalogTemplateStatus {
+  return (CATALOG_TEMPLATE_STATUSES as readonly string[]).includes(value)
 }
 
 function bundleToForm(bundle: LocalizedText | null): BundleForm {
@@ -24,6 +35,17 @@ export function formFromRow(row: TemplateAdminRow): TemplateForm {
     name: bundleToForm(row.name),
     description: bundleToForm(row.description),
     status: row.status,
+  }
+}
+
+/** Seed a blank create form (#1319 slice 3): every locale empty, status ACTIVE
+ *  (an admin-created template is intentionally live; the ARCHIVED rows come from
+ *  the backfill). Pure; the create dialog owns the mutable copy. */
+export function emptyTemplateForm(): TemplateForm {
+  return {
+    name: { en: '', ja: '', zh: '' },
+    description: { en: '', ja: '', zh: '' },
+    status: 'ACTIVE',
   }
 }
 
@@ -56,4 +78,17 @@ export function buildTemplatePatch(form: TemplateForm): TemplatePatch {
     description: toBundle(form.description),
     status: form.status,
   }
+}
+
+/**
+ * Build the `POST` body from the create form (#1319 slice 3). Unlike the patch,
+ * `name` is REQUIRED — so this returns null when the en name is blank (the Create
+ * button stays disabled in that state; null is the defensive belt). `description`
+ * rides as its bundle or explicit null (a blank en clears it), and `status` is
+ * whatever the form selected (defaults ACTIVE via {@link emptyTemplateForm}).
+ */
+export function buildTemplateCreate(form: TemplateForm): TemplateCreate | null {
+  const name = toBundle(form.name)
+  if (!name) return null
+  return { name, description: toBundle(form.description), status: form.status }
 }
