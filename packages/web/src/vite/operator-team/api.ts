@@ -10,10 +10,13 @@ import type { InviteStaffInput } from '@kuruma/shared/validators/provider-invite
 import { queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
 
-// #904: operator self-service team page. Cookie-based and operator-scoped
-// server-side — the client names NO operatorId, so a cross-tenant read/write is
-// impossible by construction (the API derives the tenant from the session). The
-// invite POST threads the session CSRF token (global double-submit guard).
+// #904 + #1230 slice 6: operator self-service team page, plus a platform-admin
+// picker surface. Cookie-based; the API resolves the tenant through
+// `resolveTeamOperatorId`, so an operator's own reads/writes stay self-scoped (a
+// foreign `operatorId` is ignored server-side) while a PLATFORM_ADMIN names the
+// picked tenant via `?operatorId=`. The reads fold that id into the query key so a
+// tenant switch refetches; the invite POST threads the session CSRF token (global
+// double-submit guard).
 
 // Network-seam validators pinned to the shared DTOs with `satisfies` so a field
 // drift fails to compile here, not silently at render.
@@ -39,22 +42,34 @@ const memberSchema = z.object({
 export const TEAM_INVITES_QUERY_KEY = ['operator-team', 'invites'] as const
 export const TEAM_MEMBERS_QUERY_KEY = ['operator-team', 'members'] as const
 
-export async function fetchTeamInvites(): Promise<OperatorInviteData[]> {
-  const res = await fetch(`${getApiBaseUrl()}/operators/me/invites`, { credentials: 'include' })
+export async function fetchTeamInvites(operatorId: string): Promise<OperatorInviteData[]> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/operators/me/invites?operatorId=${encodeURIComponent(operatorId)}`,
+    { credentials: 'include' },
+  )
   return unwrap(res, inviteSchema.array())
 }
 
-export async function fetchTeamMembers(): Promise<OperatorMemberData[]> {
-  const res = await fetch(`${getApiBaseUrl()}/operators/me/members`, { credentials: 'include' })
+export async function fetchTeamMembers(operatorId: string): Promise<OperatorMemberData[]> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/operators/me/members?operatorId=${encodeURIComponent(operatorId)}`,
+    { credentials: 'include' },
+  )
   return unwrap(res, memberSchema.array())
 }
 
-export function teamInvitesQueryOptions() {
-  return queryOptions({ queryKey: TEAM_INVITES_QUERY_KEY, queryFn: fetchTeamInvites })
+export function teamInvitesQueryOptions(operatorId: string) {
+  return queryOptions({
+    queryKey: [...TEAM_INVITES_QUERY_KEY, operatorId],
+    queryFn: () => fetchTeamInvites(operatorId),
+  })
 }
 
-export function teamMembersQueryOptions() {
-  return queryOptions({ queryKey: TEAM_MEMBERS_QUERY_KEY, queryFn: fetchTeamMembers })
+export function teamMembersQueryOptions(operatorId: string) {
+  return queryOptions({
+    queryKey: [...TEAM_MEMBERS_QUERY_KEY, operatorId],
+    queryFn: () => fetchTeamMembers(operatorId),
+  })
 }
 
 /** The one-time invite reveal: the URL embeds the token (never persisted in
@@ -69,17 +84,23 @@ const createdInviteSchema = z.object({
   expiresAt: z.string(),
 }) satisfies z.ZodType<CreatedInviteResult>
 
-// Cookie-authed POST — CSRF-gated, so the session token rides in the header.
+// Cookie-authed POST — CSRF-gated, so the session token rides in the header. The
+// `operatorId` names the picked tenant for a platform-admin; it is IGNORED for an
+// operator (self-scoped server-side) and can never mask an absent CSRF token.
 export async function inviteStaff(
   input: InviteStaffInput,
   csrfToken: string,
+  operatorId: string,
 ): Promise<CreatedInviteResult> {
-  const res = await fetch(`${getApiBaseUrl()}/operators/me/invites`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-    body: JSON.stringify(input),
-  })
+  const res = await fetch(
+    `${getApiBaseUrl()}/operators/me/invites?operatorId=${encodeURIComponent(operatorId)}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify(input),
+    },
+  )
   return unwrap(res, createdInviteSchema)
 }
 
@@ -89,24 +110,30 @@ export async function inviteStaff(
 const mutatedEntitySchema = z.object({ id: z.string() })
 
 // Owner-only writes. Both are cookie-authed POSTs (CSRF double-submit) to
-// `/operators/me/*` id paths — the API derives the tenant from the session, so
-// the client never names an operatorId. unwrap throws an ApiError carrying the
-// server message (404 for an unknown/foreign id, 409 for the last owner) so the
-// confirm dialog can render it.
-export async function revokeInvite(id: string, csrfToken: string): Promise<void> {
-  const res = await fetch(`${getApiBaseUrl()}/operators/me/invites/${id}/revoke`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrfToken },
-  })
+// `/operators/me/*` id paths carrying the picked `?operatorId=` (ignored for a
+// self-scoped operator). unwrap throws an ApiError carrying the server message
+// (404 for an unknown/foreign id, 409 for the last owner) so the confirm dialog
+// can render it.
+export async function revokeInvite(
+  id: string,
+  csrfToken: string,
+  operatorId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/operators/me/invites/${id}/revoke?operatorId=${encodeURIComponent(operatorId)}`,
+    { method: 'POST', credentials: 'include', headers: { 'X-CSRF-Token': csrfToken } },
+  )
   await unwrap(res, mutatedEntitySchema)
 }
 
-export async function deactivateMember(id: string, csrfToken: string): Promise<void> {
-  const res = await fetch(`${getApiBaseUrl()}/operators/me/members/${id}/deactivate`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrfToken },
-  })
+export async function deactivateMember(
+  id: string,
+  csrfToken: string,
+  operatorId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/operators/me/members/${id}/deactivate?operatorId=${encodeURIComponent(operatorId)}`,
+    { method: 'POST', credentials: 'include', headers: { 'X-CSRF-Token': csrfToken } },
+  )
   await unwrap(res, mutatedEntitySchema)
 }
