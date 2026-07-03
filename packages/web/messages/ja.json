@@ -877,6 +877,7 @@
       "deactivating": "無効化中...",
       "staffNotice": "スタッフを招待できるのはオーナーのみです。",
       "noOperatorContext": "このページは単一の事業者のチームを管理します。事業者の管理は管理ポータルを使用してください。",
+      "pickOperatorPrompt": "上部の選択メニューから事業者を選ぶと、そのチームを表示・管理できます。",
       "unknownName": "名前未設定",
       "roleOwner": "オーナー",
       "roleStaff": "スタッフ",

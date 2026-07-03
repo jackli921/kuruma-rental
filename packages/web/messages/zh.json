@@ -877,6 +877,7 @@
       "deactivating": "停用中...",
       "staffNotice": "只有所有者才能邀请员工。",
       "noOperatorContext": "此页面管理单个运营商的团队。请使用管理门户来管理运营商。",
+      "pickOperatorPrompt": "请从上方的选择器中选择一个运营商，以查看并管理其团队。",
       "unknownName": "未命名",
       "roleOwner": "所有者",
       "roleStaff": "员工",
