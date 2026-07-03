@@ -9,6 +9,7 @@ import {
   applyCrossOperatorReadScope,
   operatorReadScope,
   resolveOperatorIdForWrite,
+  resolveTeamOperatorId,
 } from '../src/tenancy'
 
 const operatorCtx = (operatorId?: string): CallerContext =>
@@ -119,5 +120,39 @@ describe('applyCrossOperatorReadScope', () => {
     expect(
       applyCrossOperatorReadScope(adminCtx, { operatorId: 'op_9', includeAll: true }, {}),
     ).toEqual({ operatorId: 'op_9' })
+  })
+})
+
+describe('resolveTeamOperatorId (#1230 slice 6)', () => {
+  const owner: CallerContext = { userId: 'u', role: 'OPERATOR_OWNER', operatorId: 'op-self' }
+  const admin: CallerContext = { userId: 'a', role: 'PLATFORM_ADMIN', bypassScope: true }
+
+  test('returns an operator its own id and IGNORES a foreign input (no cross-tenant)', () => {
+    expect(resolveTeamOperatorId(owner)).toBe('op-self')
+    expect(resolveTeamOperatorId(owner, 'op-other')).toBe('op-self')
+  })
+
+  test('fails closed for an operator that lost its operatorId claim', () => {
+    const noOp: CallerContext = { userId: 'u', role: 'OPERATOR_STAFF' }
+    expect(() => resolveTeamOperatorId(noOp, 'op-x')).toThrow(ForbiddenError)
+  })
+
+  test('returns the input id for a PLATFORM_ADMIN (honored ONLY here)', () => {
+    expect(resolveTeamOperatorId(admin, 'op-target')).toBe('op-target')
+  })
+
+  test('throws OperatorRequiredError (422) for a PLATFORM_ADMIN with no pick — no merged team view', () => {
+    expect(() => resolveTeamOperatorId(admin)).toThrow(OperatorRequiredError)
+    expect(() => resolveTeamOperatorId(admin, '')).toThrow(OperatorRequiredError)
+  })
+
+  test('denies renter / partner / legacy STAFF·ADMIN outright (403) — team is owner-tier internal', () => {
+    const renter: CallerContext = { userId: 'r', role: 'RENTER' }
+    const partner: CallerContext = { userId: 't', role: 'PARTNER', bypassScope: true }
+    const legacyStaff: CallerContext = { userId: 's', role: 'STAFF', bypassScope: false }
+    const legacyAdmin: CallerContext = { userId: 'a2', role: 'ADMIN', bypassScope: false }
+    for (const ctx of [renter, partner, legacyStaff, legacyAdmin]) {
+      expect(() => resolveTeamOperatorId(ctx, 'op-target')).toThrow(ForbiddenError)
+    }
   })
 })

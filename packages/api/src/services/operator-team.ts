@@ -1,18 +1,13 @@
 import type { OperatorInviteData, OperatorMemberData } from '@kuruma/shared/types/operator-team'
 import type { CallerContext } from '../auth/context'
-import {
-  ConflictError,
-  ForbiddenError,
-  NotFoundError,
-  requireOperatorOwnerWrite,
-  requireOperatorScope,
-} from '../auth/guards'
+import { ConflictError, NotFoundError, requireOperatorOwnerWrite } from '../auth/guards'
 import type {
   OperatorMembershipRepository,
   ProviderInviteRepository,
   UserRepository,
 } from '../repositories/types'
 import type { OperatorMembership, ProviderInvite, User } from '../stores'
+import { resolveTeamOperatorId } from '../tenancy'
 import type { CreatedInvite, ProviderInviteService } from './provider-invite'
 
 /**
@@ -35,11 +30,14 @@ export type RecordOperatorMemberDeactivatedAudit = (
 ) => void
 
 /**
- * #904: operator self-service staff management. Every method derives the tenant
- * from the caller's session (`ctx.operatorId`) — there is no foreign-id surface,
- * so a tenant can only ever see or mutate its own team. Writes are owner-only;
- * reads admit any operator member. The minted role is hard-coded OPERATOR_STAFF:
- * an owner can never escalate an invitee to OPERATOR_OWNER through this path.
+ * #904 + #1230 slice 6: operator self-service staff management, plus a
+ * platform-admin picker surface. Every method derives the tenant through
+ * {@link resolveTeamOperatorId}: an operator role is pinned to its own
+ * `ctx.operatorId` (a foreign input is IGNORED — no cross-tenant), while a
+ * PLATFORM_ADMIN supplies the target via `inputOperatorId` and a no-pick admin
+ * is refused (422). Writes are owner-tier (`requireOperatorOwnerWrite`); reads
+ * admit any operator member. The minted role is hard-coded OPERATOR_STAFF: an
+ * owner can never escalate an invitee to OPERATOR_OWNER through this path.
  */
 export class OperatorTeamService {
   constructor(
@@ -50,25 +48,30 @@ export class OperatorTeamService {
     private readonly recordAudit: RecordOperatorMemberDeactivatedAudit,
   ) {}
 
-  async inviteStaff(ctx: CallerContext, input: { email: string }): Promise<CreatedInvite> {
+  async inviteStaff(
+    ctx: CallerContext,
+    input: { email: string },
+    inputOperatorId?: string,
+  ): Promise<CreatedInvite> {
     requireOperatorOwnerWrite(ctx)
-    const operatorId = this.requireOwnOperator(ctx)
+    const operatorId = resolveTeamOperatorId(ctx, inputOperatorId)
     return this.inviteService.createInvite(
       { email: input.email, operatorId, role: 'OPERATOR_STAFF' },
       ctx.userId,
     )
   }
 
-  async listInvites(ctx: CallerContext): Promise<OperatorInviteData[]> {
-    requireOperatorScope(ctx)
-    const operatorId = this.requireOwnOperator(ctx)
+  // Reads intentionally return an empty list (never 404) for an unknown/foreign
+  // operatorId — unlike the writes. An empty roster is not an existence oracle, and
+  // only a PLATFORM_ADMIN can even reach a foreign id here; do NOT "fix" this to 404.
+  async listInvites(ctx: CallerContext, inputOperatorId?: string): Promise<OperatorInviteData[]> {
+    const operatorId = resolveTeamOperatorId(ctx, inputOperatorId)
     const rows = await this.invites.listByOperator(operatorId)
     return rows.map(toOperatorInviteData)
   }
 
-  async listMembers(ctx: CallerContext): Promise<OperatorMemberData[]> {
-    requireOperatorScope(ctx)
-    const operatorId = this.requireOwnOperator(ctx)
+  async listMembers(ctx: CallerContext, inputOperatorId?: string): Promise<OperatorMemberData[]> {
+    const operatorId = resolveTeamOperatorId(ctx, inputOperatorId)
     const memberships = await this.memberships.findActiveByOperator(operatorId)
     // One batched read, not a per-member query — the team is small but an N+1
     // loop is still the wrong shape. `findActiveByOperator` already orders the rows.
@@ -84,9 +87,9 @@ export class OperatorTeamService {
    * unknown id reads as `undefined` from the scoped repo and surfaces as a 404 —
    * never a 403 that would confirm the invite exists elsewhere.
    */
-  async revokeInvite(ctx: CallerContext, id: string): Promise<void> {
+  async revokeInvite(ctx: CallerContext, id: string, inputOperatorId?: string): Promise<void> {
     requireOperatorOwnerWrite(ctx)
-    const operatorId = this.requireOwnOperator(ctx)
+    const operatorId = resolveTeamOperatorId(ctx, inputOperatorId)
     const revoked = await this.invites.revoke(id, operatorId)
     if (!revoked) throw new NotFoundError('invite not found')
   }
@@ -107,9 +110,9 @@ export class OperatorTeamService {
    * member keeps access until their token expires; see the #904 session-revocation
    * follow-up.
    */
-  async deactivateMember(ctx: CallerContext, id: string): Promise<void> {
+  async deactivateMember(ctx: CallerContext, id: string, inputOperatorId?: string): Promise<void> {
     requireOperatorOwnerWrite(ctx)
-    const operatorId = this.requireOwnOperator(ctx)
+    const operatorId = resolveTeamOperatorId(ctx, inputOperatorId)
     const members = await this.memberships.findActiveByOperator(operatorId)
     const target = members.find((m) => m.id === id)
     if (!target) throw new NotFoundError('member not found')
@@ -131,17 +134,6 @@ export class OperatorTeamService {
         targetUserId: target.userId,
       })
     }
-  }
-
-  /**
-   * `requireOperatorScope` only fails OPERATOR_* roles missing an operatorId; a
-   * PLATFORM_ADMIN (not an OPERATOR_* role) slips through with no tenant. The
-   * `/me` surface is operator-only, so seal the absent tenant here rather than
-   * letting it reach the repo as `listByOperator(undefined)`.
-   */
-  private requireOwnOperator(ctx: CallerContext): string {
-    if (!ctx.operatorId) throw new ForbiddenError('operator scope required')
-    return ctx.operatorId
   }
 }
 

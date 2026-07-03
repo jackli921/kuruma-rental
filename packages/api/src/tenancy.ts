@@ -375,3 +375,27 @@ export async function resolveOperatorIdForWrite(
   if (inputOperatorId) return inputOperatorId
   throw new OperatorRequiredError('operatorId is required: specify a target operator')
 }
+
+/**
+ * Resolve the operator whose TEAM the caller may read/manage (#1230 slice 6).
+ *
+ * Deliberately STRICTER than {@link resolveOperatorIdForWrite}: team data is
+ * operator-internal, owner-tier, so a foreign operatorId is honored ONLY for
+ * PRIVILEGED_ROLES (PLATFORM_ADMIN). It is an allowlist, not a bypass-first
+ * denylist — operator role OR PRIVILEGED_ROLES pass; everyone else (renter,
+ * PARTNER, legacy STAFF/ADMIN) falls into `else` and is denied, which is why no
+ * explicit PARTNER branch is needed. Do NOT collapse this onto the write
+ * resolver: it keys on `!isOperatorRole` and would honor legacy STAFF/ADMIN,
+ * silently opening a cross-tenant team write (pinned by a route test).
+ */
+export function resolveTeamOperatorId(ctx: CallerContext, inputOperatorId?: string): string {
+  if (isOperatorRole(ctx.role)) {
+    if (!ctx.operatorId) throw new ForbiddenError('operator scope required')
+    return ctx.operatorId // input IGNORED — an operator cannot act cross-tenant
+  }
+  if (PRIVILEGED_ROLES.has(ctx.role)) {
+    if (inputOperatorId) return inputOperatorId // the `all` tier — honored ONLY here
+    throw new OperatorRequiredError('operatorId is required: specify a target operator')
+  }
+  throw new ForbiddenError('operator scope required') // renter / partner / legacy
+}

@@ -9,7 +9,12 @@ import {
   timestamp,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
-import { PAYMENT_EVENT_STATUSES, PAYMENT_REFUND_STATUSES } from '../enums'
+import {
+  PAYMENT_ANOMALY_KINDS,
+  PAYMENT_ANOMALY_RESOLUTIONS,
+  PAYMENT_EVENT_STATUSES,
+  PAYMENT_REFUND_STATUSES,
+} from '../enums'
 import { operators } from './auth'
 import { bookings } from './booking'
 
@@ -111,18 +116,14 @@ export const paymentRefunds = pgTable(
 // Persisted (not just logged, #461 P1b) so the admin surface can list duplicates to
 // refund rather than scrape logs. Kept OUT of payment_events so revenue math (which sums
 // SUCCEEDED rows) is never polluted by a flagged-for-review charge.
-export const paymentAnomalyKindEnum = pgEnum('payment_anomaly_kind', [
-  'DOUBLE_PAYMENT',
-  'AMOUNT_MISMATCH',
-])
+export const paymentAnomalyKindEnum = pgEnum('payment_anomaly_kind', PAYMENT_ANOMALY_KINDS)
 // How a platform admin closed a flagged charge (#1075 slice 3). Carries NO money —
 // v1 only clears the review queue; the duplicate's actual refund happens in the
 // Stripe dashboard (REFUNDED_EXTERNALLY) until in-app refund ships as its own slice.
-export const paymentAnomalyResolutionEnum = pgEnum('payment_anomaly_resolution', [
-  'BENIGN',
-  'INVESTIGATED',
-  'REFUNDED_EXTERNALLY',
-])
+export const paymentAnomalyResolutionEnum = pgEnum(
+  'payment_anomaly_resolution',
+  PAYMENT_ANOMALY_RESOLUTIONS,
+)
 export const paymentAnomalies = pgTable(
   'payment_anomalies',
   {
