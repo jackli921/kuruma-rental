@@ -33,8 +33,10 @@ import type { RunInTransaction, TransactionRepos } from '../../src/repositories/
 import { BookingService } from '../../src/services/booking'
 import type { Booking } from '../../src/stores'
 import {
+  assertBookingInventoryWithinOperator,
   assertBookingWriteWithinOperator,
   assertFleetWriteWithinOperator,
+  bookingInventoryDenialResult,
   fleetWriteDenialResult,
 } from '../../src/tenancy'
 
@@ -109,6 +111,58 @@ describe('assertBookingWriteWithinOperator — bypass keying (#1260)', () => {
   })
 })
 
+// #1417: the booking CREATE path reads inventory (vehicle/pickup) with SYSTEM_CONTEXT
+// (unscoped) for EVERY tier, so the read-scope clamp the binding model relies on is
+// absent -- an operator can reach a foreign operator's PUBLIC storefront vehicle by raw
+// id. This bind makes an OPERATOR_* own-fleet only. Renters/partners still pass through
+// (booking any storefront vehicle is the marketplace); the bypass `all` tier keeps its
+// pick-an-operator bind unchanged.
+describe('assertBookingInventoryWithinOperator — operator-tier create bind (#1417)', () => {
+  const FOREIGN_OP = 'op-foreign-b'
+
+  it('denies a tenant operator that books FOREIGN inventory (403 forbidden)', () => {
+    expect(assertBookingInventoryWithinOperator(operatorCtxA, FOREIGN_OP, undefined)).toEqual({
+      kind: 'foreign-operator',
+    })
+  })
+
+  it('allows a tenant operator that books its OWN inventory', () => {
+    expect(assertBookingInventoryWithinOperator(operatorCtxA, OP_A, undefined)).toBeNull()
+  })
+
+  it('binds an operator to its OWN operatorId, ignoring a stray acting id naming the target', () => {
+    expect(assertBookingInventoryWithinOperator(operatorCtxA, FOREIGN_OP, FOREIGN_OP)).toEqual({
+      kind: 'foreign-operator',
+    })
+  })
+
+  it('fails closed for an OPERATOR_* with no operatorId (owns no inventory)', () => {
+    const noOpCtx: CallerContext = {
+      userId: 'op-user-x',
+      role: 'OPERATOR_OWNER',
+      bypassScope: false,
+    }
+    expect(assertBookingInventoryWithinOperator(noOpCtx, OP_A, undefined)).toEqual({
+      kind: 'foreign-operator',
+    })
+  })
+
+  it('is a no-op for a renter (booking any storefront vehicle is the marketplace)', () => {
+    const renterCtx: CallerContext = { userId: RENTER_ID, role: 'RENTER', bypassScope: false }
+    expect(assertBookingInventoryWithinOperator(renterCtx, FOREIGN_OP, undefined)).toBeNull()
+  })
+
+  it('still binds the bypass admin (no pick -> required, wrong pick -> not-in-scope, own -> ok)', () => {
+    expect(assertBookingInventoryWithinOperator(adminCtx, OP_A, undefined)).toEqual({
+      kind: 'operator-required',
+    })
+    expect(assertBookingInventoryWithinOperator(adminCtx, OP_A, 'op-else')).toEqual({
+      kind: 'not-in-scope',
+    })
+    expect(assertBookingInventoryWithinOperator(adminCtx, OP_A, OP_A)).toBeNull()
+  })
+})
+
 describe('fleetWriteDenialResult — denial -> service result (#1260)', () => {
   it('maps operator-required to 422 carrying OPERATOR_REQUIRED', () => {
     expect(fleetWriteDenialResult({ kind: 'operator-required' }, 'Booking not found')).toEqual({
@@ -124,6 +178,29 @@ describe('fleetWriteDenialResult — denial -> service result (#1260)', () => {
       ok: false,
       status: 404,
       error: 'Booking not found',
+    })
+  })
+})
+
+describe('bookingInventoryDenialResult — create denial -> service result (#1417)', () => {
+  it('maps foreign-operator to 403 forbidden (operator referenced another tenant)', () => {
+    expect(bookingInventoryDenialResult({ kind: 'foreign-operator' }, 'Vehicle not found')).toEqual(
+      {
+        ok: false,
+        status: 403,
+        error: 'This booking references inventory owned by another operator',
+      },
+    )
+  })
+
+  it('delegates non-foreign denials to the shared mapper (422 required, 404 not-found)', () => {
+    expect(
+      bookingInventoryDenialResult({ kind: 'operator-required' }, 'Vehicle not found'),
+    ).toMatchObject({ status: 422, code: 'OPERATOR_REQUIRED' })
+    expect(bookingInventoryDenialResult({ kind: 'not-in-scope' }, 'Vehicle not found')).toEqual({
+      ok: false,
+      status: 404,
+      error: 'Vehicle not found',
     })
   })
 })
@@ -193,6 +270,122 @@ describe('BookingService.cancel — operator write scope (#1260)', () => {
     expect(res.booking.status).toBe('CANCELLED')
   })
 })
+
+// #1417 end-to-end repro: a tenant operator (A) manual-books a car owned by operator B.
+// It is reachable because submitInTx reads the vehicle with SYSTEM_CONTEXT (unscoped),
+// so B's PUBLIC storefront car is found by raw id. Before the fix the operator-tier bind
+// no-ops and the booking persists under B (availability griefing + cross-tenant PII);
+// the fix refuses it 403 and writes nothing under B. Walk-in so no renter seeding is
+// needed — the bind fires before the walk-in renter is minted.
+const OP_B = 'op-write-scope-b'
+
+describe('BookingCreationService.create — operator inventory bind (#1417)', () => {
+  it('refuses a tenant operator booking a FOREIGN operator vehicle (403) and writes nothing', async () => {
+    const { service, bookingRepo, bVehicleId, bLocationId } = await createHarness()
+    const now = new Date('2027-07-15T00:00:00Z')
+    const startAt = new Date('2027-08-01T09:00:00Z')
+    const endAt = new Date('2027-08-03T09:00:00Z')
+
+    const res = await service.create(
+      operatorCtxA,
+      {
+        fulfillmentMode: 'SPECIFIC',
+        requestedVehicleId: bVehicleId,
+        pickupLocationId: bLocationId,
+        dropoffLocationId: bLocationId,
+        addOnIds: [],
+        source: 'MANUAL',
+        walkInCustomer: { name: 'Walk In', phone: '+819012345678' },
+        startAt,
+        endAt,
+      },
+      now,
+    )
+
+    expect(res).toMatchObject({
+      ok: false,
+      status: 403,
+      error: 'This booking references inventory owned by another operator',
+    })
+    // The griefing write never lands under operator B.
+    const all = await bookingRepo.findAll(SYSTEM_CONTEXT)
+    expect(all.filter((b) => b.operatorId === OP_B)).toEqual([])
+  })
+})
+
+async function createHarness() {
+  const bookingRepo = new InMemoryBookingRepository()
+  const bookingEventRepo = new InMemoryBookingEventRepository()
+  const vehicleRepo = new InMemoryVehicleRepository()
+  const vehicleClassRepo = new InMemoryVehicleClassRepository()
+  const locationRepo = new InMemoryLocationRepository()
+  const userRepo = new InMemoryUserRepository()
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
+  )
+
+  // Operator B's inventory — public on B's storefront, reachable by raw id.
+  // A fully bookable car (class set, AVAILABLE, docs valid) so EVERY pre-bind gate in
+  // submitInTx passes — the 403 tenant bind is then the ONLY thing refusing the write.
+  const bVehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
+    operatorId: OP_B,
+    classId: 'b-class-1',
+    name: 'B Car',
+    description: null,
+    seats: 4,
+    transmission: 'AUTO',
+    fuelType: null,
+    licensePlate: null,
+    status: 'AVAILABLE',
+    minRentalHours: null,
+    maxRentalHours: null,
+    advanceBookingHours: null,
+    dailyRateJpy: 8000,
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
+  })
+  const bLocation = await locationRepo.create({
+    operatorId: OP_B,
+    name: 'B Depot',
+    address: '9-9-9 Foreign',
+    operatingHours: null,
+    timezone: 'Asia/Tokyo',
+    defaultTurnaroundMinutes: 2880,
+    status: 'ACTIVE',
+  } as Parameters<typeof locationRepo.create>[0])
+
+  const repos: TransactionRepos = {
+    vehicleRepo,
+    maintenanceLogRepo: new InMemoryMaintenanceLogRepository(),
+    bookingRepo,
+    bookingEventRepo,
+    locationRepo,
+    insuranceOptionRepo: new InMemoryInsuranceOptionRepository(),
+    addOnRepo: new InMemoryAddOnRepository(),
+    feeScheduleRepo: new InMemoryFeeScheduleRepository(),
+    userRepo,
+    availabilityRepo,
+    classRatePlanRepo: new InMemoryClassRatePlanRepository(),
+    vehicleClassRepo,
+    vehicleBlockRepo: new InMemoryVehicleBlockRepository(),
+  }
+  const runInTransactionFn: RunInTransaction = (fn) => fn(repos)
+  const service = new BookingService(
+    bookingRepo,
+    runInTransactionFn,
+    vehicleRepo,
+    userRepo,
+    vehicleClassRepo,
+    undefined,
+    undefined,
+    bookingEventRepo,
+  )
+
+  return { service, bookingRepo, bVehicleId: bVehicle.id, bLocationId: bLocation.id }
+}
 
 async function setup() {
   const bookingStore = new Map<string, Booking>()
