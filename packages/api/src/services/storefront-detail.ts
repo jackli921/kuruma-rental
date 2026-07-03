@@ -1,6 +1,7 @@
 import type { Locale } from '@kuruma/shared/i18n/locales'
 import { type LuggageSize, resolveLuggage } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
+import type { ClassComboSearchResult } from '@kuruma/shared/types/search-result'
 import type { StorefrontAddOnData, StorefrontInsuranceData } from '@kuruma/shared/types/storefront'
 import type { CallerContext } from '../middleware/auth'
 import type {
@@ -13,6 +14,7 @@ import type {
   VehicleClassRepository,
 } from '../repositories/types'
 import { resolveAddOnDescription, resolveAddOnName } from './add-on-resolve'
+import type { ClassOfferingService } from './class-offering'
 import { clampLimit, decodeCursor, encodeCursor } from './search-paging'
 
 export interface StorefrontSummary {
@@ -64,6 +66,10 @@ export interface AvailableVehicle {
 export interface StorefrontDetailData {
   storefront: StorefrontSummary
   vehicles: AvailableVehicle[]
+  /** #464: the store's active class rate plans as CLASS_COMBO cards (a class with
+   *  an inventory count, exact car assigned on pickup day). Unpaginated — combos
+   *  are one row per (class, location), so P stays small; only `vehicles` paginates. */
+  classOfferings: ClassComboSearchResult[]
   nextCursor: string | null
 }
 
@@ -119,6 +125,7 @@ export class StorefrontDetailService {
     private readonly classRepo: VehicleClassRepository,
     private readonly insuranceOptionRepo: InsuranceOptionRepository,
     private readonly addOnRepo: AddOnRepository,
+    private readonly classOfferingService: ClassOfferingService,
   ) {}
 
   /**
@@ -209,6 +216,34 @@ export class StorefrontDetailService {
       .map((v) => toAvailableVehicle(v, v.classId ? classById.get(v.classId) : undefined))
       .sort(compareVehicles)
 
+    // #464: the SECOND producer runs over this one store's scope. The RAW storefront
+    // carries lat/lng (the trimmed StorefrontSummary drops them), so the one-entry
+    // locationById map is built here from it. Scoping the plan scan to this store's
+    // operator + location forecloses a stray cross-operator rate plan surfacing a
+    // card under the wrong store. Offerings are unpaginated (only `vehicles` pages).
+    const locationById = new Map([
+      [
+        storefront.id,
+        {
+          locationId: storefront.id,
+          operatorId: storefront.operatorId,
+          operatorName: storefront.operatorName,
+          name: storefront.name,
+          address: storefront.address,
+          latitude: storefront.latitude,
+          longitude: storefront.longitude,
+        },
+      ],
+    ])
+    const classOfferings = await this.classOfferingService.findOfferings({
+      planFilters: { operatorId: storefront.operatorId, locationIds: [locationId] },
+      from,
+      to,
+      locationById,
+      classById,
+      requested,
+    })
+
     let start = 0
     if (cursor) {
       const decoded = decodeCursor(cursor)
@@ -232,6 +267,7 @@ export class StorefrontDetailService {
           turnaroundMinutes: storefront.defaultTurnaroundMinutes,
         },
         vehicles: page,
+        classOfferings,
         nextCursor,
       },
     }

@@ -4,6 +4,7 @@ import { PUBLIC_CONTEXT, SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryAddOnRepository } from '../repositories/in-memory/add-on'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
+import { InMemoryClassRatePlanRepository } from '../repositories/in-memory/class-rate-plan'
 import { InMemoryInsuranceOptionRepository } from '../repositories/in-memory/insurance-option'
 import { InMemoryLocationRepository } from '../repositories/in-memory/location'
 import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
@@ -11,7 +12,16 @@ import { InMemoryStorefrontRepository } from '../repositories/in-memory/storefro
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleBlockRepository } from '../repositories/in-memory/vehicle-block'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
-import type { AddOn, InsuranceOption, Location, Operator, Vehicle, VehicleClass } from '../stores'
+import type {
+  AddOn,
+  ClassRatePlan,
+  InsuranceOption,
+  Location,
+  Operator,
+  Vehicle,
+  VehicleClass,
+} from '../stores'
+import { ClassOfferingService } from './class-offering'
 import { StorefrontDetailService } from './storefront-detail'
 
 const FROM = new Date('2026-08-01T10:00:00Z')
@@ -24,6 +34,7 @@ let bookingRepo: InMemoryBookingRepository
 let classRepo: InMemoryVehicleClassRepository
 let insuranceRepo: InMemoryInsuranceOptionRepository
 let addOnRepo: InMemoryAddOnRepository
+let classRatePlanRepo: InMemoryClassRatePlanRepository
 let service: StorefrontDetailService
 
 beforeEach(() => {
@@ -34,6 +45,7 @@ beforeEach(() => {
   classRepo = new InMemoryVehicleClassRepository()
   insuranceRepo = new InMemoryInsuranceOptionRepository()
   addOnRepo = new InMemoryAddOnRepository()
+  classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   const availabilityRepo = new InMemoryAvailabilityRepository(
     vehicleRepo,
@@ -41,12 +53,14 @@ beforeEach(() => {
     new InMemoryVehicleBlockRepository(),
     operatorRepo,
   )
+  const classOfferingService = new ClassOfferingService(classRatePlanRepo, availabilityRepo)
   service = new StorefrontDetailService(
     storefrontRepo,
     availabilityRepo,
     classRepo,
     insuranceRepo,
     addOnRepo,
+    classOfferingService,
   )
 })
 
@@ -142,6 +156,53 @@ function makeVehicle(overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'upda
     shakenExpiryDate: '2027-03-31',
     insuranceExpiryDate: '2027-03-31',
     ...overrides,
+  })
+}
+
+function makeRatePlan(overrides: Partial<Omit<ClassRatePlan, 'id' | 'createdAt' | 'updatedAt'>>) {
+  return classRatePlanRepo.create({
+    operatorId: 'op_a',
+    classId: 'class_compact',
+    pickupLocationId: 'loc_namba',
+    dayRateJpy: 6000,
+    isActive: true,
+    label: null,
+    ...overrides,
+  })
+}
+
+// A CONFIRMED booking that consumes one unit of class demand at the real
+// (operator, class, location) triple. The combo producer sizes availableCount by
+// the triple, not the assigned car, so a triple-matching booking is what a
+// sold-out combo needs (bookOverlapping's hardcoded triple only blocks the car).
+function bookClassDemand(operatorId: string, classId: string, pickupLocationId: string) {
+  return bookingRepo.create(SYSTEM_CONTEXT, {
+    operatorId,
+    renterId: 'u1',
+    classId,
+    requestedVehicleId: null,
+    assignedVehicleId: null,
+    pickupLocationId,
+    dropoffLocationId: pickupLocationId,
+    startAt: new Date('2026-08-01T09:00:00Z'),
+    endAt: new Date('2026-08-01T12:00:00Z'),
+    effectiveEndAt: new Date('2026-08-01T13:00:00Z'),
+    status: 'CONFIRMED',
+    source: 'DIRECT',
+    fulfillmentMode: 'CLASS_COMBO',
+    bookingCode: `bk-${crypto.randomUUID().slice(0, 8)}`,
+    insuranceOptionId: null,
+    insuranceSnapshot: null,
+    feeSnapshot: [],
+    addOnSnapshot: [],
+    externalId: null,
+    notes: null,
+    totalPrice: null,
+    cancellationFee: null,
+    cancelledAt: null,
+    idempotencyKey: null,
+    disclaimerAcknowledgedAt: null,
+    disclaimerTermsVersion: null,
   })
 }
 
@@ -449,6 +510,72 @@ describe('StorefrontDetailService.getDetail (#391)', () => {
     if (result.ok) throw new Error('expected a failure result for a malformed cursor')
     expect(result.status).toBe(400)
     expect(result.error).toMatch(/cursor/i)
+  })
+})
+
+describe('StorefrontDetailService.getDetail classOfferings (#464)', () => {
+  it('returns the location active class rate plans as CLASS_COMBO offerings, sized by availableCount', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, name: 'Compact', acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeRatePlan({
+      operatorId: op.id,
+      classId: compact.id,
+      pickupLocationId: namba.id,
+      dayRateJpy: 6000,
+    })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: namba.id, from: FROM, to: TO }),
+    )
+
+    expect(data.classOfferings).toEqual([
+      expect.objectContaining({ kind: 'CLASS_COMBO', classId: compact.id, availableCount: 1 }),
+    ])
+    // Combos are a SECOND producer — the SPECIFIC car list is unchanged.
+    expect(data.vehicles).toHaveLength(1)
+  })
+
+  it('narrows offerings by the ACRISS class filter the same way it narrows vehicles', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, name: 'Compact', acrissCode: 'CCAR' })
+    const van = await makeClass({ operatorId: op.id, name: 'Minivan', acrissCode: 'MVAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeVehicle({ operatorId: op.id, classId: van.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: op.id, classId: van.id, pickupLocationId: namba.id })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, {
+        locationId: namba.id,
+        from: FROM,
+        to: TO,
+        classes: ['CCAR'],
+      }),
+    )
+
+    expect(data.classOfferings).toEqual([
+      expect.objectContaining({ kind: 'CLASS_COMBO', classId: compact.id }),
+    ])
+    expect(data.vehicles.map((v) => v.classId)).toEqual([compact.id])
+  })
+
+  it('omits a sold-out class (capacity − demand <= 0) from classOfferings', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, name: 'Compact', acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    // Consume the class's only unit of supply for the window (capacity 1, demand 1).
+    await bookClassDemand(op.id, compact.id, namba.id)
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: namba.id, from: FROM, to: TO }),
+    )
+
+    expect(data.classOfferings).toEqual([])
   })
 })
 

@@ -489,14 +489,15 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     vehicleClassRepo,
     regionRepo,
   )
+  const classOfferingService = new ClassOfferingService(classRatePlanRepo, availabilityRepo)
   const storefrontDetailService = new StorefrontDetailService(
     storefrontRepo,
     availabilityRepo,
     vehicleClassRepo,
     insuranceOptionRepo,
     addOnRepo,
+    classOfferingService,
   )
-  const classOfferingService = new ClassOfferingService(classRatePlanRepo, availabilityRepo)
   const flatSearchService = new FlatSearchService(
     storefrontRepo,
     availabilityRepo,
