@@ -221,15 +221,21 @@ export class StorefrontDetailService {
     // scan to this store's operator + location forecloses a stray cross-operator rate
     // plan surfacing a card under the wrong store. Offerings are unpaginated (only
     // `vehicles` pages).
-    const classOfferings = await this.classOfferingService.findOfferings({
-      planFilters: { operatorId: storefront.operatorId, locationIds: [locationId] },
-      from,
-      to,
-      locationById: singleLocationMap(storefront),
-      classById,
-      turnaroundByLocationId: new Map([[storefront.id, storefront.defaultTurnaroundMinutes]]),
-      requested,
-    })
+    // #1422: they ship on the FIRST page only. A load-more `cursor` request already
+    // has them client-side, so re-running the scan (1 plan + 2 count queries per plan)
+    // would be pure waste — skip it and ship `[]` on cursor pages (the response
+    // contract keeps the field; the web client defaults a missing one to `[]`).
+    const classOfferings = cursor
+      ? []
+      : await this.classOfferingService.findOfferings({
+          planFilters: { operatorId: storefront.operatorId, locationIds: [locationId] },
+          from,
+          to,
+          locationById: singleLocationMap(storefront),
+          classById,
+          turnaroundByLocationId: new Map([[storefront.id, storefront.defaultTurnaroundMinutes]]),
+          requested,
+        })
 
     let start = 0
     if (cursor) {
