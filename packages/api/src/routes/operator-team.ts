@@ -29,7 +29,10 @@ export function createOperatorTeamRoutes(service: OperatorTeamService) {
       return ok(c, { inviteUrl: created.inviteUrl, expiresAt: created.expiresAt }, 201)
     })
     .get('/operators/me/invites', async (c) => {
-      const invites = await service.listInvites(toCallerContext(requireUser(c)))
+      const invites = await service.listInvites(
+        toCallerContext(requireUser(c)),
+        c.req.query('operatorId'),
+      )
       return ok(c, invites)
     })
     .post('/operators/me/invites/:id/revoke', async (c) => {
@@ -40,7 +43,10 @@ export function createOperatorTeamRoutes(service: OperatorTeamService) {
       return ok(c, { id })
     })
     .get('/operators/me/members', async (c) => {
-      const members = await service.listMembers(toCallerContext(requireUser(c)))
+      const members = await service.listMembers(
+        toCallerContext(requireUser(c)),
+        c.req.query('operatorId'),
+      )
       return ok(c, members)
     })
     .post('/operators/me/members/:id/deactivate', async (c) => {
