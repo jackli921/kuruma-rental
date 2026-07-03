@@ -68,6 +68,12 @@ const OPERATOR_SESSION: Session = {
   user: { id: 'u_op', role: 'OPERATOR_OWNER', operatorId: 'op_1', operatorSlug: 'osaka' },
   csrfToken: 'test-csrf',
 }
+// A picker admin (#1260) — no operatorId of its own; it can only act on the operator
+// it has picked. Used to prove the view forwards `pickedOperatorId` to the Today panel.
+const ADMIN_SESSION: Session = {
+  user: { id: 'u_admin', role: 'PLATFORM_ADMIN' },
+  csrfToken: 'test-csrf',
+}
 
 const TODAY_PANEL_TITLE = enMessages.business.today.title
 
@@ -77,7 +83,11 @@ const TODAY_PANEL_TITLE = enMessages.business.today.title
 // panel-visibility tests pass an operator session AND stub the flag. The
 // QueryClientProvider is still required — TodayPanel calls useQueryClient/useMutation
 // before its early return (rules of hooks).
-function renderDashboard(vehicles: OperatorFleetVehicle[], session: Session | null = null) {
+function renderDashboard(
+  vehicles: OperatorFleetVehicle[],
+  session: Session | null = null,
+  pickedOperatorId: string | undefined = undefined,
+) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
@@ -87,6 +97,7 @@ function renderDashboard(vehicles: OperatorFleetVehicle[], session: Session | nu
           vehicles={vehicles}
           session={session}
           locale="en"
+          pickedOperatorId={pickedOperatorId}
         />
       </IntlProvider>
     </QueryClientProvider>,
@@ -124,6 +135,22 @@ describe('OperatorDashboardView', () => {
   it('omits the Today panel for an operator session when the flag is OFF (#1329)', () => {
     vi.stubEnv('VITE_FEATURE_OPERATOR_TODAY', undefined)
     renderDashboard([vehicle()], OPERATOR_SESSION)
+    expect(screen.queryByRole('region', { name: TODAY_PANEL_TITLE })).not.toBeInTheDocument()
+  })
+
+  // Seam guard (#1433): the view must forward pickedOperatorId to the Today panel. A
+  // picker admin has no operatorId, so the panel's canWriteAsOperator gate only passes
+  // when the picked id reaches it — if the forward is dropped the panel gets undefined
+  // and renders nothing. Asserting the region mounts therefore proves the pass-through.
+  it('forwards the picked operator to the Today panel so a picker admin sees it (#1433)', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_TODAY', 'true')
+    renderDashboard([vehicle()], ADMIN_SESSION, 'op_7')
+    expect(screen.getByRole('region', { name: TODAY_PANEL_TITLE })).toBeInTheDocument()
+  })
+
+  it('hides the Today panel from a picker admin who has not picked an operator (#1433)', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_TODAY', 'true')
+    renderDashboard([vehicle()], ADMIN_SESSION)
     expect(screen.queryByRole('region', { name: TODAY_PANEL_TITLE })).not.toBeInTheDocument()
   })
 })
