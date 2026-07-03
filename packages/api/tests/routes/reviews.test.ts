@@ -202,3 +202,67 @@ describe('Review routes — HTTP contract', () => {
     expect(res.status).toBe(403)
   })
 })
+
+describe('Review routes — report for moderation (#1086)', () => {
+  // Reveal both sides so the renter review is published (publicly reportable).
+  async function seedPublishedReviewId(): Promise<string> {
+    await submit(appAs(RENTER_ID, 'RENTER'), 'OPERATOR')
+    await submit(appAs(OP_USER_ID, 'OPERATOR_OWNER'), 'RENTER')
+    const renter = (await reviewRepo.findByBookingId(BOOKING_ID)).find(
+      (r) => r.authorRole === 'RENTER',
+    )
+    if (!renter) throw new Error('expected a renter review')
+    return renter.id
+  }
+
+  function report(app: Hono, reviewId: string, reason = 'Abusive language') {
+    return app.request(`/reviews/${reviewId}/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+  }
+
+  it('401s an unauthenticated report (requireAuth gates the sub-path)', async () => {
+    const reviewId = await seedPublishedReviewId()
+    const res = await routes().request(`/reviews/${reviewId}/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'x' }),
+    })
+    expect(res.status).toBe(401)
+  })
+
+  it('201s a report against a published review and echoes it', async () => {
+    const reviewId = await seedPublishedReviewId()
+    const res = await report(appAs(STRANGER_ID, 'RENTER'), reviewId)
+    expect(res.status).toBe(201)
+    expect((await res.json()).data.report).toMatchObject({
+      reviewId,
+      reporterUserId: STRANGER_ID,
+      reason: 'Abusive language',
+    })
+  })
+
+  it('400s an empty reason at the Zod boundary', async () => {
+    const reviewId = await seedPublishedReviewId()
+    const res = await report(appAs(STRANGER_ID, 'RENTER'), reviewId, '')
+    expect(res.status).toBe(400)
+  })
+
+  it('404s reporting a still-hidden double-blind review (no oracle)', async () => {
+    await submit(appAs(RENTER_ID, 'RENTER'), 'OPERATOR') // lone submit -> stays hidden
+    const hidden = (await reviewRepo.findByBookingId(BOOKING_ID))[0]
+    if (!hidden) throw new Error('expected a review')
+    const res = await report(appAs(STRANGER_ID, 'RENTER'), hidden.id)
+    expect(res.status).toBe(404)
+  })
+
+  it('409s a duplicate report by the same user', async () => {
+    const reviewId = await seedPublishedReviewId()
+    await report(appAs(STRANGER_ID, 'RENTER'), reviewId)
+    const res = await report(appAs(STRANGER_ID, 'RENTER'), reviewId)
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe('ALREADY_REPORTED')
+  })
+})
