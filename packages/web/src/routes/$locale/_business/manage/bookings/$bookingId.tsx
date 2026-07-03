@@ -10,6 +10,7 @@ import {
   operatorRowFromDetail,
   substitutionCandidatesQueryOptions,
 } from '@/vite/operator-bookings/api'
+import { useOperatorContext } from '@/vite/operator-context/operator-context'
 import { RateRenterPanel } from '@/vite/reviews'
 import { sessionQueryOptions } from '@/vite/session'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
@@ -52,6 +53,10 @@ export function TripDetailRoute() {
   const { data: detail } = useSuspenseQuery(operatorBookingDetailQueryOptions(bookingId))
   const { data: events } = useSuspenseQuery(bookingEventsQueryOptions(bookingId))
   const { data: session } = useSuspenseQuery(sessionQueryOptions())
+  // #1361: this route is registered in OPERATOR_CONTEXT_ROUTE_IDS, so a picker admin's
+  // chosen operator rides here — thread it into the Actions panel so its status/cancel
+  // writes bind to that operator (#1260). Undefined for a tenant operator.
+  const { pickedOperatorId } = useOperatorContext()
   // The replacement-candidate endpoint is operator-only and only relevant to a
   // live booking, so gate the fetch on both — bypass-role viewers (no operatorId)
   // would 403, and a settled trip can't be substituted.
@@ -86,6 +91,7 @@ export function TripDetailRoute() {
               session={session}
               candidates={candidates}
               candidatesError={candidatesError}
+              pickedOperatorId={pickedOperatorId}
             />
             {/* #1084: rate the renter once the trip is COMPLETED. Operator sessions only —
                 oversight viewers (PLATFORM_ADMIN, no operatorId) aren't review participants
