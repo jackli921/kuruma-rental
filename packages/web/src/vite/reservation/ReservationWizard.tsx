@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { formatJstDateTimeLocal } from '@/lib/datetime'
-import type { CreateBookingInput } from '@/vite/bookings/api'
+import type { CreateBookingDraft } from '@/vite/bookings/api'
 import type { AvailableVehicleData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
 import { Link } from '@tanstack/react-router'
@@ -73,8 +73,10 @@ export function ReservationWizard({
     addOnPricesJpy: selectedAddOns.map((addOn) => addOn.priceJpy),
   })
   // `disclaimerAccepted` is intentionally absent — consent is a payment-step gate
-  // (#613), supplied by PaymentStep at submit, not a wizard selection.
-  const bookingInput: Omit<CreateBookingInput, 'disclaimerAccepted'> = {
+  // (#613), supplied by PaymentStep at submit, not a wizard selection. This wizard
+  // only books a concrete car (SPECIFIC); the CLASS_COMBO arm is Task 6 (#464).
+  const bookingInput: CreateBookingDraft = {
+    fulfillmentMode: 'SPECIFIC',
     requestedVehicleId: vehicle.id,
     pickupLocationId: locationId,
     dropoffLocationId: locationId,

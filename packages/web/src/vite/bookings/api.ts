@@ -98,10 +98,9 @@ export const bookingDtoSchema = z.object({
   operator: z.object({ name: z.string(), preAuthHandoffUrl: z.string().nullable() }).optional(),
 }) satisfies z.ZodType<BookingDto>
 
-// What the renter selected in the wizard; the server derives operatorId, classId,
+// Fields shared by both fulfillment arms; the server derives operatorId, classId,
 // assignedVehicleId, totalPrice + snapshots (none are client fields, proposal §6.2).
-export interface CreateBookingInput {
-  requestedVehicleId: string
+interface CreateBookingCommon {
   pickupLocationId: string
   dropoffLocationId: string
   startAt: string
@@ -116,6 +115,24 @@ export interface CreateBookingInput {
    *  (400 CONSENT_REQUIRED). Replaces the dropped online document upload. */
   disclaimerAccepted: boolean
 }
+
+// What the renter selected in the wizard, keyed on `fulfillmentMode` so the wire
+// body matches one arm of the server's `discriminatedUnion` (#464): SPECIFIC = a
+// concrete car (requestedVehicleId); CLASS_COMBO = a vehicle class (classId), the
+// operator assigns the car later.
+export type CreateBookingInput =
+  | (CreateBookingCommon & { fulfillmentMode: 'SPECIFIC'; requestedVehicleId: string })
+  | (CreateBookingCommon & { fulfillmentMode: 'CLASS_COMBO'; classId: string })
+
+// `Omit<CreateBookingInput, 'disclaimerAccepted'>` is non-distributive — over a
+// union it collapses to the common keys and silently drops each arm's discriminant
+// + id field. This distributes the Omit across the union so the wizard draft (the
+// booking minus its payment-step consent) keeps both arms intact (#464).
+export type CreateBookingDraft = CreateBookingInput extends infer T
+  ? T extends unknown
+    ? Omit<T, 'disclaimerAccepted'>
+    : never
+  : never
 
 // Instant-book (#511): POST /bookings creates a CONFIRMED booking — no online
 // payment in the path (pre-auth is handled later via the operator handoff link
@@ -132,7 +149,10 @@ export async function createBooking(
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
     body: JSON.stringify({
-      requestedVehicleId: input.requestedVehicleId,
+      fulfillmentMode: input.fulfillmentMode,
+      ...(input.fulfillmentMode === 'SPECIFIC'
+        ? { requestedVehicleId: input.requestedVehicleId }
+        : { classId: input.classId }),
       pickupLocationId: input.pickupLocationId,
       dropoffLocationId: input.dropoffLocationId,
       startAt: input.startAt,
