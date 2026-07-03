@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { TRANSMISSIONS, VEHICLE_STATUSES } from '../enums'
 import { LUGGAGE_SIZES } from '../lib/luggage'
+import { jpyAmount } from './money'
 import { httpUrl } from './url'
 
 const MIN_VEHICLE_YEAR = 1900
@@ -11,7 +12,7 @@ const MAX_VEHICLE_YEAR = 2100
 // with no price is not rentable. Mirrored in the `vehicles_pricing_at_
 // least_one` CHECK constraint on the vehicles table (see schema.ts and
 // issue #48).
-const jpyRate = z.number().int('Rate must be a whole yen amount').min(0, 'Rate cannot be negative')
+const jpyRate = jpyAmount('Rate')
 
 // photos carries a .default() only on create. Kept off the base because Zod
 // .partial() does NOT strip .default(), so a partial PATCH would re-inject
