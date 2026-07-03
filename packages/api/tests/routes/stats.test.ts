@@ -155,7 +155,9 @@ describe('GET /stats', () => {
       }),
     })
     const maintenanceBody = await maintenanceRes.json()
-    await app.request(`/vehicles/${maintenanceBody.data.id}`, {
+    // #1260: a STAFF admin is all-scoped, so bind this soft-delete to the target
+    // operator (the admin-picker path) or the acting-operator guard 422s it.
+    await app.request(`/vehicles/${maintenanceBody.data.id}?operatorId=${TEST_OPERATOR_ID}`, {
       method: 'DELETE',
       headers: staffHeaders,
     })

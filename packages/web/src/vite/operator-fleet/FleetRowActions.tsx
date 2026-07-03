@@ -32,6 +32,9 @@ import { useTranslations } from 'use-intl'
 interface FleetRowActionsProps {
   readonly vehicle: OperatorFleetVehicle
   readonly onEdit: () => void
+  // #1260: a picker-admin binds each write to the operator it picked; undefined
+  // for an operator session (the API scopes those by the session cookie).
+  readonly pickedOperatorId?: string | undefined
 }
 
 type OpenDialog = 'none' | 'maintenance' | 'retire'
@@ -41,7 +44,7 @@ type OpenDialog = 'none' | 'maintenance' | 'retire'
 // behind a confirm. No routing / global state — the parent owns the Edit drawer
 // via onEdit; every write goes through the injected api functions and
 // invalidates the shared fleet query on success so the list re-fetches.
-export function FleetRowActions({ vehicle, onEdit }: FleetRowActionsProps) {
+export function FleetRowActions({ vehicle, onEdit, pickedOperatorId }: FleetRowActionsProps) {
   const t = useTranslations('business.vehicles')
   const tFleet = useTranslations('business.vehicles.fleet')
   const queryClient = useQueryClient()
@@ -55,8 +58,8 @@ export function FleetRowActions({ vehicle, onEdit }: FleetRowActionsProps) {
   const statusMutation = useMutation({
     mutationFn: ({ status, reason }: { status: 'AVAILABLE' | 'MAINTENANCE'; reason?: string }) =>
       status === 'MAINTENANCE'
-        ? updateVehicleStatus(vehicle.id, status, csrfToken, reason)
-        : updateVehicleStatus(vehicle.id, status, csrfToken),
+        ? updateVehicleStatus(vehicle.id, status, csrfToken, reason, pickedOperatorId)
+        : updateVehicleStatus(vehicle.id, status, csrfToken, undefined, pickedOperatorId),
     onSuccess: () => {
       setOpenDialog('none')
       setReason('')
@@ -65,7 +68,7 @@ export function FleetRowActions({ vehicle, onEdit }: FleetRowActionsProps) {
   })
 
   const retireMutation = useMutation({
-    mutationFn: () => retireVehicle(vehicle.id, csrfToken),
+    mutationFn: () => retireVehicle(vehicle.id, csrfToken, pickedOperatorId),
     onSuccess: () => {
       setOpenDialog('none')
       invalidateFleet()

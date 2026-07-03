@@ -25,6 +25,9 @@ interface BulkActionBarProps {
   readonly onDone: () => void
   /** Called when the operator dismisses the selection without acting. */
   readonly onClear: () => void
+  // #1260: a picker-admin binds the bulk write to the operator it picked; undefined
+  // for an operator session (the API scopes those by the session cookie).
+  readonly pickedOperatorId?: string | undefined
 }
 
 /**
@@ -38,6 +41,7 @@ export function BulkActionBar({
   selectedIds,
   onDone,
   onClear,
+  pickedOperatorId,
 }: BulkActionBarProps): ReactElement | null {
   const t = useTranslations('business.vehicles')
   const queryClient = useQueryClient()
@@ -47,7 +51,7 @@ export function BulkActionBar({
 
   const mutation = useMutation({
     mutationFn: (status: BulkVehicleStatus) =>
-      bulkUpdateVehicleStatus(selectedIds, status, csrfToken),
+      bulkUpdateVehicleStatus(selectedIds, status, csrfToken, pickedOperatorId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: FLEET_QUERY_KEY })
       setPendingStatus(null)
