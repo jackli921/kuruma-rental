@@ -270,6 +270,7 @@ export interface AddOnRepository {
 export type {
   AddOnTemplateRepository,
   InsuranceTemplateRepository,
+  TemplateCreateInput,
 } from './types-catalog-templates'
 
 // #521 provider authorization. Not ctx-scoped: the admin endpoint

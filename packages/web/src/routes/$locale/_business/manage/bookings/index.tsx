@@ -385,6 +385,7 @@ export function OperatorBookingsRoute() {
           locations={manualBookingLocations}
           csrfToken={session?.csrfToken ?? ''}
           initialRange={slotRange ?? undefined}
+          pickedOperatorId={pickedOperatorId}
         />
       )}
       {canManageBlocks && (
