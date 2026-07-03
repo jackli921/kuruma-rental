@@ -877,6 +877,7 @@
       "deactivating": "停用中...",
       "staffNotice": "只有所有者才能邀请员工。",
       "noOperatorContext": "此页面管理单个运营商的团队。请使用管理门户来管理运营商。",
+      "pickOperatorPrompt": "请从上方的选择器中选择一个运营商，以查看并管理其团队。",
       "unknownName": "未命名",
       "roleOwner": "所有者",
       "roleStaff": "员工",
@@ -924,7 +925,21 @@
         "submit": "提交申请",
         "submitting": "提交中...",
         "individual": "个人",
-        "company": "公司"
+        "company": "公司",
+        "fleetSizePlaceholder": "请选择车队规模",
+        "businessTypePlaceholder": "请选择",
+        "errors": {
+          "businessName": "请输入企业名称。",
+          "contactName": "请输入联系人姓名。",
+          "contactEmail": "请输入有效的电子邮箱地址。",
+          "contactPhone": "请输入有效的电话号码。",
+          "serviceArea": "请输入服务区域。",
+          "estimatedFleetSize": "请选择车队规模。",
+          "website": "请输入以 http:// 或 https:// 开头的有效网址。",
+          "businessLicenseNumber": "请缩短营业执照编号。",
+          "message": "请缩短留言内容。",
+          "consent": "提交申请前必须同意。"
+        }
       },
       "errors": {
         "generic": "无法提交您的申请，请重试。",
@@ -1365,6 +1380,7 @@
       "governance": "同意治理",
       "customers": "客户",
       "operators": "运营商",
+      "templates": "模板库",
       "featureFlags": "功能开关",
       "backToSite": "返回网站",
       "applications": "申请"
@@ -1379,6 +1395,16 @@
       "serviceAreaLabel": "服务区域",
       "fleetSizeLabel": "预计车队规模",
       "businessTypeLabel": "经营类型",
+      "fleetSize": {
+        "1-5": "1-5 辆",
+        "6-20": "6-20 辆",
+        "21-50": "21-50 辆",
+        "50+": "50+ 辆"
+      },
+      "businessType": {
+        "INDIVIDUAL": "个人",
+        "COMPANY": "公司"
+      },
       "websiteLabel": "网站",
       "messageLabel": "留言",
       "submittedLabel": "提交日期",
@@ -1392,10 +1418,54 @@
       "copy": "复制",
       "copied": "已复制",
       "approved": "已批准",
+      "regenerate": "重新生成链接",
+      "regenerating": "重新生成中…",
+      "regenerateFailed": "无法重新生成邀请链接。请重试。",
+      "regenerateUnavailable": "此邀请无法再重新生成。负责人可能已完成入驻。",
       "alreadyReviewed": "该申请已被审核，或该邮箱已归属某运营商。",
       "approveFailed": "无法批准该申请，请重试。",
       "loadError": "无法加载申请队列。",
       "retry": "重试"
+    },
+    "templateLibrary": {
+      "title": "模板库",
+      "subtitle": "管理所有运营商可选用的平台级附加服务和保险模板。",
+      "tab": {
+        "addOns": "附加服务 ({count})",
+        "insurance": "保险 ({count})"
+      },
+      "colName": "名称",
+      "colKey": "键",
+      "colStatus": "状态",
+      "colTranslations": "翻译",
+      "colActions": "操作",
+      "active": "启用",
+      "archived": "已归档",
+      "empty": "此目录中暂无模板。",
+      "loadError": "无法加载模板库。",
+      "retry": "重试",
+      "action": {
+        "edit": "编辑",
+        "editNamed": "编辑{name}",
+        "create": "新建模板"
+      },
+      "edit": {
+        "title": "编辑模板",
+        "description": "先翻译各语言，再设置状态。将回填生成的模板切换为启用即可发布。",
+        "nameSection": "名称",
+        "descriptionSection": "说明",
+        "statusLabel": "状态",
+        "nameEnRequired": "英文名称为必填项。",
+        "save": "保存",
+        "saving": "保存中…",
+        "cancel": "取消"
+      },
+      "create": {
+        "title": "新建模板",
+        "description": "向目录添加模板。英文名称为必填项，键将据此生成。",
+        "submit": "创建",
+        "submitting": "创建中…"
+      }
     },
     "featureFlags": {
       "title": "功能开关",

@@ -877,6 +877,7 @@
       "deactivating": "Deactivating...",
       "staffNotice": "Only an owner can invite staff.",
       "noOperatorContext": "This page manages a single operator's team. Use the admin portal to manage operators.",
+      "pickOperatorPrompt": "Select an operator from the picker above to view and manage its team.",
       "unknownName": "Unnamed",
       "roleOwner": "Owner",
       "roleStaff": "Staff",
@@ -924,7 +925,21 @@
         "submit": "Submit application",
         "submitting": "Submitting...",
         "individual": "Individual",
-        "company": "Company"
+        "company": "Company",
+        "fleetSizePlaceholder": "Select a fleet size",
+        "businessTypePlaceholder": "Select an option",
+        "errors": {
+          "businessName": "Please enter your business name.",
+          "contactName": "Please enter a contact name.",
+          "contactEmail": "Please enter a valid email address.",
+          "contactPhone": "Please enter a valid phone number.",
+          "serviceArea": "Please enter your service area.",
+          "estimatedFleetSize": "Please select a fleet size.",
+          "website": "Please enter a valid URL starting with http:// or https://.",
+          "businessLicenseNumber": "Please shorten the license number.",
+          "message": "Please shorten your message.",
+          "consent": "You must agree before submitting your application."
+        }
       },
       "errors": {
         "generic": "Couldn't submit your application. Please try again.",
@@ -1365,6 +1380,7 @@
       "governance": "Consent governance",
       "customers": "Customers",
       "operators": "Operators",
+      "templates": "Template library",
       "featureFlags": "Feature flags",
       "backToSite": "Back to site",
       "applications": "Applications"
@@ -1379,6 +1395,16 @@
       "serviceAreaLabel": "Service area",
       "fleetSizeLabel": "Fleet size",
       "businessTypeLabel": "Business type",
+      "fleetSize": {
+        "1-5": "1-5 vehicles",
+        "6-20": "6-20 vehicles",
+        "21-50": "21-50 vehicles",
+        "50+": "50+ vehicles"
+      },
+      "businessType": {
+        "INDIVIDUAL": "Individual",
+        "COMPANY": "Company"
+      },
       "websiteLabel": "Website",
       "messageLabel": "Message",
       "submittedLabel": "Submitted",
@@ -1392,10 +1418,54 @@
       "copy": "Copy",
       "copied": "Copied",
       "approved": "Approved",
+      "regenerate": "Regenerate link",
+      "regenerating": "Regenerating…",
+      "regenerateFailed": "Couldn't regenerate the invite link. Try again.",
+      "regenerateUnavailable": "This invite can no longer be regenerated. The owner may already be onboarded.",
       "alreadyReviewed": "This application was already reviewed, or the email already belongs to an operator.",
       "approveFailed": "Couldn't approve the application. Try again.",
       "loadError": "Couldn't load the applications queue.",
       "retry": "Retry"
+    },
+    "templateLibrary": {
+      "title": "Template library",
+      "subtitle": "Curate the platform-owned add-on and insurance templates every operator picks from.",
+      "tab": {
+        "addOns": "Add-ons ({count})",
+        "insurance": "Insurance ({count})"
+      },
+      "colName": "Name",
+      "colKey": "Key",
+      "colStatus": "Status",
+      "colTranslations": "Translations",
+      "colActions": "Actions",
+      "active": "Active",
+      "archived": "Archived",
+      "empty": "No templates in this catalog yet.",
+      "loadError": "Couldn't load the template library.",
+      "retry": "Retry",
+      "action": {
+        "edit": "Edit",
+        "editNamed": "Edit {name}",
+        "create": "New template"
+      },
+      "edit": {
+        "title": "Edit template",
+        "description": "Translate each locale, then set the status. Promote a backfill-minted template by switching it to Active.",
+        "nameSection": "Name",
+        "descriptionSection": "Description",
+        "statusLabel": "Status",
+        "nameEnRequired": "An English name is required.",
+        "save": "Save",
+        "saving": "Saving…",
+        "cancel": "Cancel"
+      },
+      "create": {
+        "title": "New template",
+        "description": "Add a template to the catalog. The English name is required; the key is generated from it.",
+        "submit": "Create",
+        "submitting": "Creating…"
+      }
     },
     "featureFlags": {
       "title": "Feature flags",

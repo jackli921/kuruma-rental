@@ -496,28 +496,46 @@ async function writeBooking(
   return unwrap(res, bookingDtoSchema)
 }
 
+// #1260/#1361: a picker admin binds the write to the operator it is acting as via
+// ?operatorId=; a tenant operator omits it (the server drops it, so it can never
+// widen scope). Without it a picker admin's write 422s OPERATOR_REQUIRED.
 export function updateBookingStatus(
   id: string,
   status: OperatorBookingStatus,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<BookingDto> {
-  return writeBooking(`/bookings/${encodeURIComponent(id)}/status`, 'PATCH', csrfToken, { status })
+  const suffix = pickedOperatorId ? `?operatorId=${encodeURIComponent(pickedOperatorId)}` : ''
+  return writeBooking(`/bookings/${encodeURIComponent(id)}/status${suffix}`, 'PATCH', csrfToken, {
+    status,
+  })
 }
 
 // DELETE-equivalent (the API models cancel as a POST that records a cancellation
 // fee in the meta); the projection in `data` is the now-CANCELLED booking.
-export function cancelBooking(id: string, csrfToken: string): Promise<BookingDto> {
-  return writeBooking(`/bookings/${encodeURIComponent(id)}/cancel`, 'POST', csrfToken)
+export function cancelBooking(
+  id: string,
+  csrfToken: string,
+  pickedOperatorId?: string,
+): Promise<BookingDto> {
+  const suffix = pickedOperatorId ? `?operatorId=${encodeURIComponent(pickedOperatorId)}` : ''
+  return writeBooking(`/bookings/${encodeURIComponent(id)}/cancel${suffix}`, 'POST', csrfToken)
 }
 
 // --- Existing-customer search (#589 1d slice 3) ------------------------------
 // The dialog can attach an EXISTING renter instead of creating a walk-in. This
 // reads the one operator-reachable customer route: CustomerService.search scopes
 // an OPERATOR_* caller to renters within its own tenant (prior-booking), so the
-// picker can't enumerate the global user table (#396/#475) — the client passes
-// only `q`, never an operatorId; the session cookie carries the tenant scope.
-export async function searchCustomers(q: string): Promise<CustomerSearchResult[]> {
+// picker can't enumerate the global user table (#396/#475). A tenant operator's
+// scope rides the session cookie; a picker admin (#1260) passes pickedOperatorId
+// so the search is scoped to the operator it acts as (else it would offer — then
+// 403 at booking — customers it cannot book).
+export async function searchCustomers(
+  q: string,
+  pickedOperatorId?: string,
+): Promise<CustomerSearchResult[]> {
   const sp = new URLSearchParams({ q })
+  if (pickedOperatorId) sp.set('operatorId', pickedOperatorId)
   const res = await fetch(`${getApiBaseUrl()}/customers/search?${sp.toString()}`, {
     credentials: 'include',
   })
@@ -526,11 +544,12 @@ export async function searchCustomers(q: string): Promise<CustomerSearchResult[]
 
 // The picker drives this with its debounced query. `enabled` mirrors the server's
 // 2-char minimum so an under-length term never fires a guaranteed-400 request.
+// pickedOperatorId is part of the query key so switching operators refetches.
 const CUSTOMER_SEARCH_MIN_CHARS = 2
-export function customerSearchQueryOptions(q: string) {
+export function customerSearchQueryOptions(q: string, pickedOperatorId?: string) {
   return queryOptions({
-    queryKey: ['operator-bookings', 'customer-search', q],
-    queryFn: () => searchCustomers(q),
+    queryKey: ['operator-bookings', 'customer-search', q, pickedOperatorId ?? null],
+    queryFn: () => searchCustomers(q, pickedOperatorId),
     enabled: q.trim().length >= CUSTOMER_SEARCH_MIN_CHARS,
   })
 }
@@ -572,6 +591,7 @@ export interface CreateManualBookingInput {
 export function createManualBooking(
   input: CreateManualBookingInput,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<BookingDto> {
   // The customer source is XOR: an existing renter sends `renterId`, a walk-in
   // sends inline `walkInCustomer`. Building exactly one block keeps the wire body
@@ -581,9 +601,15 @@ export function createManualBooking(
     input.customer.kind === 'existing'
       ? { renterId: input.customer.renterId }
       : { walkInCustomer: { name: input.customer.name, phone: input.customer.phone } }
+  // #1260: a picker admin binds the write to the operator it acts as via
+  // ?operatorId=; a tenant operator omits it (the server drops it, never widening
+  // scope). Without it a picker admin's create would 422 (OPERATOR_REQUIRED).
+  const path = pickedOperatorId
+    ? `/bookings?operatorId=${encodeURIComponent(pickedOperatorId)}`
+    : '/bookings'
   // Composes the shared writeBooking helper (credentials + X-CSRF-Token + JSON +
   // unwrap in one auditable place). The body always exists, so JSON is sent.
-  return writeBooking('/bookings', 'POST', csrfToken, {
+  return writeBooking(path, 'POST', csrfToken, {
     requestedVehicleId: input.requestedVehicleId,
     pickupLocationId: input.pickupLocationId,
     dropoffLocationId: input.dropoffLocationId,

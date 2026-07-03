@@ -119,6 +119,7 @@ export function OperatorFleetView({
                 todayIso={todayIso}
                 locale={locale}
                 operatorNameFor={operatorNameFor}
+                pickedOperatorId={pickedOperatorId}
               />
             ) : (
               <FleetTable
@@ -133,6 +134,7 @@ export function OperatorFleetView({
                 todayIso={todayIso}
                 locale={locale}
                 operatorNameFor={operatorNameFor}
+                pickedOperatorId={pickedOperatorId}
               />
             )}
           </div>
@@ -145,6 +147,7 @@ export function OperatorFleetView({
             selectedIds={effectiveSelectedIds}
             onDone={clearSelection}
             onClear={clearSelection}
+            pickedOperatorId={pickedOperatorId}
           />
           <EditVehicleSheet
             open={sheet !== null}

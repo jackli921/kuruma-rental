@@ -1,8 +1,7 @@
 import { operatorApplications } from '@kuruma/shared/db/schema'
-import type { OperatorApplicationStatus } from '@kuruma/shared/enums'
 import { and, desc, eq } from 'drizzle-orm'
 import type { OperatorApplication } from '../../stores'
-import type { OperatorApplicationRepository } from '../types'
+import type { OperatorApplicationListParams, OperatorApplicationRepository } from '../types'
 import type { Db } from './shared'
 
 type Row = typeof operatorApplications.$inferSelect
@@ -26,12 +25,14 @@ export class DrizzleOperatorApplicationRepository implements OperatorApplication
     return row ? toOperatorApplication(row) : undefined
   }
 
-  async list(status?: OperatorApplicationStatus): Promise<OperatorApplication[]> {
+  async list({ status, limit, offset }: OperatorApplicationListParams): Promise<OperatorApplication[]> {
     const rows = await this.db
       .select()
       .from(operatorApplications)
       .where(status ? eq(operatorApplications.status, status) : undefined)
       .orderBy(desc(operatorApplications.createdAt), operatorApplications.id)
+      .limit(limit)
+      .offset(offset)
     return rows.map(toOperatorApplication)
   }
 

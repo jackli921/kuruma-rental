@@ -4,6 +4,7 @@ import { z } from 'zod'
 import {
   exceedsContentLength,
   fail,
+  failResult,
   ok,
   parseArchivableFilters,
   parseBody,
@@ -27,6 +28,22 @@ function createTestApp() {
   app.get('/fail-404', (c) => fail(c, 'not found', 404))
   app.get('/fail-extras', (c) =>
     fail(c, 'rule violated', 400, { code: 'RULE_X', details: { required: 6 } }),
+  )
+
+  app.get('/fail-result-bare', (c) => failResult(c, { status: 404, error: 'not found' }))
+  app.get('/fail-result-code', (c) =>
+    failResult(c, { status: 409, error: 'conflict', code: 'RULE_X' }),
+  )
+  app.get('/fail-result-count', (c) =>
+    failResult(c, {
+      status: 409,
+      error: 'reassign first',
+      code: 'HAS_ACTIVE_BOOKINGS',
+      activeBookingsCount: 2,
+    }),
+  )
+  app.get('/fail-result-zero-count', (c) =>
+    failResult(c, { status: 409, error: 'edge', code: 'X', activeBookingsCount: 0 }),
   )
 
   const testSchema = z.object({
@@ -197,6 +214,54 @@ describe('fail()', () => {
       code: 'RULE_X',
       details: { required: 6 },
     })
+  })
+})
+
+describe('failResult()', () => {
+  const app = createTestApp()
+
+  it('returns the bare { success: false, error } envelope when the result carries no discriminants', async () => {
+    const res = await app.request('/fail-result-bare')
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ success: false, error: 'not found' })
+  })
+
+  it('forwards the machine-readable code discriminant', async () => {
+    const res = await app.request('/fail-result-code')
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ success: false, error: 'conflict', code: 'RULE_X' })
+  })
+
+  it('forwards both code and activeBookingsCount', async () => {
+    const res = await app.request('/fail-result-count')
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'reassign first',
+      code: 'HAS_ACTIVE_BOOKINGS',
+      activeBookingsCount: 2,
+    })
+  })
+
+  it('forwards activeBookingsCount === 0 (guard is a defined-check, not a truthiness check)', async () => {
+    const res = await app.request('/fail-result-zero-count')
+
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'edge',
+      code: 'X',
+      activeBookingsCount: 0,
+    })
+  })
+
+  it('never leaks the internal status/ok fields into the response body', async () => {
+    const body = await (await app.request('/fail-result-code')).json()
+
+    expect(body.status).toBeUndefined()
+    expect(body.ok).toBeUndefined()
   })
 })
 

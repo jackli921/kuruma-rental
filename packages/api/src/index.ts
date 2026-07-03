@@ -35,6 +35,7 @@ import { createAdminOperatorApplicationRoutes } from './routes/admin-operator-ap
 import { createAdminOperatorRoutes } from './routes/admin-operators'
 import { createAdminOverviewRoutes } from './routes/admin-overview'
 import { createAdminRevenueRoutes } from './routes/admin-revenue'
+import { createAdminTemplateRoutes } from './routes/admin-templates'
 import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
@@ -122,6 +123,7 @@ import { ReviewService } from './services/review'
 import { ReviewAggregateService } from './services/review-aggregate'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
+import { TemplateLibraryService } from './services/template-library'
 import { createTranslationProvider } from './services/translation-provider-factory'
 import { UserDirectoryService } from './services/user-directory'
 import { VehicleService } from './services/vehicle'
@@ -162,6 +164,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     insuranceOptionRepo,
     addOnRepo,
     addOnTemplateRepo,
+    insuranceTemplateRepo,
     feeScheduleRepo,
     notificationLogRepo,
     storefrontRepo,
@@ -481,6 +484,10 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
   const addOnService = new AddOnService(addOnRepo, addOnTemplateRepo)
   const addOnTemplateService = new AddOnTemplateService(addOnTemplateRepo, addOnRepo)
+  const templateLibraryService = new TemplateLibraryService(
+    addOnTemplateRepo,
+    insuranceTemplateRepo,
+  )
   const feeScheduleService = new FeeScheduleService(feeScheduleRepo)
   const storefrontSearchService = new StorefrontSearchService(
     storefrontRepo,
@@ -591,6 +598,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))
     .route('/', createAddOnRoutes(addOnService, resolveWriteOperatorId))
     .route('/', createAddOnTemplateRoutes(addOnTemplateService))
+    .route('/', createAdminTemplateRoutes(templateLibraryService))
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))
     .route('/', createNotificationRoutes(notificationService))
     .route('/', createOperatorRoutes(operatorService))

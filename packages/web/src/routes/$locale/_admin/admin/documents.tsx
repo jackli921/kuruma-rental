@@ -1,4 +1,5 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { DocumentsReviewView } from '@/vite/admin/documents/DocumentsReviewView'
 import {
   ADMIN_DOCUMENTS_QUERY_KEY,
@@ -7,7 +8,7 @@ import {
 } from '@/vite/admin/documents/api'
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
+import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
 // Platform-admin renter-document review (#932). The `_admin` parent layout already
@@ -44,17 +45,11 @@ function DocumentsRoute() {
 
 function DocumentsError(_props: ErrorComponentProps) {
   const t = useTranslations('admin.documents')
-  const router = useRouter()
   return (
-    <div className="mx-auto max-w-3xl px-4 py-20 text-center sm:px-6 lg:px-8">
-      <p className="text-lg text-muted-foreground">{t('loadError')}</p>
-      <button
-        type="button"
-        onClick={() => router.invalidate()}
-        className="mt-4 inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted/50"
-      >
-        {t('retry')}
-      </button>
-    </div>
+    <RouteRetryError
+      message={t('loadError')}
+      retryLabel={t('retry')}
+      className="mx-auto max-w-3xl px-4 py-20 text-center sm:px-6 lg:px-8"
+    />
   )
 }

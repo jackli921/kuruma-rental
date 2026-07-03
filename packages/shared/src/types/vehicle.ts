@@ -1,7 +1,9 @@
+import type { Transmission, VehicleStatus } from '../enums'
 import type { LuggageSize } from '../lib/luggage'
 
-export type VehicleStatus = 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED'
-export type Transmission = 'AUTO' | 'MANUAL'
+// Re-exported from the enums SSoT (#1375) so existing `types/vehicle` importers of
+// these names are unaffected; the members are identical, derivation just kills drift.
+export type { Transmission, VehicleStatus }
 
 export interface VehicleBase {
   id: string

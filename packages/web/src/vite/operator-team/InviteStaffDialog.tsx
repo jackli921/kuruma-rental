@@ -17,6 +17,9 @@ interface InviteStaffDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   csrfToken: string
+  // The tenant the invite is minted under: the picker-admin's picked operator, or
+  // the operator's own id (ignored server-side for a self-scoped operator).
+  operatorId: string
 }
 
 // #904: owner-only staff invite. On success the dialog does NOT close — it
@@ -24,14 +27,19 @@ interface InviteStaffDialogProps {
 // no email is sent yet), so the owner copies it to share. The new pending row is
 // pulled in by invalidating the invites query. Closing resets both the mutation
 // and the local form/copy state so a prior reveal never lingers on reopen.
-export function InviteStaffDialog({ open, onOpenChange, csrfToken }: InviteStaffDialogProps) {
+export function InviteStaffDialog({
+  open,
+  onOpenChange,
+  csrfToken,
+  operatorId,
+}: InviteStaffDialogProps) {
   const t = useTranslations('business.team')
   const queryClient = useQueryClient()
   const [email, setEmail] = useState('')
   const [copied, setCopied] = useState(false)
 
   const mutation = useMutation({
-    mutationFn: (value: string) => inviteStaff({ email: value }, csrfToken),
+    mutationFn: (value: string) => inviteStaff({ email: value }, csrfToken, operatorId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: TEAM_INVITES_QUERY_KEY })
     },

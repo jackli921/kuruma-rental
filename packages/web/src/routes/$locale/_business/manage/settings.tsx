@@ -1,4 +1,5 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { featureFlagsQueryOptions, resolveFeatureFlag } from '@/vite/config'
 import { canPickOperatorContext, canWriteAsOperatorOwner } from '@/vite/guards'
 import { useOperatorContext } from '@/vite/operator-context'
@@ -11,12 +12,7 @@ import {
 import { sessionQueryOptions } from '@/vite/session'
 import type { UpdateOperatorInput } from '@kuruma/shared/validators/operator'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import {
-  type ErrorComponentProps,
-  createFileRoute,
-  redirect,
-  useRouter,
-} from '@tanstack/react-router'
+import { type ErrorComponentProps, createFileRoute, redirect } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 
@@ -42,9 +38,12 @@ export const Route = createFileRoute('/$locale/_business/manage/settings')({
   }),
   loader: async ({ context, deps }) => {
     const session = await context.queryClient.ensureQueryData(sessionQueryOptions())
-    // Effective id: own operator session id wins; a bypass admin falls back to the
-    // picked param. Matches OperatorSettingsRoute exactly (one resolution, two readers).
-    const operatorId = session?.user.operatorId ?? deps.operator
+    // Capability-gated: a retained ?operator= is honored only for a picker-admin,
+    // never a legacy STAFF/ADMIN (whose profile read would 403). Search params are
+    // input, not permission — derive from session capability first. Matches
+    // OperatorSettingsRoute exactly (one resolution, two readers must stay in lockstep).
+    const picked = canPickOperatorContext(session ?? null) ? deps.operator : undefined
+    const operatorId = session?.user.operatorId ?? picked
     if (operatorId) {
       await context.queryClient.ensureQueryData(operatorProfileQueryOptions(operatorId))
     }
@@ -58,10 +57,12 @@ export function OperatorSettingsRoute() {
   const t = useTranslations('business.settings')
   const { data: session } = useSuspenseQuery(sessionQueryOptions())
   const { pickedOperatorId } = useOperatorContext()
-  // Effective operator id: a real operator session's own id always wins; a bypass
-  // admin falls back to the picked id. Mirrors the loader (must stay in lockstep).
-  const operatorId = session?.user.operatorId ?? pickedOperatorId
   const canPick = canPickOperatorContext(session ?? null)
+  // Effective operator id: a real operator session's own id always wins; a picker-admin
+  // falls back to the picked id. Mirror the loader (must stay in lockstep) — a legacy
+  // STAFF/ADMIN's retained param drops, so it never drives a foreign profile read.
+  const picked = canPick ? pickedOperatorId : undefined
+  const operatorId = session?.user.operatorId ?? picked
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -144,20 +145,14 @@ function OperatorSettings({
 
 function OperatorSettingsError(_props: ErrorComponentProps) {
   const t = useTranslations('business.settings')
-  const router = useRouter()
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl py-20 text-center">
-        <p className="text-lg text-muted-foreground">{t('loadError')}</p>
-        <button
-          type="button"
-          onClick={() => router.invalidate()}
-          className="mt-4 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-        >
-          {t('retry')}
-        </button>
-      </div>
+      <RouteRetryError
+        message={t('loadError')}
+        retryLabel={t('retry')}
+        className="mx-auto max-w-7xl py-20 text-center"
+      />
     </main>
   )
 }

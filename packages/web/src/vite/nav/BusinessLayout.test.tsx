@@ -121,7 +121,9 @@ describe('BusinessLayout', () => {
   })
 
   it('hides the operator picker for a PLATFORM_ADMIN on a route that does not honor ?operator', () => {
-    h.routeId = '/$locale/_business/manage/team'
+    // The fleet by-id detail is intentionally NOT a picker route (#1264); team is
+    // now registered (#1230), so use the detail as the stable non-honoring example.
+    h.routeId = '/$locale/_business/manage/fleet/$vehicleId'
     renderBusinessLayout({ role: 'PLATFORM_ADMIN' })
     expect(screen.queryByLabelText('Operator')).toBeNull()
   })

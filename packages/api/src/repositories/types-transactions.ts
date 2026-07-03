@@ -72,11 +72,13 @@ export interface OperatorGrantRepos {
 export type RunOperatorGrant = <T>(fn: (repos: OperatorGrantRepos) => Promise<T>) => Promise<T>
 
 // #1277: atomic operator-approval tx. C1 read guard (email -> membership/invite) +
-// operator INSERT + invite INSERT + application claim+link, all-or-nothing.
+// operator INSERT + invite INSERT + application claim+link, all-or-nothing. Also
+// backs the invite-remint tx (#1370): membership guard + revoke the stale PENDING
+// invite + INSERT a fresh one, hence `invites.revoke` in the Pick below.
 export interface OperatorApprovalRepos {
   users: Pick<UserRepository, 'findByEmail'>
   memberships: Pick<OperatorMembershipRepository, 'findActiveByUserId'>
-  invites: Pick<ProviderInviteRepository, 'create' | 'findPendingByEmail'>
+  invites: Pick<ProviderInviteRepository, 'create' | 'findPendingByEmail' | 'revoke'>
   operators: Pick<OperatorRepository, 'create' | 'existsBySlug'>
   applications: Pick<OperatorApplicationRepository, 'markApprovedIfPending'>
 }

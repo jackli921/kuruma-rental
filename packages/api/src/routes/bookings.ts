@@ -210,6 +210,11 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
         idempotencyKey: parsed.data.idempotencyKey ?? null,
         disclaimerAccepted: parsed.data.disclaimerAccepted ?? false,
       }
+      // #1260: a picker admin (PLATFORM_ADMIN) binds the manual booking to the
+      // operator it chose via ?operatorId=; tenant operators ignore it (their read
+      // scope clamps them). The service requires it for a bypass-admin create and
+      // scopes both the customer and the vehicle/inventory to that operator.
+      const actingOperatorId = c.req.query('operatorId')
       const createResult = await service.create(
         ctx,
         parsed.data.fulfillmentMode === 'CLASS_COMBO'
@@ -219,6 +224,8 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
               fulfillmentMode: 'SPECIFIC',
               requestedVehicleId: parsed.data.requestedVehicleId,
             },
+        undefined,
+        actingOperatorId,
       )
 
       if (!createResult.ok) {

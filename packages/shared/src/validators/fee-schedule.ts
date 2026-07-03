@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { FEE_TYPES, FEE_UNITS, type FeeType, type FeeUnit } from '../enums'
+import { jpyAmount } from './money'
 
 // Re-exported from the enum SSoT (#688) under their original names so the
 // `fee_type`/`fee_unit` pgEnums, this validator, and every existing consumer all
@@ -32,10 +33,7 @@ export function feeUnitCoherenceMessage(feeType: FeeType): string {
   return `${feeType} fees must use the ${REQUIRED_UNIT_BY_FEE_TYPE[feeType]} unit`
 }
 
-const amountSchema = z
-  .number()
-  .int('Amount must be a whole yen amount')
-  .min(0, 'Amount cannot be negative')
+const amountSchema = jpyAmount('Amount')
 
 const feeScheduleObjectSchema = z.object({
   feeType: z.enum(FEE_TYPES),
