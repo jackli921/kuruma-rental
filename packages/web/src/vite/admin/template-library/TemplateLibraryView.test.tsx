@@ -1,9 +1,15 @@
 import type { TemplateAdminRow } from '@kuruma/shared/types/template-admin'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import en from '../../../../messages/en.json'
 import { TemplateLibraryView } from './TemplateLibraryView'
+
+// Opening the edit dialog mounts a component that reads the session; stub it.
+vi.mock('@/vite/session', () => ({
+  useSession: () => ({ data: { csrfToken: 'csrf_1' } }),
+}))
 
 const ARCHIVED_ADD_ON: TemplateAdminRow = {
   id: 'a1',
@@ -64,5 +70,36 @@ describe('TemplateLibraryView', () => {
   it('renders an empty message when a catalog has no templates', () => {
     renderView({ addOns: [] })
     expect(screen.getByText('No templates in this catalog yet.')).toBeInTheDocument()
+  })
+
+  it('renders a per-row Edit button keyed by the template name', () => {
+    renderView()
+    const row = screen.getByText('Baby seat').closest('tr') as HTMLElement
+    expect(within(row).getByRole('button', { name: 'Edit Baby seat' })).toBeInTheDocument()
+  })
+})
+
+// The edit dialog mounts on click, so it needs a QueryClient (mutation) provider.
+function renderViewWithProviders() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={qc}>
+      <IntlProvider locale="en" messages={en}>
+        <TemplateLibraryView addOns={[ARCHIVED_ADD_ON]} insurance={[ACTIVE_INSURANCE]} />
+      </IntlProvider>
+    </QueryClientProvider>,
+  )
+}
+
+describe('TemplateLibraryView edit dialog', () => {
+  it('opens the edit dialog seeded with the clicked row when Edit is pressed', () => {
+    renderViewWithProviders()
+    // No dialog until a row's Edit is clicked.
+    expect(screen.queryByRole('heading', { name: 'Edit template' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Baby seat' }))
+
+    expect(screen.getByRole('heading', { name: 'Edit template' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Name EN')).toHaveValue('Baby seat')
   })
 })

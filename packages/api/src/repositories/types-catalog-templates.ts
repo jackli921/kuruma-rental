@@ -1,3 +1,4 @@
+import type { TemplatePatch } from '@kuruma/shared/types/template-admin'
 import type { AddOnTemplate, InsuranceTemplate } from '../stores'
 
 // Platform-owned catalog TEMPLATE repositories (catalog i18n, epic #385 / #1319).
@@ -27,6 +28,14 @@ export interface AddOnTemplateRepository {
    * the ACTIVE-only policy. Undefined when no row matches.
    */
   findById(id: string): Promise<AddOnTemplate | undefined>
+  /**
+   * Curate ONE template — the platform-admin write (#1319 slice 2). A single
+   * partial serves both intents: translate/edit the `name` / `description`
+   * bundles and promote/archive via `status` (promote = `{ status: 'ACTIVE' }`
+   * on a backfill-minted ARCHIVED row). Bumps `updatedAt`. Returns the updated
+   * row, or undefined when no row matches (a 404 for the service, never a throw).
+   */
+  update(id: string, patch: TemplatePatch): Promise<AddOnTemplate | undefined>
 }
 
 /**
@@ -41,4 +50,7 @@ export interface InsuranceTemplateRepository {
   findAll(): Promise<InsuranceTemplate[]>
   /** One template by id, any status; undefined when no row matches. */
   findById(id: string): Promise<InsuranceTemplate | undefined>
+  /** Curate ONE template — the admin write (#1319 slice 2). Same partial + bump
+   *  as the add-on catalog; undefined when no row matches. */
+  update(id: string, patch: TemplatePatch): Promise<InsuranceTemplate | undefined>
 }
