@@ -117,6 +117,15 @@ export const PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT = 'provider_invites_pendin
  */
 export const OPERATOR_APPLICATION_EMAIL_CONSTRAINT = 'operator_applications_live_email_unique'
 
+/**
+ * Column-level UNIQUE on operators.slug (`operators_slug_unique`). A 23505 on this
+ * name inside the approval tx (#1277) is a concurrent slug race between two
+ * similarly-named businesses approved at once — a RETRYABLE provisioning failure,
+ * NOT a "review conflict". The service branches on it so the loser gets an accurate
+ * message / retry, never a misleading "application already reviewed".
+ */
+export const OPERATORS_SLUG_CONSTRAINT = 'operators_slug_unique'
+
 /** Extract the Postgres error code from an unknown thrown value, or null.
  *
  * Drizzle + postgres-js wraps the raw PostgresError inside `err.cause`,
