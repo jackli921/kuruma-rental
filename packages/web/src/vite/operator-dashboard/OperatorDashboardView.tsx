@@ -15,9 +15,12 @@ interface OperatorDashboardViewProps {
   // Manage Fleet link, so reading it here is a cache hit, not a second round-trip.
   readonly vehicles: readonly OperatorFleetVehicle[]
   // #1102: the Today panel's inline advance is a CSRF-gated write, so it needs the
-  // session token; the panel also gates itself to an operator session.
+  // session token; the panel also gates itself via `canWriteAsOperator`.
   readonly session: Session | null
   readonly locale: string
+  // #1433: forwarded to the Today panel so a picker admin's inline status advance
+  // binds to the operator it is acting as (mirrors the trip-detail write surface).
+  readonly pickedOperatorId?: string | undefined
 }
 
 // Presentational operator overview (#524). The route owns the loader /
@@ -29,6 +32,7 @@ export function OperatorDashboardView({
   vehicles,
   session,
   locale,
+  pickedOperatorId,
 }: OperatorDashboardViewProps) {
   const t = useTranslations('business')
 
@@ -54,6 +58,7 @@ export function OperatorDashboardView({
             vehicles={vehicles}
             session={session}
             locale={locale}
+            pickedOperatorId={pickedOperatorId}
           />
         )}
 
