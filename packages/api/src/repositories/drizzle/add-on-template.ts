@@ -2,7 +2,7 @@ import { addOnTemplates } from '@kuruma/shared/db/schema'
 import type { TemplatePatch } from '@kuruma/shared/types/template-admin'
 import { asc, eq } from 'drizzle-orm'
 import type { AddOnTemplate } from '../../stores'
-import type { AddOnTemplateRepository } from '../types'
+import type { AddOnTemplateRepository, TemplateCreateInput } from '../types'
 import type { Db } from './shared'
 import { templatePatchColumns } from './template-patch-columns'
 
@@ -44,6 +44,14 @@ export class DrizzleAddOnTemplateRepository implements AddOnTemplateRepository {
       .set({ ...templatePatchColumns(patch), updatedAt: new Date() })
       .where(eq(addOnTemplates.id, id))
       .returning(TEMPLATE_COLUMNS)
+    return row
+  }
+
+  async create(input: TemplateCreateInput): Promise<AddOnTemplate> {
+    // id + createdAt/updatedAt are DB-defaulted (crypto.randomUUID / now()). A
+    // duplicate key trips add_on_templates_key_unique (23505) -> service 409.
+    const [row] = await this.db.insert(addOnTemplates).values(input).returning(TEMPLATE_COLUMNS)
+    if (!row) throw new Error('Failed to insert add-on template')
     return row
   }
 }
