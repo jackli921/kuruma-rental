@@ -84,7 +84,7 @@ describe('ClassOfferingCard', () => {
     renderCard()
     expect(screen.getByText('Compact')).toBeInTheDocument()
     expect(screen.getByText('5 seats')).toBeInTheDocument()
-    expect(screen.getByText('3 available')).toBeInTheDocument()
+    expect(screen.getByText('3 cars available')).toBeInTheDocument()
     expect(screen.getByText('From ¥9,000 / day')).toBeInTheDocument()
     expect(screen.getByText('Class deal')).toBeInTheDocument()
   })
@@ -109,6 +109,6 @@ describe('ClassOfferingCard', () => {
 
   it('renders a single-car availability label when only one remains', () => {
     renderCard(makeOffering({ availableCount: 1 }))
-    expect(screen.getByText('1 available')).toBeInTheDocument()
+    expect(screen.getByText('1 car available')).toBeInTheDocument()
   })
 })

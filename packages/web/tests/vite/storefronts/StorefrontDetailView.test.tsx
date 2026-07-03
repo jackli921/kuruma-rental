@@ -217,7 +217,7 @@ describe('StorefrontDetailView', () => {
     renderDetail(makeDetail([], [makeOffering()]))
     expect(screen.getByText('Class deals')).toBeInTheDocument()
     expect(screen.getByText('Compact')).toBeInTheDocument()
-    expect(screen.getByText('3 available')).toBeInTheDocument()
+    expect(screen.getByText('3 cars available')).toBeInTheDocument()
   })
 
   it('carries the storefront location + dates + classId (never a vehicleId) into the class-deal CTA', () => {

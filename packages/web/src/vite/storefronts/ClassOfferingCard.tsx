@@ -69,7 +69,7 @@ export function ClassOfferingCard({
           </span>
           <span className="flex items-center gap-1.5">
             <Car className="size-4" />
-            {t('detail.classAvailable', { count: offering.availableCount })}
+            {t('available', { count: offering.availableCount })}
           </span>
         </div>
         <p className="text-xs text-muted-foreground">{t('comboHint')}</p>
