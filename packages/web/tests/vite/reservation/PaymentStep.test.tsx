@@ -121,6 +121,25 @@ describe('PaymentStep (instant-book submit, #511)', () => {
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
+  it('surfaces a visible alert when a CLASS_COMBO submit sells out at the 409 race (#464)', async () => {
+    // A class-combo can sell out between the storefront view and submit (its
+    // availableCount is a live count of interchangeable cars). The existing 409
+    // branch already surfaces it — this pins the sold-out path for the CLASS_COMBO
+    // body (classId, no requestedVehicleId) to a visible role="alert", not silence.
+    const { requestedVehicleId: _omit, ...common } = bookingInput
+    const comboInput = { fulfillmentMode: 'CLASS_COMBO' as const, classId: 'class-eco', ...common }
+    mockCreateBooking.mockRejectedValue(new ApiError('class just sold out', 409))
+    const user = userEvent.setup()
+    renderStep({ bookingInput: comboInput })
+
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: 'Reserve now' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(en.reservation.payment.errorConflict)
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
   it('routes a 400 "no longer available" rejection to the choose-another message, not a dead-end generic', async () => {
     mockCreateBooking.mockRejectedValue(new ApiError('Vehicle is not available', 400))
     const user = userEvent.setup()

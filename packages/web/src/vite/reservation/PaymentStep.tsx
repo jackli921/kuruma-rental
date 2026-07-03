@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { ApiError, DOCUMENT_VERIFICATION_REQUIRED } from '@/lib/api-error'
-import { type CreateBookingInput, createBooking } from '@/vite/bookings/api'
+import { type CreateBookingDraft, createBooking } from '@/vite/bookings/api'
 import { useSession } from '@/vite/session'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
@@ -9,8 +9,10 @@ import { useTranslations } from 'use-intl'
 
 interface PaymentStepProps {
   readonly locale: string
-  /** Consent is supplied here, not by the wizard — see `disclaimerAccepted` below. */
-  readonly bookingInput: Omit<CreateBookingInput, 'disclaimerAccepted'>
+  /** Consent is supplied here, not by the wizard — see `disclaimerAccepted` below.
+   *  `CreateBookingDraft` distributes the Omit across the fulfillment-mode union so
+   *  both arms keep their discriminant + id field (#464). */
+  readonly bookingInput: CreateBookingDraft
   readonly onBack: () => void
 }
 

@@ -98,10 +98,9 @@ export const bookingDtoSchema = z.object({
   operator: z.object({ name: z.string(), preAuthHandoffUrl: z.string().nullable() }).optional(),
 }) satisfies z.ZodType<BookingDto>
 
-// What the renter selected in the wizard; the server derives operatorId, classId,
+// Fields shared by both fulfillment arms; the server derives operatorId, classId,
 // assignedVehicleId, totalPrice + snapshots (none are client fields, proposal §6.2).
-export interface CreateBookingInput {
-  requestedVehicleId: string
+interface CreateBookingCommon {
   pickupLocationId: string
   dropoffLocationId: string
   startAt: string
@@ -116,6 +115,24 @@ export interface CreateBookingInput {
    *  (400 CONSENT_REQUIRED). Replaces the dropped online document upload. */
   disclaimerAccepted: boolean
 }
+
+// What the renter selected in the wizard, keyed on `fulfillmentMode` so the wire
+// body matches one arm of the server's `discriminatedUnion` (#464): SPECIFIC = a
+// concrete car (requestedVehicleId); CLASS_COMBO = a vehicle class (classId), the
+// operator assigns the car later.
+export type CreateBookingInput =
+  | (CreateBookingCommon & { fulfillmentMode: 'SPECIFIC'; requestedVehicleId: string })
+  | (CreateBookingCommon & { fulfillmentMode: 'CLASS_COMBO'; classId: string })
+
+// `Omit<CreateBookingInput, 'disclaimerAccepted'>` is non-distributive — over a
+// union it collapses to the common keys and silently drops each arm's discriminant
+// + id field. This distributes the Omit across the union so the wizard draft (the
+// booking minus its payment-step consent) keeps both arms intact (#464).
+export type CreateBookingDraft = CreateBookingInput extends infer T
+  ? T extends unknown
+    ? Omit<T, 'disclaimerAccepted'>
+    : never
+  : never
 
 // Instant-book (#511): POST /bookings creates a CONFIRMED booking — no online
 // payment in the path (pre-auth is handled later via the operator handoff link
@@ -132,7 +149,10 @@ export async function createBooking(
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
     body: JSON.stringify({
-      requestedVehicleId: input.requestedVehicleId,
+      fulfillmentMode: input.fulfillmentMode,
+      ...(input.fulfillmentMode === 'SPECIFIC'
+        ? { requestedVehicleId: input.requestedVehicleId }
+        : { classId: input.classId }),
       pickupLocationId: input.pickupLocationId,
       dropoffLocationId: input.dropoffLocationId,
       startAt: input.startAt,
@@ -162,6 +182,38 @@ export function bookingByIdQueryOptions(id: string) {
   return queryOptions({
     queryKey: ['bookings', id],
     queryFn: () => fetchBookingById(id),
+  })
+}
+
+// #464: the renter confirmation read model. A CLASS_COMBO booking floats (no car
+// at book time) until the operator assigns one; this variant asks the IDOR-sealed
+// `GET /bookings/:id?expand=vehicle,renter` for the enriched projection so the
+// page can show the concrete car once assigned. `vehicle` is OPTIONAL — the wire
+// omits it for a float (or a deleted car) — so the schema never runs stricter
+// than the server. Base `bookingDtoSchema`/`fetchBookingById` stay untouched: the
+// messages route + self-cancel re-read depend on their exact shape.
+export const renterBookingDetailSchema = bookingDtoSchema.extend({
+  vehicle: z.object({ name: z.string(), photos: z.array(z.string()) }).optional(),
+})
+
+export type RenterBookingDetail = z.infer<typeof renterBookingDetailSchema>
+
+export async function fetchBookingDetail(id: string): Promise<RenterBookingDetail | null> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}?expand=vehicle,renter`,
+    { credentials: 'include' },
+  )
+  if (res.status === 404) return null
+  return unwrap(res, renterBookingDetailSchema)
+}
+
+// A PREFIX-EXTENSION of `['bookings', id]`: a distinct cache entry from the base
+// read, yet the self-cancel `invalidateQueries(['bookings'])` still refetches it,
+// so the confirmation page re-renders in its CANCELLED state (#856).
+export function bookingDetailQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: ['bookings', id, 'detail'],
+    queryFn: () => fetchBookingDetail(id),
   })
 }
 
