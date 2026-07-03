@@ -30,9 +30,11 @@ export type RecordOperatorMemberDeactivatedAudit = (
 ) => void
 
 /**
- * #904: operator self-service staff management. Every method derives the tenant
- * from the caller's session (`ctx.operatorId`) — there is no foreign-id surface,
- * so a tenant can only ever see or mutate its own team. Writes are owner-only;
+ * #904: operator self-service staff management. Every method resolves the tenant
+ * through `resolveTeamOperatorId` (#1230 slice 6): for operator roles `ctx.operatorId`
+ * is the ceiling (any client-supplied id is ignored), so a tenant can only ever see
+ * or mutate its OWN team; a PLATFORM_ADMIN may supply a foreign `operatorId` to act
+ * as a picked operator, and that is the ONLY foreign-id surface. Writes are owner-only;
  * reads admit any operator member. The minted role is hard-coded OPERATOR_STAFF:
  * an owner can never escalate an invitee to OPERATOR_OWNER through this path.
  */
