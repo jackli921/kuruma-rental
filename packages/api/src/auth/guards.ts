@@ -53,7 +53,10 @@ export class ScopeRequiredError extends Error {
  * this doubles as the cross-tenant seal (no existence oracle).
  */
 export class NotFoundError extends Error {
-  readonly name = 'NotFoundError'
+  // Typed `string`, not the literal, so subclasses (e.g. OperatorNotFoundError,
+  // #1230 c1) can override with a distinct name; the global handler + local
+  // catches match by `instanceof`, never on this literal.
+  readonly name: string = 'NotFoundError'
   constructor(message = 'Not found') {
     super(message)
   }
