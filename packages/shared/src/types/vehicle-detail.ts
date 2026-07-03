@@ -2,6 +2,7 @@
 // utilization data for the owner-facing /manage/vehicles/[id] page.
 // Computed per-request by the repository. See issue #53.
 
+import type { BookingSource, BookingStatus } from '../enums'
 import type { MaintenanceLogSummary } from './maintenance-log'
 import type { VehicleBase } from './vehicle'
 
@@ -10,8 +11,9 @@ export interface VehicleDetailBooking {
   startAt: Date
   endAt: Date
   renterName: string | null
-  source: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
-  status: 'CONFIRMED' | 'ACTIVE'
+  source: BookingSource
+  // Deliberate subset of BookingStatus: only in-flight bookings surface as "upcoming".
+  status: Extract<BookingStatus, 'CONFIRMED' | 'ACTIVE'>
 }
 
 export interface DailyUtilization {
