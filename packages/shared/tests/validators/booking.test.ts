@@ -301,6 +301,9 @@ describe('createBookingSchema — fulfillment discriminator (#464)', () => {
     startAt: '2026-04-10T09:00:00Z',
     endAt: '2026-04-10T17:00:00Z',
   }
+  // #1430: a CLASS_COMBO must be returned to its pickup, so combo fixtures pin
+  // dropoff === pickup. SPECIFIC keeps `common` (one-way is allowed there).
+  const comboCommon = { ...common, dropoffLocationId: PICKUP_UUID }
 
   it('defaults a fulfillmentMode-less body to SPECIFIC (back-compat)', () => {
     const result = createBookingSchema.safeParse({ ...common, requestedVehicleId: VALID_UUID })
@@ -332,7 +335,7 @@ describe('createBookingSchema — fulfillment discriminator (#464)', () => {
 
   it('accepts a CLASS_COMBO booking with a classId', () => {
     const result = createBookingSchema.safeParse({
-      ...common,
+      ...comboCommon,
       fulfillmentMode: 'CLASS_COMBO',
       classId: CLASS_UUID,
     })
@@ -346,13 +349,33 @@ describe('createBookingSchema — fulfillment discriminator (#464)', () => {
   })
 
   it('rejects a CLASS_COMBO booking missing classId', () => {
-    const result = createBookingSchema.safeParse({ ...common, fulfillmentMode: 'CLASS_COMBO' })
+    const result = createBookingSchema.safeParse({ ...comboCommon, fulfillmentMode: 'CLASS_COMBO' })
     expect(result.success).toBe(false)
+  })
+
+  // #1430: the availability card the renter books from can only size the
+  // occupancy window by the PICKUP turnaround (no dropoff is chosen at browse
+  // time), while booking creation sizes it by the DROPOFF turnaround — so a
+  // one-way combo would let the card and the write-side disagree ("advertised
+  // but sold out at checkout"). One-way combos are unsupported product-wide, so
+  // the contract forbids them: a CLASS_COMBO must be returned to its pickup.
+  it('rejects a CLASS_COMBO booking dropped off at a different location', () => {
+    const result = createBookingSchema.safeParse({
+      ...common,
+      pickupLocationId: PICKUP_UUID,
+      dropoffLocationId: DROPOFF_UUID,
+      fulfillmentMode: 'CLASS_COMBO',
+      classId: CLASS_UUID,
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues[0]?.path).toEqual(['dropoffLocationId'])
+    }
   })
 
   it('drops requestedVehicleId from a CLASS_COMBO booking (not a SPECIFIC field)', () => {
     const result = createBookingSchema.safeParse({
-      ...common,
+      ...comboCommon,
       fulfillmentMode: 'CLASS_COMBO',
       classId: CLASS_UUID,
       requestedVehicleId: VALID_UUID,
@@ -374,7 +397,7 @@ describe('createBookingSchema — fulfillment discriminator (#464)', () => {
 
   it('still enforces endAt > startAt across the discriminator', () => {
     const result = createBookingSchema.safeParse({
-      ...common,
+      ...comboCommon,
       fulfillmentMode: 'CLASS_COMBO',
       classId: CLASS_UUID,
       startAt: '2026-04-10T17:00:00Z',

@@ -82,6 +82,7 @@ import { type RecordAuditEvent, toAuditRow } from './services/audit'
 import { AvailabilityService } from './services/availability'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
+import { ClassOfferingService } from './services/class-offering'
 import { ComplianceDigestService } from './services/compliance-digest'
 import { ConsentService } from './services/consent'
 import { ConsentEvidenceService } from './services/consent-evidence'
@@ -495,19 +496,21 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     vehicleClassRepo,
     regionRepo,
   )
+  const classOfferingService = new ClassOfferingService(classRatePlanRepo, availabilityRepo)
   const storefrontDetailService = new StorefrontDetailService(
     storefrontRepo,
     availabilityRepo,
     vehicleClassRepo,
     insuranceOptionRepo,
     addOnRepo,
+    classOfferingService,
   )
   const flatSearchService = new FlatSearchService(
     storefrontRepo,
     availabilityRepo,
     vehicleClassRepo,
     regionRepo,
-    classRatePlanRepo,
+    classOfferingService,
   )
   const reviewService = new ReviewService(
     reviewRepo,

@@ -1,5 +1,4 @@
 import type {
-  ClassComboSearchResult,
   ResultLocation,
   SearchResultItem,
   SearchResultsData,
@@ -10,7 +9,6 @@ import type {
   AvailabilityFilters,
   AvailabilityRepository,
   ClassRatePlanFilters,
-  ClassRatePlanRepository,
   RegionRepository,
   Storefront,
   StorefrontFilters,
@@ -19,7 +17,7 @@ import type {
   VehicleClass,
   VehicleClassRepository,
 } from '../repositories/types'
-import type { ClassRatePlan } from '../stores'
+import type { ClassOfferingService } from './class-offering'
 import { clampLimit, decodeCursor, encodeCursor } from './search-paging'
 
 export type FlatSearchResult =
@@ -62,7 +60,7 @@ export class FlatSearchService {
     private readonly availabilityRepo: AvailabilityRepository,
     private readonly classRepo: VehicleClassRepository,
     private readonly regionRepo: RegionRepository,
-    private readonly classRatePlanRepo: ClassRatePlanRepository,
+    private readonly classOfferingService: ClassOfferingService,
   ) {}
 
   async search(ctx: CallerContext, params: FlatSearchParams): Promise<FlatSearchResult> {
@@ -85,6 +83,11 @@ export class FlatSearchService {
     // mappable and is dropped below.
     const locationById = new Map<string, ResultLocation>(
       storefronts.map((sf) => [sf.id, toResultLocation(sf)]),
+    )
+    // Per-location turnaround so the combo producer scans the same turnaround-inclusive
+    // occupancy window booking creation checks (each storefront sets its own buffer).
+    const turnaroundByLocationId = new Map<string, number>(
+      storefronts.map((sf) => [sf.id, sf.defaultTurnaroundMinutes]),
     )
 
     // ONE availability scan per page — the same call slice 5 makes (N+1 guard).
@@ -125,14 +128,15 @@ export class FlatSearchService {
     // producers into one ordered, paginated list.
     const planFilters: ClassRatePlanFilters = { locationIds: storefronts.map((sf) => sf.id) }
     if (operatorId) planFilters.operatorId = operatorId
-    const comboItems = await this.findComboItems(
+    const comboItems = await this.classOfferingService.findOfferings({
       planFilters,
       from,
       to,
       locationById,
       classById,
+      turnaroundByLocationId,
       requested,
-    )
+    })
 
     const items: SearchResultItem[] = [...specificItems, ...comboItems].sort(compareItems)
 
@@ -147,81 +151,6 @@ export class FlatSearchService {
     const nextCursor = last && start + limit < items.length ? encodeCursor(itemKey(last)) : null
 
     return { ok: true, data: { items: page, nextCursor } }
-  }
-
-  // #464: one CLASS_COMBO card per active rate plan whose pickup location is an
-  // in-scope storefront and whose road-legal supply currently exceeds demand.
-  // N+1 note (bounded): two count queries per plan, fired concurrently. A combo is
-  // one row per (operator, class, location) offered, so P stays small at MVP scale;
-  // collapse to one grouped query if plan volume ever grows — the same deferral the
-  // SPECIFIC pagination comment records.
-  private async findComboItems(
-    planFilters: ClassRatePlanFilters,
-    from: Date,
-    to: Date,
-    locationById: Map<string, ResultLocation>,
-    classById: Map<string, VehicleClass>,
-    requested: Set<string> | null,
-  ): Promise<ClassComboSearchResult[]> {
-    const plans = await this.classRatePlanRepo.findActiveRatePlans(planFilters)
-    const cards = await Promise.all(
-      plans.map((plan) => this.toCombo(plan, from, to, locationById, classById, requested)),
-    )
-    return cards.filter((c): c is ClassComboSearchResult => c !== null)
-  }
-
-  private async toCombo(
-    plan: ClassRatePlan,
-    from: Date,
-    to: Date,
-    locationById: Map<string, ResultLocation>,
-    classById: Map<string, VehicleClass>,
-    requested: Set<string> | null,
-  ): Promise<ClassComboSearchResult | null> {
-    // The plan's pickup location must be an in-scope active storefront (mappable).
-    const location = locationById.get(plan.pickupLocationId)
-    if (!location) return null
-
-    const vc = classById.get(plan.classId)
-    const acrissCode = vc?.acrissCode ?? null
-    // Same ACRISS class filter the SPECIFIC producer applies (toSpecific).
-    if (requested && (acrissCode == null || !requested.has(acrissCode))) return null
-
-    // availableCount = road-legal supply − overlapping demand (floating + specific),
-    // both keyed on the (operator, class, location) triple. asOf = the return date,
-    // so a combo never surfaces a class whose only cars lapse before `to` (§5.2).
-    const [capacity, demand] = await Promise.all([
-      this.availabilityRepo.countClassCapacity(
-        plan.operatorId,
-        plan.classId,
-        plan.pickupLocationId,
-        from,
-        to,
-        to,
-      ),
-      this.availabilityRepo.countClassDemand(
-        plan.operatorId,
-        plan.classId,
-        plan.pickupLocationId,
-        from,
-        to,
-      ),
-    ])
-    const availableCount = Math.max(0, capacity - demand)
-    if (availableCount <= 0) return null
-
-    return {
-      kind: 'CLASS_COMBO',
-      location,
-      dailyRateJpy: plan.dayRateJpy,
-      hourlyRateJpy: null,
-      classLabel: vc?.name ?? '',
-      acrissCode,
-      seats: vc?.seats ?? 0,
-      photos: vc?.photos ?? [],
-      classId: plan.classId,
-      availableCount,
-    }
   }
 }
 
