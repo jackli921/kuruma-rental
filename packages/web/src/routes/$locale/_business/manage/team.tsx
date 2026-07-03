@@ -34,10 +34,11 @@ export const Route = createFileRoute('/$locale/_business/manage/team')({
     }
   },
   loader: async ({ context }) => {
+    const session = await context.queryClient.ensureQueryData(sessionQueryOptions())
+    const operatorId = session?.user.operatorId ?? ''
     await Promise.all([
-      context.queryClient.ensureQueryData(sessionQueryOptions()),
-      context.queryClient.ensureQueryData(teamMembersQueryOptions()),
-      context.queryClient.ensureQueryData(teamInvitesQueryOptions()),
+      context.queryClient.ensureQueryData(teamMembersQueryOptions(operatorId)),
+      context.queryClient.ensureQueryData(teamInvitesQueryOptions(operatorId)),
     ])
   },
   pendingComponent: PageSkeleton,
@@ -48,8 +49,9 @@ export const Route = createFileRoute('/$locale/_business/manage/team')({
 export function OperatorTeamRoute() {
   const t = useTranslations('business.team')
   const { data: session } = useSuspenseQuery(sessionQueryOptions())
-  const { data: members } = useSuspenseQuery(teamMembersQueryOptions())
-  const { data: invites } = useSuspenseQuery(teamInvitesQueryOptions())
+  const operatorId = session?.user.operatorId ?? ''
+  const { data: members } = useSuspenseQuery(teamMembersQueryOptions(operatorId))
+  const { data: invites } = useSuspenseQuery(teamInvitesQueryOptions(operatorId))
   const [inviteOpen, setInviteOpen] = useState(false)
   const [selectedInvite, setSelectedInvite] = useState<OperatorInviteData | null>(null)
   const [selectedMember, setSelectedMember] = useState<OperatorMemberData | null>(null)
@@ -98,16 +100,19 @@ export function OperatorTeamRoute() {
               open={inviteOpen}
               onOpenChange={setInviteOpen}
               csrfToken={session.csrfToken}
+              operatorId={operatorId}
             />
             <RevokeInviteDialog
               invite={selectedInvite}
               onOpenChange={(open) => !open && setSelectedInvite(null)}
               csrfToken={session.csrfToken}
+              operatorId={operatorId}
             />
             <DeactivateMemberDialog
               member={selectedMember}
               onOpenChange={(open) => !open && setSelectedMember(null)}
               csrfToken={session.csrfToken}
+              operatorId={operatorId}
             />
           </>
         )}

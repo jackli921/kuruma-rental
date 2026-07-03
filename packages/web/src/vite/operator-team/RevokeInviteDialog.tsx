@@ -16,17 +16,23 @@ interface RevokeInviteDialogProps {
   invite: OperatorInviteData | null
   onOpenChange: (open: boolean) => void
   csrfToken: string
+  operatorId: string
 }
 
 // #904 slice 2: owner-only revoke of a pending staff invite. The API returns 404
 // for an unknown/foreign id (tenant is session-derived), surfaced inline via the
 // thrown ApiError message. Success invalidates the invites query and closes;
 // closing resets the mutation so a prior refusal never lingers on reopen.
-export function RevokeInviteDialog({ invite, onOpenChange, csrfToken }: RevokeInviteDialogProps) {
+export function RevokeInviteDialog({
+  invite,
+  onOpenChange,
+  csrfToken,
+  operatorId,
+}: RevokeInviteDialogProps) {
   const t = useTranslations('business.team')
   const queryClient = useQueryClient()
   const mutation = useMutation({
-    mutationFn: (id: string) => revokeInvite(id, csrfToken),
+    mutationFn: (id: string) => revokeInvite(id, csrfToken, operatorId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: TEAM_INVITES_QUERY_KEY })
       onOpenChange(false)
