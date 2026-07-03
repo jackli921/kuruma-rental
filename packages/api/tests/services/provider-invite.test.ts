@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { ConflictError } from '../../src/auth/guards'
+import { ConflictError, NotFoundError } from '../../src/auth/guards'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
 import { InMemoryProviderInviteRepository } from '../../src/repositories/in-memory/provider-invite'
 import {
@@ -103,6 +103,12 @@ describe('ProviderInviteService.createInvite', () => {
     // The failed mint adds no second row and emits no audit for the rejected attempt.
     expect(await repo.listByOperator('op_1')).toHaveLength(1)
     expect(audits).toHaveLength(1)
+  })
+
+  it('OperatorNotFoundError is a NotFoundError so the global handler maps it to 404, not 500 (c1)', () => {
+    const err = new OperatorNotFoundError('op_missing')
+    expect(err).toBeInstanceOf(NotFoundError)
+    expect(err.operatorId).toBe('op_missing')
   })
 
   it('lets the same email be re-invited once the prior invite is revoked', async () => {

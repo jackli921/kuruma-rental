@@ -1,5 +1,5 @@
 import type { CreateProviderInviteInput } from '@kuruma/shared/validators/provider-invite'
-import { ConflictError } from '../auth/guards'
+import { ConflictError, NotFoundError } from '../auth/guards'
 import { sha256Hex } from '../auth/token-hash'
 import {
   PG_ERROR,
@@ -15,12 +15,17 @@ export { INVITE_TTL_MS } from './invite-mint'
 export type { ProviderInviteAuditEvent }
 
 /** Raised when an invite is minted against an operatorId with no matching row.
- *  The route maps this to a 404 so a bad target reads as a client error, not a
- *  500 from the FK violation (#563). */
-export class OperatorNotFoundError extends Error {
+ *  Extends NotFoundError so the global handler maps it to 404 (#563, #1230 c1);
+ *  the platform-admin team path can now supply an arbitrary operatorId, so this
+ *  is reachable for the first time. The admin.ts:47 local catch is KEPT — it pins
+ *  the suffix-free 'Operator not found' message provider-invites.test.ts asserts.
+ *  Note: `name` is not overridden here because NotFoundError declares it as the
+ *  literal type 'NotFoundError'; a subclass override would be a TS2416 type error.
+ *  Identity is preserved via `instanceof OperatorNotFoundError` (the admin.ts catch)
+ *  and `instanceof NotFoundError` (the global handler's 404 branch). */
+export class OperatorNotFoundError extends NotFoundError {
   constructor(readonly operatorId: string) {
     super(`Operator not found: ${operatorId}`)
-    this.name = 'OperatorNotFoundError'
   }
 }
 
