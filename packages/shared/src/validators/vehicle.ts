@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { TRANSMISSIONS, VEHICLE_STATUSES } from '../enums'
 import { LUGGAGE_SIZES } from '../lib/luggage'
 import { jpyAmount } from './money'
-import { httpUrl } from './url'
+import { httpUrlMax } from './url'
 
 const MIN_VEHICLE_YEAR = 1900
 const MAX_VEHICLE_YEAR = 2100
@@ -17,9 +17,10 @@ const jpyRate = jpyAmount('Rate')
 // photos carries a .default() only on create. Kept off the base because Zod
 // .partial() does NOT strip .default(), so a partial PATCH would re-inject
 // { photos: [] } and wipe that column on write (issue #432, same root cause
-// as #430). Entries are http(s) URLs (#967): bare .url() admits `r2:`/`data:`/
-// `javascript:`, which stored then rendered are spoof/injection vectors.
-const photosSchema = z.array(httpUrl)
+// as #430). Entries are length-capped http(s) URLs (#967): bare .url() admits
+// `r2:`/`data:`/`javascript:`, which stored then rendered are spoof/injection
+// vectors. The 2048 cap matches class photos (validators/url.ts httpUrlMax).
+const photosSchema = z.array(httpUrlMax(2048))
 
 // Shaken/insurance expiry — a real YYYY-MM-DD calendar date that is not in the
 // past (§5.0 / #916). The runtime road-legal gate treats a certificate as valid
