@@ -3,8 +3,9 @@ import { AnomaliesPanel } from '@/vite/admin/AnomaliesPanel'
 import { RevenueView } from '@/vite/admin/RevenueView'
 import { paymentAnomaliesQueryOptions } from '@/vite/admin/anomalies/api'
 import { adminRevenueQueryOptions } from '@/vite/admin/revenue/api'
+import { RouteRetryError } from '@/vite/route-error'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
-import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
+import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
 // `YYYY-MM` (JST) payout-month filter (#628); an invalid value is dropped so the
@@ -63,17 +64,11 @@ function RevenueRoute() {
 
 function RevenueError(_props: ErrorComponentProps) {
   const t = useTranslations('admin.revenue')
-  const router = useRouter()
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-      <p className="text-lg text-muted-foreground">{t('loadError')}</p>
-      <button
-        type="button"
-        onClick={() => router.invalidate()}
-        className="mt-4 inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted/50"
-      >
-        {t('retry')}
-      </button>
-    </div>
+    <RouteRetryError
+      message={t('loadError')}
+      retryLabel={t('retry')}
+      className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center"
+    />
   )
 }

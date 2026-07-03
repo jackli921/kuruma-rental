@@ -10,15 +10,10 @@ import {
   substitutionCandidatesQueryOptions,
 } from '@/vite/operator-bookings/api'
 import { RateRenterPanel } from '@/vite/reviews'
+import { RouteRetryError } from '@/vite/route-error'
 import { sessionQueryOptions } from '@/vite/session'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
-import {
-  type ErrorComponentProps,
-  Link,
-  createFileRoute,
-  notFound,
-  useRouter,
-} from '@tanstack/react-router'
+import { type ErrorComponentProps, Link, createFileRoute, notFound } from '@tanstack/react-router'
 import { ChevronLeft } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
@@ -115,20 +110,14 @@ export function TripDetailRoute() {
 
 function TripDetailError(_props: ErrorComponentProps) {
   const t = useTranslations('bookings.operator')
-  const router = useRouter()
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl py-20 text-center">
-        <p className="text-lg text-muted-foreground">{t('detail.loadError')}</p>
-        <button
-          type="button"
-          onClick={() => router.invalidate()}
-          className="mt-4 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-        >
-          {t('retry')}
-        </button>
-      </div>
+      <RouteRetryError
+        message={t('detail.loadError')}
+        retryLabel={t('retry')}
+        className="mx-auto max-w-3xl py-20 text-center"
+      />
     </main>
   )
 }
