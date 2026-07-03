@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { setupGlobalHandlers } from '../../src/error-handlers'
 import { type UserRole, requireAuth } from '../../src/middleware/auth'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
@@ -8,11 +8,14 @@ import { InMemoryPaymentEventRepository } from '../../src/repositories/in-memory
 import { InMemoryPaymentRefundRepository } from '../../src/repositories/in-memory/payment-refund'
 import { createPaymentRoutes } from '../../src/routes/payments'
 import { PaymentService } from '../../src/services/payment/payment'
-import type {
-  CheckoutSession,
-  CreateCheckoutParams,
-  PaymentGateway,
-  VerifiedPaymentEvent,
+import {
+  type CheckoutSession,
+  type CreateCheckoutParams,
+  type PaymentGateway,
+  type RefundParams,
+  RefundRejectedError,
+  type StripeRefund,
+  type VerifiedPaymentEvent,
 } from '../../src/services/payment/payment-gateway'
 import type { Booking } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
@@ -46,9 +49,16 @@ class StubGateway implements PaymentGateway {
     if (!this.event) throw new Error('bad signature')
     return this.event
   }
-  // Refund surface (#851) is unused by these checkout/webhook route tests.
-  async refundPayment(): Promise<never> {
+  // Refund surface: programmable so the #1378 amount-mismatch auto-refund + alert
+  // path can be driven at the route boundary. retrieve/list stay unused here.
+  refundCalls: RefundParams[] = []
+  nextRefund: StripeRefund | (() => never) = () => {
     throw new Error('no refund programmed')
+  }
+  async refundPayment(p: RefundParams): Promise<StripeRefund> {
+    this.refundCalls.push(p)
+    const r = this.nextRefund
+    return typeof r === 'function' ? r() : r
   }
   async retrieveRefund(): Promise<never> {
     throw new Error('no refund programmed')
@@ -105,8 +115,26 @@ const completed = (): VerifiedPaymentEvent => ({
   amountTotal: 100_000,
   currency: 'jpy',
   paymentStatus: 'paid',
+  refundStatus: null,
+  refundId: null,
   metadata: { bookingId: BOOKING_ID },
 })
+
+// A charge captured for the WRONG amount (99_999 vs the booking's 100_000) → #1378.
+const mismatch = (): VerifiedPaymentEvent => ({
+  ...completed(),
+  eventId: 'evt_mm',
+  amountTotal: 99_999,
+})
+
+const succeededRefund: StripeRefund = {
+  id: 're_1',
+  amount: 99_999,
+  currency: 'jpy',
+  status: 'succeeded',
+  paymentIntentId: 'pi_1',
+  metadata: { bookingId: BOOKING_ID },
+}
 
 describe('POST /bookings/:id/checkout-session', () => {
   it('401 when unauthenticated (relies on the app-level /bookings/* guard)', async () => {
@@ -177,6 +205,50 @@ describe('POST /webhooks/stripe (public)', () => {
     expect(await paymentRepo.findSucceededByBookingId(BOOKING_ID)).toMatchObject({
       grossJpy: 100_000,
     })
+  })
+
+  it('auto-refunds a mismatched charge and logs at WARNING level, not an alert (#1378)', async () => {
+    const { app, gateway } = publicApp()
+    gateway.event = mismatch()
+    gateway.nextRefund = succeededRefund
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await app.request('/webhooks/stripe', {
+      method: 'POST',
+      headers: { 'stripe-signature': 't=1,v1=good' },
+      body: 'raw',
+    })
+    expect(res.status).toBe(200)
+    expect(gateway.refundCalls).toHaveLength(1)
+    // A clean auto-refund is NOT an alert.
+    expect(error).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledWith(
+      '[payment:webhook] amount mismatch',
+      expect.objectContaining({ refund: 'refunded', stranded: false, bookingId: BOOKING_ID }),
+    )
+    warn.mockRestore()
+    error.mockRestore()
+  })
+
+  it('ALERTS via console.error when the mismatch refund is rejected — funds may be stranded (#1378)', async () => {
+    const { app, gateway } = publicApp()
+    gateway.event = mismatch()
+    gateway.nextRefund = () => {
+      throw new RefundRejectedError('charge already refunded', 'charge_already_refunded')
+    }
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await app.request('/webhooks/stripe', {
+      method: 'POST',
+      headers: { 'stripe-signature': 't=1,v1=good' },
+      body: 'raw',
+    })
+    // Still a 200 ack (the anomaly + failed disposition are recorded, not re-driven here).
+    expect(res.status).toBe(200)
+    expect(error).toHaveBeenCalledWith(
+      '[payment:webhook] amount mismatch',
+      expect.objectContaining({ refund: 'failed', stranded: true, bookingId: BOOKING_ID }),
+    )
+    error.mockRestore()
   })
 })
 

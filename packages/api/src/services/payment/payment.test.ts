@@ -6,11 +6,14 @@ import { InMemoryPaymentEventRepository } from '../../repositories/in-memory/pay
 import { InMemoryPaymentRefundRepository } from '../../repositories/in-memory/payment-refund'
 import type { Booking } from '../../stores'
 import { PaymentService } from './payment'
-import type {
-  CheckoutSession,
-  CreateCheckoutParams,
-  PaymentGateway,
-  VerifiedPaymentEvent,
+import {
+  type CheckoutSession,
+  type CreateCheckoutParams,
+  type PaymentGateway,
+  type RefundParams,
+  RefundRejectedError,
+  type StripeRefund,
+  type VerifiedPaymentEvent,
 } from './payment-gateway'
 
 const RENTER: CallerContext = { userId: 'renter-1', role: 'RENTER', bypassScope: false }
@@ -72,10 +75,18 @@ class FakeGateway implements PaymentGateway {
     return ev
   }
 
-  // Refund surface (#851) is exercised in payment-refund.test.ts; these checkout/
-  // webhook tests never refund, so the stubs throw if unexpectedly reached.
-  async refundPayment(): Promise<never> {
+  // Refund surface: refundPayment is programmable so the #1378 amount-mismatch
+  // auto-refund path can be driven and asserted. retrieve/list stay throwing —
+  // the mismatch path refunds DIRECTLY (no receipt ledger, no adopt), so they're
+  // never reached from these webhook tests.
+  refundCalls: RefundParams[] = []
+  nextRefund: StripeRefund | (() => never) = () => {
     throw new Error('no refund programmed')
+  }
+  async refundPayment(p: RefundParams): Promise<StripeRefund> {
+    this.refundCalls.push(p)
+    const r = this.nextRefund
+    return typeof r === 'function' ? r() : r
   }
   async retrieveRefund(): Promise<never> {
     throw new Error('no refund programmed')
@@ -98,6 +109,20 @@ function completedEvent(overrides: Partial<VerifiedPaymentEvent> = {}): Verified
     refundId: null,
     metadata: { bookingId: 'bk-1', operatorId: 'spoofed-operator' },
     ...overrides,
+  }
+}
+
+// A narrowed Stripe Refund the fake hands back from refundPayment (#1378 mismatch
+// auto-refund). Defaults to a succeeded full refund of the mismatched charge.
+function stripeRefund(o: Partial<StripeRefund> = {}): StripeRefund {
+  return {
+    id: 're_mismatch_1',
+    amount: 99_999,
+    currency: 'jpy',
+    status: 'succeeded',
+    paymentIntentId: 'pi_1',
+    metadata: { bookingId: 'bk-1' },
+    ...o,
   }
 }
 
@@ -284,6 +309,7 @@ describe('PaymentService.handleWebhook', () => {
 
   it('rejects an amount that does not match the booking total, carrying reconciliation context', async () => {
     gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
+    gateway.nextRefund = stripeRefund({ amount: 99_999 })
     const result = await service.handleWebhook('raw', 'sig')
     expect(result.status).toBe(200)
     expect(result.outcome).toBe('amount_mismatch')
@@ -299,9 +325,65 @@ describe('PaymentService.handleWebhook', () => {
     expect(await paymentRepo.findSucceededByBookingId('bk-1')).toBeNull()
   })
 
-  it('rejects a non-JPY currency', async () => {
+  it('auto-refunds the captured charge on an amount mismatch, never stranding funds (#1378)', async () => {
+    gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
+    gateway.nextRefund = stripeRefund({ amount: 99_999 })
+    const result = await service.handleWebhook('raw', 'sig')
+    expect(result.outcome).toBe('amount_mismatch')
+    // The disposition is surfaced so the route can alert on an UNRESOLVED refund.
+    expect(result.refund).toBe('refunded')
+    // The FULL captured (wrong) amount is refunded against the charge's paymentIntent.
+    expect(gateway.refundCalls).toEqual([
+      expect.objectContaining({
+        paymentIntentId: 'pi_1',
+        amountJpy: 99_999,
+        metadata: { bookingId: 'bk-1' },
+      }),
+    ])
+    // Booking legitimately stays UNPAID — we refused a wrong amount, we didn't book it.
+    expect(await paymentRepo.findSucceededByBookingId('bk-1')).toBeNull()
+  })
+
+  it('rejects a non-JPY currency and refunds the foreign-currency charge', async () => {
     gateway.nextEvent = completedEvent({ currency: 'usd' })
-    expect(await service.handleWebhook('raw', 'sig')).toMatchObject({ outcome: 'amount_mismatch' })
+    gateway.nextRefund = stripeRefund({ amount: 100_000 })
+    const result = await service.handleWebhook('raw', 'sig')
+    expect(result).toMatchObject({ outcome: 'amount_mismatch', refund: 'refunded' })
+    expect(gateway.refundCalls).toHaveLength(1)
+  })
+
+  it('flags a mismatch as unrefundable when Stripe reported no PaymentIntent (nothing to refund)', async () => {
+    gateway.nextEvent = completedEvent({ amountTotal: 99_999, paymentIntentId: null })
+    const result = await service.handleWebhook('raw', 'sig')
+    expect(result).toMatchObject({ outcome: 'amount_mismatch', refund: 'unrefundable' })
+    // Never call Stripe when there's no PI to refund against; the anomaly is the surface.
+    expect(gateway.refundCalls).toEqual([])
+  })
+
+  it('flags the refund as failed when Stripe TERMINALLY rejects it (funds may still be stranded)', async () => {
+    gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
+    gateway.nextRefund = () => {
+      throw new RefundRejectedError('charge already refunded', 'charge_already_refunded')
+    }
+    const result = await service.handleWebhook('raw', 'sig')
+    expect(result).toMatchObject({ outcome: 'amount_mismatch', refund: 'failed' })
+  })
+
+  it('propagates a TRANSIENT refund error so the webhook 500s and Stripe retries (never a silent strand)', async () => {
+    gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
+    gateway.nextRefund = () => {
+      throw new Error('stripe 503 timeout')
+    }
+    await expect(service.handleWebhook('raw', 'sig')).rejects.toThrow('stripe 503 timeout')
+    // The anomaly was still captured before the refund attempt threw.
+    expect(await anomalyRepo.listUnresolved()).toHaveLength(1)
+  })
+
+  it('surfaces a pending refund (async settlement) so the route does not alert as stranded', async () => {
+    gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
+    gateway.nextRefund = stripeRefund({ amount: 99_999, status: 'pending' })
+    const result = await service.handleWebhook('raw', 'sig')
+    expect(result).toMatchObject({ outcome: 'amount_mismatch', refund: 'pending' })
   })
 
   it('rejects a null amount even against a booking with no total (no null===null match)', async () => {
@@ -368,6 +450,7 @@ describe('PaymentService.handleWebhook', () => {
   // can list duplicate charges to refund instead of scraping logs.
   it('persists an AMOUNT_MISMATCH anomaly carrying received + expected amounts', async () => {
     gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
+    gateway.nextRefund = stripeRefund({ amount: 99_999 })
     await service.handleWebhook('raw', 'sig')
 
     const anomalies = await anomalyRepo.listUnresolved()
@@ -411,6 +494,7 @@ describe('PaymentService.handleWebhook', () => {
 
   it('records a single anomaly when an amount_mismatch webhook is redelivered (idempotent)', async () => {
     gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
+    gateway.nextRefund = stripeRefund({ amount: 99_999 })
     await service.handleWebhook('raw', 'sig')
     await service.handleWebhook('raw', 'sig') // same evt_1 redelivered
     expect(await anomalyRepo.listUnresolved()).toHaveLength(1)
