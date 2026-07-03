@@ -496,18 +496,30 @@ async function writeBooking(
   return unwrap(res, bookingDtoSchema)
 }
 
+// #1260/#1361: a picker admin binds the write to the operator it is acting as via
+// ?operatorId=; a tenant operator omits it (the server drops it, so it can never
+// widen scope). Without it a picker admin's write 422s OPERATOR_REQUIRED.
 export function updateBookingStatus(
   id: string,
   status: OperatorBookingStatus,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<BookingDto> {
-  return writeBooking(`/bookings/${encodeURIComponent(id)}/status`, 'PATCH', csrfToken, { status })
+  const suffix = pickedOperatorId ? `?operatorId=${encodeURIComponent(pickedOperatorId)}` : ''
+  return writeBooking(`/bookings/${encodeURIComponent(id)}/status${suffix}`, 'PATCH', csrfToken, {
+    status,
+  })
 }
 
 // DELETE-equivalent (the API models cancel as a POST that records a cancellation
 // fee in the meta); the projection in `data` is the now-CANCELLED booking.
-export function cancelBooking(id: string, csrfToken: string): Promise<BookingDto> {
-  return writeBooking(`/bookings/${encodeURIComponent(id)}/cancel`, 'POST', csrfToken)
+export function cancelBooking(
+  id: string,
+  csrfToken: string,
+  pickedOperatorId?: string,
+): Promise<BookingDto> {
+  const suffix = pickedOperatorId ? `?operatorId=${encodeURIComponent(pickedOperatorId)}` : ''
+  return writeBooking(`/bookings/${encodeURIComponent(id)}/cancel${suffix}`, 'POST', csrfToken)
 }
 
 // --- Existing-customer search (#589 1d slice 3) ------------------------------

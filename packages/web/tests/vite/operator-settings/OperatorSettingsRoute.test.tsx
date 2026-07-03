@@ -119,4 +119,14 @@ describe('OperatorSettingsRoute (#903)', () => {
     expect(screen.getByText(en.noOperatorContext)).toBeInTheDocument()
     expect(screen.queryByLabelText(en.form.name)).not.toBeInTheDocument()
   })
+
+  it('drops a retained ?operator pick for a legacy STAFF session — no-context notice, no foreign profile read (#1420)', () => {
+    // The bug: without the capability gate, operatorId ?? pickedOperatorId resolves
+    // the retained foreign id and drives a profile read the API denies (403). A legacy
+    // STAFF is not a picker, so the param must drop and the terminal notice shows.
+    h.picked = 'op_foreign' // no profile seeded for it — a read would suspend/fetch
+    renderRoute(legacyStaffSession)
+    expect(screen.getByText(en.noOperatorContext)).toBeInTheDocument()
+    expect(screen.queryByLabelText(en.form.name)).not.toBeInTheDocument()
+  })
 })

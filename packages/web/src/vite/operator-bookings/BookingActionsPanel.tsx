@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { useFeatureFlag } from '@/vite/config'
-import { isOperatorSession } from '@/vite/guards'
+import { canWriteAsOperator, isOperatorSession } from '@/vite/guards'
 import { CancelBookingDialog } from '@/vite/operator-bookings/CancelBookingDialog'
 import { SubstituteVehicleDialog } from '@/vite/operator-bookings/SubstituteVehicleDialog'
 import {
@@ -25,6 +25,10 @@ interface BookingActionsPanelProps {
   /** True when the candidate fetch errored — forwarded so the Substitute dialog
    *  can tell a load failure apart from a genuinely empty list. */
   readonly candidatesError?: boolean
+  /** #1361: the operator a picker admin (PLATFORM_ADMIN) has chosen via the context
+   *  picker. Threaded into the status/cancel writes so the #1260 guard binds to it;
+   *  undefined for a tenant operator (its scope rides the cookie). */
+  readonly pickedOperatorId?: string | undefined
 }
 
 // The status a one-click "advance" moves a live booking to: CONFIRMED -> ACTIVE
@@ -53,6 +57,7 @@ export function BookingActionsPanel({
   session,
   candidates,
   candidatesError = false,
+  pickedOperatorId,
 }: BookingActionsPanelProps) {
   const t = useTranslations('bookings.operator.detail')
   const cancellationEnabled = useFeatureFlag('CANCELLATION')
@@ -60,11 +65,15 @@ export function BookingActionsPanel({
   const csrfToken = session?.csrfToken ?? ''
 
   const statusMutation = useMutation({
-    mutationFn: (next: OperatorBookingStatus) => updateBookingStatus(detail.id, next, csrfToken),
+    mutationFn: (next: OperatorBookingStatus) =>
+      updateBookingStatus(detail.id, next, csrfToken, pickedOperatorId),
     onSuccess: () => invalidateBookingCaches(queryClient),
   })
 
-  if (!isOperatorSession(session)) return null
+  // #1361: a picker admin who has chosen an operator may act here too (#1260 binds
+  // the write to it). Substitute stays operator-only below — the API has no admin
+  // substitute path — so an admin never sees a button that would 403.
+  if (!canWriteAsOperator(session, pickedOperatorId)) return null
 
   // A live booking (CONFIRMED/ACTIVE) is the only one with anything to act on; a
   // COMPLETED/CANCELLED trip is settled, so the panel just explains the absence.
@@ -84,17 +93,26 @@ export function BookingActionsPanel({
           >
             {advanceTarget === 'ACTIVE' ? t('markActive') : t('markCompleted')}
           </Button>
-          <SubstituteVehicleDialog
-            bookingId={detail.id}
-            candidates={candidates}
-            candidatesError={candidatesError}
-            csrfToken={csrfToken}
-          />
+          {/* Substitute is an operator-only fleet decision (POST /substitute is
+              isOperatorRole-gated — no admin path, booking-authz.md), so hide it from
+              a picker admin rather than offer a button that 403s. */}
+          {isOperatorSession(session) && (
+            <SubstituteVehicleDialog
+              bookingId={detail.id}
+              candidates={candidates}
+              candidatesError={candidatesError}
+              csrfToken={csrfToken}
+            />
+          )}
           {/* Only CONFIRMED bookings can be cancelled — the server 409s any other
               status. An ACTIVE (picked-up) trip is past the cancellation window, so
               we hide the button rather than offer a dead-end action. */}
           {cancellationEnabled && detail.status === 'CONFIRMED' && (
-            <CancelBookingDialog bookingId={detail.id} csrfToken={csrfToken} />
+            <CancelBookingDialog
+              bookingId={detail.id}
+              csrfToken={csrfToken}
+              pickedOperatorId={pickedOperatorId}
+            />
           )}
         </div>
       ) : (

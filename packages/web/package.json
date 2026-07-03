@@ -25,7 +25,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
-    "dayjs": "^1.11.10",
     "interactjs": "1.10.27",
     "lucide-react": "^1.7.0",
     "pigeon-maps": "^0.22.1",
