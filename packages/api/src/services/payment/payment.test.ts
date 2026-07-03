@@ -373,6 +373,22 @@ describe('PaymentService.handleWebhook', () => {
     expect(result).toMatchObject({ outcome: 'amount_mismatch', refund: 'failed' })
   })
 
+  it('flags the refund as failed when Stripe RETURNS a failed status (not thrown)', async () => {
+    gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
+    gateway.nextRefund = stripeRefund({ amount: 99_999, status: 'failed' })
+    const result = await service.handleWebhook('raw', 'sig')
+    // A non-thrown 'failed'/'canceled' refund must NOT be softened to 'pending':
+    // captured funds did not move, so the route has to alert LOUD, not warn.
+    expect(result).toMatchObject({ outcome: 'amount_mismatch', refund: 'failed' })
+  })
+
+  it('flags the refund as failed when Stripe RETURNS a canceled status', async () => {
+    gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
+    gateway.nextRefund = stripeRefund({ amount: 99_999, status: 'canceled' })
+    const result = await service.handleWebhook('raw', 'sig')
+    expect(result).toMatchObject({ outcome: 'amount_mismatch', refund: 'failed' })
+  })
+
   it('propagates a TRANSIENT refund error so the webhook 500s and Stripe retries (never a silent strand)', async () => {
     gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
     gateway.nextRefund = () => {
@@ -398,8 +414,23 @@ describe('PaymentService.handleWebhook', () => {
   it('rejects a null amount even against a booking with no total (no null===null match)', async () => {
     bookings.set('bk-1', makeBooking({ totalPrice: null }))
     gateway.nextEvent = completedEvent({ amountTotal: null })
-    expect(await service.handleWebhook('raw', 'sig')).toMatchObject({ outcome: 'amount_mismatch' })
+    // A null amount has nothing to refund against → 'unrefundable' (the anomaly is the
+    // human surface), and Stripe is never called.
+    expect(await service.handleWebhook('raw', 'sig')).toMatchObject({
+      outcome: 'amount_mismatch',
+      refund: 'unrefundable',
+    })
+    expect(gateway.refundCalls).toEqual([])
     expect(await paymentRepo.findSucceededByBookingId('bk-1')).toBeNull()
+  })
+
+  it('flags a zero-amount mismatch as unrefundable (nothing to refund, never calls Stripe)', async () => {
+    gateway.nextEvent = completedEvent({ amountTotal: 0 })
+    expect(await service.handleWebhook('raw', 'sig')).toMatchObject({
+      outcome: 'amount_mismatch',
+      refund: 'unrefundable',
+    })
+    expect(gateway.refundCalls).toEqual([])
   })
 
   it('is idempotent on a redelivered event (no duplicate row)', async () => {
