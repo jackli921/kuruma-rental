@@ -22,7 +22,11 @@ export function createOperatorTeamRoutes(service: OperatorTeamService) {
       const parsed = await parseBody(c, inviteStaffSchema)
       if (!parsed.ok) return parsed.response
 
-      const created = await service.inviteStaff(toCallerContext(user), parsed.data)
+      const created = await service.inviteStaff(
+        toCallerContext(user),
+        parsed.data,
+        c.req.query('operatorId'),
+      )
       // The URL embeds the one-time token (never persisted in cleartext); the
       // owner copies it to share. We omit the bare `token` field — the URL is the
       // only form the page needs.
@@ -39,7 +43,7 @@ export function createOperatorTeamRoutes(service: OperatorTeamService) {
       const id = c.req.param('id')
       // Owner-only + tenant scope live in the service; an unknown/foreign id
       // throws NotFoundError (-> 404) via the global handler, so no id is leaked.
-      await service.revokeInvite(toCallerContext(requireUser(c)), id)
+      await service.revokeInvite(toCallerContext(requireUser(c)), id, c.req.query('operatorId'))
       return ok(c, { id })
     })
     .get('/operators/me/members', async (c) => {
@@ -54,7 +58,7 @@ export function createOperatorTeamRoutes(service: OperatorTeamService) {
       // Owner-only + tenant scope + last-owner lockout live in the service: an
       // unknown/foreign id throws NotFoundError (-> 404) and the last owner throws
       // ConflictError (-> 409), both via the global handler, so no id is leaked.
-      await service.deactivateMember(toCallerContext(requireUser(c)), id)
+      await service.deactivateMember(toCallerContext(requireUser(c)), id, c.req.query('operatorId'))
       return ok(c, { id })
     })
 }
