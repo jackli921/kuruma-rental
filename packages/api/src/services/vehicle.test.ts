@@ -1,6 +1,6 @@
 import { createVehicleSchema, updateVehicleSchema } from '@kuruma/shared/validators/vehicle'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { SYSTEM_CONTEXT } from '../middleware/auth'
+import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import type { ResolveWriteOperatorId } from '../tenancy'
 import { VehicleService } from './vehicle'
@@ -9,6 +9,17 @@ const OPERATOR_ID = 'op_test'
 // A non-empty public bucket base so the #967 cross-tenant photo-spoof guard is
 // active in these tests (it is inert when the base is empty — see isForeignVehiclePhoto).
 const PHOTOS_BASE = 'https://photos.kuruma.test'
+
+// #1260: the guarded writes (update / softDelete / bulkUpdateStatus) run as the
+// tenant operator that owns the seeded fleet, so the acting-operator guard is a
+// transparent no-op here (isOperatorRole -> null). These tests exercise CRUD
+// business rules, not the guard — admin / legacy-STAFF binding is covered in
+// tests/services/vehicle-write-scope.test.ts. Seeds/reads stay SYSTEM_CONTEXT.
+const operator: CallerContext = {
+  userId: 'op-owner',
+  role: 'OPERATOR_OWNER',
+  operatorId: OPERATOR_ID,
+}
 
 // Resolver stub: echoes the seeded operator so create() can prove it both
 // invokes the injected resolver and stamps the resolved id onto the row.
@@ -90,7 +101,7 @@ describe('VehicleService — cross-tenant photo-spoof guard (#967)', () => {
     const id = await seedVehicle(service)
 
     const result = await service.update(
-      SYSTEM_CONTEXT,
+      operator,
       id,
       updateVehicleSchema.parse({ photos: [`${PHOTOS_BASE}/vehicles/veh_other/x.jpg`] }),
     )
@@ -105,7 +116,7 @@ describe('VehicleService — cross-tenant photo-spoof guard (#967)', () => {
     const id = await seedVehicle(service)
 
     const result = await service.update(
-      SYSTEM_CONTEXT,
+      operator,
       id,
       updateVehicleSchema.parse({ photos: [`${PHOTOS_BASE}/vehicles/${id}/x.jpg`] }),
     )
@@ -129,7 +140,7 @@ describe('VehicleService.update — merge-level rate guard', () => {
     const id = await seedVehicle(service, { dailyRateJpy: 8000, hourlyRateJpy: null })
 
     const result = await service.update(
-      SYSTEM_CONTEXT,
+      operator,
       id,
       updateVehicleSchema.parse({ dailyRateJpy: null }),
     )
@@ -145,7 +156,7 @@ describe('VehicleService.update — merge-level rate guard', () => {
     const id = await seedVehicle(service, { dailyRateJpy: 8000, hourlyRateJpy: 1200 })
 
     const result = await service.update(
-      SYSTEM_CONTEXT,
+      operator,
       id,
       updateVehicleSchema.parse({ dailyRateJpy: null }),
     )
@@ -163,7 +174,7 @@ describe('VehicleService.update — merge-level min/max guard', () => {
     const id = await seedVehicle(service, { minRentalHours: 10, maxRentalHours: 72 })
 
     const result = await service.update(
-      SYSTEM_CONTEXT,
+      operator,
       id,
       updateVehicleSchema.parse({ maxRentalHours: 5 }),
     )
@@ -182,7 +193,7 @@ describe('VehicleService.update — merge semantics', () => {
     const id = await seedVehicle(service, { name: 'Original', dailyRateJpy: 8000 })
 
     const result = await service.update(
-      SYSTEM_CONTEXT,
+      operator,
       id,
       updateVehicleSchema.parse({ name: 'Renamed', fuelType: 'EV' }),
     )
@@ -198,7 +209,7 @@ describe('VehicleService.update — merge semantics', () => {
     const { service } = setup()
 
     const result = await service.update(
-      SYSTEM_CONTEXT,
+      operator,
       '00000000-0000-0000-0000-000000000000',
       updateVehicleSchema.parse({ name: 'Nope' }),
     )
@@ -218,7 +229,7 @@ describe('VehicleService.bulkUpdateStatus', () => {
     const a = await seedVehicle(service)
     const b = await seedVehicle(service)
 
-    const result = await service.bulkUpdateStatus(SYSTEM_CONTEXT, [a, b], 'MAINTENANCE')
+    const result = await service.bulkUpdateStatus(operator, [a, b], 'MAINTENANCE')
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
@@ -229,7 +240,7 @@ describe('VehicleService.bulkUpdateStatus', () => {
     const a = await seedVehicle(service)
 
     const result = await service.bulkUpdateStatus(
-      SYSTEM_CONTEXT,
+      operator,
       [a, '00000000-0000-0000-0000-000000000000'],
       'MAINTENANCE',
     )
@@ -241,9 +252,9 @@ describe('VehicleService.bulkUpdateStatus', () => {
 
   it('returns 400 when any target is RETIRED', async () => {
     const a = await seedVehicle(service)
-    await service.softDelete(SYSTEM_CONTEXT, a)
+    await service.softDelete(operator, a)
 
-    const result = await service.bulkUpdateStatus(SYSTEM_CONTEXT, [a], 'AVAILABLE')
+    const result = await service.bulkUpdateStatus(operator, [a], 'AVAILABLE')
 
     expect(result).toEqual({ ok: false, error: 'Cannot bulk-update retired vehicles', status: 400 })
   })
@@ -251,7 +262,7 @@ describe('VehicleService.bulkUpdateStatus', () => {
   it('deduplicates repeated ids', async () => {
     const a = await seedVehicle(service)
 
-    const result = await service.bulkUpdateStatus(SYSTEM_CONTEXT, [a, a], 'MAINTENANCE')
+    const result = await service.bulkUpdateStatus(operator, [a, a], 'MAINTENANCE')
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
@@ -264,7 +275,7 @@ describe('VehicleService.softDelete', () => {
     const { service } = setup()
     const id = await seedVehicle(service)
 
-    const result = await service.softDelete(SYSTEM_CONTEXT, id)
+    const result = await service.softDelete(operator, id)
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
@@ -274,7 +285,7 @@ describe('VehicleService.softDelete', () => {
   it('returns 404 for a non-existent vehicle', async () => {
     const { service } = setup()
 
-    const result = await service.softDelete(SYSTEM_CONTEXT, '00000000-0000-0000-0000-000000000000')
+    const result = await service.softDelete(operator, '00000000-0000-0000-0000-000000000000')
 
     expect(result).toEqual({ ok: false, error: 'Vehicle not found', status: 404 })
   })

@@ -16,6 +16,9 @@ export interface CustomerPickerProps {
   readonly onSelect: (customer: CustomerSearchResult | null) => void
   /** Debounce before a keystroke fires a search; pass 0 in tests for determinism. */
   readonly debounceMs?: number
+  /** #1260: a picker admin's chosen operator — scopes the search to its customers
+   *  (undefined for a tenant operator, whose session cookie carries the scope). */
+  readonly pickedOperatorId?: string | undefined
 }
 
 // #589 1d (slice 3): search an EXISTING renter to attach to a manual booking. The
@@ -27,6 +30,7 @@ export function CustomerPicker({
   selected,
   onSelect,
   debounceMs = DEFAULT_DEBOUNCE_MS,
+  pickedOperatorId,
 }: CustomerPickerProps) {
   const t = useTranslations('bookings.operator.newBooking')
   const inputId = useId()
@@ -38,7 +42,7 @@ export function CustomerPicker({
     return () => clearTimeout(timer)
   }, [query, debounceMs])
 
-  const search = useQuery(customerSearchQueryOptions(debounced))
+  const search = useQuery(customerSearchQueryOptions(debounced, pickedOperatorId))
 
   if (selected) {
     return (

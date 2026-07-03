@@ -298,6 +298,190 @@ async function seedReady(h: Harness) {
   return { vehicleId: h.vehicleId, locationId }
 }
 
+// #1260: register `renterId` as a customer of `operatorId` by seeding a prior
+// booking with it (that is what listRenterIdsForOperator keys on). Seeded far in
+// the past + COMPLETED so it never conflicts with the CONFIRMED booking under test.
+async function seedCustomerOf(
+  h: Harness,
+  operatorId: string,
+  renterId: string,
+  bookingCode = 'SEEDCUST',
+): Promise<void> {
+  await h.repos.bookingRepo.create(SYSTEM_CONTEXT, {
+    operatorId,
+    renterId,
+    classId: CLASS_COMPACT,
+    requestedVehicleId: h.vehicleId,
+    assignedVehicleId: h.vehicleId,
+    pickupLocationId: LOC_OSAKA,
+    dropoffLocationId: LOC_OSAKA,
+    startAt: new Date('2020-01-01T00:00:00Z'),
+    endAt: new Date('2020-01-02T00:00:00Z'),
+    effectiveEndAt: new Date('2020-01-04T00:00:00Z'),
+    status: 'COMPLETED',
+    source: 'MANUAL',
+    bookingCode,
+    insuranceOptionId: null,
+    insuranceSnapshot: null,
+    feeSnapshot: [],
+    addOnSnapshot: [],
+    externalId: null,
+    notes: null,
+    totalPrice: 10000,
+    cancellationFee: null,
+    cancelledAt: null,
+    idempotencyKey: null,
+  })
+}
+
+// #1260 slice 3: a bypass admin (PLATFORM_ADMIN) using the operator picker binds a
+// manual booking to the operator it acts as (?operatorId=) — for BOTH the customer
+// (an existing renter must be that operator's customer) and the inventory (the car
+// must belong to it). Before this a picked admin could attach ANY renter to ANY
+// operator's car by raw id. Tenant operators are unaffected (their read scope
+// already clamps them; a stray actingOperatorId is ignored).
+describe('BookingService.create — #1260 manual-booking operator binding', () => {
+  const adminCtx: CallerContext = { userId: 'admin-1', role: 'PLATFORM_ADMIN', bypassScope: true }
+  const opACtx: CallerContext = {
+    userId: 'op-a-owner',
+    role: 'OPERATOR_OWNER',
+    operatorId: OP_A,
+    bypassScope: false,
+  }
+  const walkIn = { name: 'Hanako Walk-In', phone: '+81-90-0000-0001' }
+
+  it('rejects a bypass admin booking for an existing renter with no acting operator (422 OPERATOR_REQUIRED)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    await seedCustomerOf(h, OP_A, RENTER)
+    const result = await h.service.create(
+      adminCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        renterId: RENTER,
+        source: 'MANUAL',
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(422)
+    expect(result.code).toBe('OPERATOR_REQUIRED')
+  })
+
+  it('rejects a bypass admin (acting as OP_A) booking for a renter who is not OP_A’s customer (403, no oracle)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    // RENTER has no prior booking with OP_A -> not a customer.
+    const result = await h.service.create(
+      adminCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        renterId: RENTER,
+        source: 'MANUAL',
+      }),
+      NOW,
+      OP_A,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(403)
+    expect(result.error).toBe('Cannot book for a renter outside your customers')
+  })
+
+  it('lets a bypass admin (acting as OP_A) book for one of OP_A’s own customers (201)', async () => {
+    const h = await setup({ codes: ['ADMINOK1'] })
+    const { vehicleId, locationId } = await seedReady(h)
+    await seedCustomerOf(h, OP_A, RENTER)
+    const result = await h.service.create(
+      adminCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        renterId: RENTER,
+        source: 'MANUAL',
+      }),
+      NOW,
+      OP_A,
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.booking.renterId).toBe(RENTER)
+    expect(result.booking.operatorId).toBe(OP_A)
+  })
+
+  it('binds the booked vehicle to the picked operator: acting as OP_B cannot book OP_A’s car (404, no oracle)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    // A walk-in isolates the INVENTORY bind (the customer scope check is skipped),
+    // so the 404 proves the vehicle-operator binding, not the customer one.
+    const result = await h.service.create(
+      adminCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        walkInCustomer: walkIn,
+        source: 'MANUAL',
+      }),
+      NOW,
+      OP_B,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(404)
+    expect(result.error).toBe('Vehicle not found')
+  })
+
+  it('lets a bypass admin (acting as OP_A) register a walk-in on OP_A’s car (201)', async () => {
+    const h = await setup({ codes: ['WALKADM1'] })
+    const { vehicleId, locationId } = await seedReady(h)
+    const result = await h.service.create(
+      adminCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        walkInCustomer: walkIn,
+        source: 'MANUAL',
+      }),
+      NOW,
+      OP_A,
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.booking.operatorId).toBe(OP_A)
+  })
+
+  it('a tenant operator ignores a stray ?operatorId= and books within its own tenant', async () => {
+    const h = await setup({ codes: ['OPOWN001'] })
+    const { vehicleId, locationId } = await seedReady(h)
+    await seedCustomerOf(h, OP_A, RENTER)
+    // OP_A owner passes a stray OP_B; it must be ignored in BOTH the customer and
+    // inventory checks (the booking still succeeds against its own tenant).
+    const result = await h.service.create(
+      opACtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        renterId: RENTER,
+        source: 'MANUAL',
+      }),
+      NOW,
+      OP_B,
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.booking.renterId).toBe(RENTER)
+  })
+})
+
 describe('BookingService.create — past-start floor (#954)', () => {
   // The seeded vehicle has advanceBookingHours: null (the default + forced for
   // MANUAL), so the universal past-start floor in checkRentalRules is the only
@@ -610,6 +794,9 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
     const h = await setup({ codes: ['MANUAL12'] })
     const { vehicleId, locationId } = await seedReady(h)
     const staffCtx: CallerContext = { userId: 'staff-9', role: 'PLATFORM_ADMIN', bypassScope: true }
+    // #1260: a bypass admin binds the booking to the operator it acts as (OP_A) and
+    // may attach only that operator's customers, so seed RENTER as one.
+    await seedCustomerOf(h, OP_A, RENTER)
 
     const result = await h.service.create(
       staffCtx,
@@ -620,6 +807,7 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
         renterId: RENTER, // staff books on behalf of an existing renter
       }),
       NOW,
+      OP_A,
     )
 
     expect(result.ok).toBe(true)

@@ -94,6 +94,15 @@ describe('createVehicleSchema', () => {
     },
   )
 
+  // #1384: photo URLs are length-capped at 2048 (matches class photos) — an
+  // absurdly long URL is a stored-payload / DoS vector. A real photo URL is
+  // never close to the cap, so legitimate consumers are unaffected.
+  it('rejects a photo URL longer than the 2048 cap', () => {
+    const tooLong = `https://example.com/${'a'.repeat(2100)}`
+    const result = createVehicleSchema.safeParse({ ...validInput, photos: [tooLong] })
+    expect(result.success).toBe(false)
+  })
+
   // Issue #48: pricing rules.
   describe('pricing (dailyRateJpy / hourlyRateJpy)', () => {
     // Strip the rate from validInput so we can add rates per-test.

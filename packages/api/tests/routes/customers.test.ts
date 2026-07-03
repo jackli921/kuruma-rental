@@ -375,6 +375,24 @@ describe('GET /customers/search', () => {
     expect(body.data).toEqual([])
   })
 
+  it('#1260: a PLATFORM_ADMIN acting as an operator (?operatorId=) is scoped to that operator’s customers', async () => {
+    const OP = '00000000-0000-4000-8000-0000000000aa'
+    // u1 (Tanaka) has a prior booking with OP -> its customer; u3 (Chen) does not.
+    setup({
+      users: seed(),
+      bookings: [mkBooking({ id: 'b1', renterId: 'u1', operatorId: OP })],
+      asRole: 'PLATFORM_ADMIN',
+    })
+    // A non-customer match is filtered out — without the ?operatorId= wiring the
+    // admin would get the full-table hit here (mutation proof of the threading).
+    const foreign = await app.request(`/customers/search?q=chen&operatorId=${OP}`)
+    expect((await foreign.json()).data).toEqual([])
+    const own = await app.request(`/customers/search?q=tanaka&operatorId=${OP}`)
+    const body = await own.json()
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0].id).toBe('u1')
+  })
+
   it('rejects OPERATOR_OWNER on /customers list (403) — L7', async () => {
     setup({
       users: seed(),

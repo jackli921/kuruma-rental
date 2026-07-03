@@ -32,6 +32,9 @@ export interface ManualBookingDialogProps {
   readonly csrfToken: string
   /** A clicked calendar slot, to prefill the pickup/return range (wall-clock JST). */
   readonly initialRange?: { start: Date; end: Date } | undefined
+  /** #1260: the operator a picker admin is acting as. Binds the create + scopes the
+   *  customer search to that operator (undefined for a tenant operator session). */
+  readonly pickedOperatorId?: string | undefined
 }
 
 // #589 1d: the manual-booking form. A *controlled* dialog — the route lifts `open`
@@ -48,6 +51,7 @@ export function ManualBookingDialog({
   locations,
   csrfToken,
   initialRange,
+  pickedOperatorId,
 }: ManualBookingDialogProps) {
   const t = useTranslations('bookings.operator.newBooking')
   const queryClient = useQueryClient()
@@ -85,6 +89,7 @@ export function ManualBookingDialog({
           idempotencyKey,
         },
         csrfToken,
+        pickedOperatorId,
       ),
     onSuccess: () => {
       // A write invalidates the operator-bookings prefix + dashboard overview; the
@@ -252,7 +257,11 @@ export function ManualBookingDialog({
                   </div>
                 </>
               ) : (
-                <CustomerPicker selected={selectedCustomer} onSelect={setSelectedCustomer} />
+                <CustomerPicker
+                  selected={selectedCustomer}
+                  onSelect={setSelectedCustomer}
+                  pickedOperatorId={pickedOperatorId}
+                />
               )}
             </div>
 

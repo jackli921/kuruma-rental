@@ -29,8 +29,11 @@ export const operatorApplicationSchema = z.object({
   message: z.preprocess(emptyToUndefined, z.string().trim().max(2000).optional()),
   // Reuse the locale SSoT so this stays in lockstep when a locale is added.
   submittedLocale: z.enum(SUPPORTED_LOCALES),
-  // Anti-spam bot trap — must be absent or empty. Not persisted.
-  honeypot: z.string().max(0).optional(),
+  // Anti-spam bot trap. A hidden field humans never see, so any non-empty value
+  // means a bot filled it. Accept any string here (never a 400) — the route
+  // silently no-ops on a filled value so a bot can't learn the field is a trap by
+  // watching for a validation error. Not persisted.
+  honeypot: z.string().optional(),
   // Consent gate — must be explicitly checked (literal true, not just truthy).
   consent: z.literal(true),
 })

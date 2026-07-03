@@ -67,7 +67,11 @@ export function EditVehicleSheet({
             onCancel={() => onOpenChange(false)}
             pickedOperatorId={pickedOperatorId}
           />
-          <PhotoUpload vehicleId={vehicle?.id ?? null} photos={vehicle?.photos ?? []} />
+          <PhotoUpload
+            vehicleId={vehicle?.id ?? null}
+            photos={vehicle?.photos ?? []}
+            pickedOperatorId={pickedOperatorId}
+          />
         </div>
       </SheetContent>
     </Sheet>
