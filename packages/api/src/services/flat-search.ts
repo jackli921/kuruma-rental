@@ -123,14 +123,14 @@ export class FlatSearchService {
     // producers into one ordered, paginated list.
     const planFilters: ClassRatePlanFilters = { locationIds: storefronts.map((sf) => sf.id) }
     if (operatorId) planFilters.operatorId = operatorId
-    const comboItems = await this.classOfferingService.findOfferings(
+    const comboItems = await this.classOfferingService.findOfferings({
       planFilters,
       from,
       to,
       locationById,
       classById,
       requested,
-    )
+    })
 
     const items: SearchResultItem[] = [...specificItems, ...comboItems].sort(compareItems)
 

@@ -9,7 +9,7 @@ import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleBlockRepository } from '../repositories/in-memory/vehicle-block'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
-import type { Location, Operator, Vehicle, VehicleClass } from '../stores'
+import type { ClassRatePlan, Location, Operator, Vehicle, VehicleClass } from '../stores'
 import { ClassOfferingService } from './class-offering'
 
 const FROM = new Date('2026-08-01T10:00:00Z')
@@ -107,9 +107,7 @@ function makeVehicle(overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'upda
   })
 }
 
-function makeRatePlan(
-  overrides: Partial<Omit<import('../stores').ClassRatePlan, 'id' | 'createdAt' | 'updatedAt'>>,
-) {
+function makeRatePlan(overrides: Partial<Omit<ClassRatePlan, 'id' | 'createdAt' | 'updatedAt'>>) {
   return classRatePlanRepo.create({
     operatorId: 'op_a',
     classId: 'class_compact',
@@ -187,14 +185,14 @@ describe('ClassOfferingService.findOfferings (#464)', () => {
       dayRateJpy: 6000,
     })
 
-    const offerings = await service.findOfferings(
-      { locationIds: [namba.id] },
-      FROM,
-      TO,
-      locationMap(namba, a.name),
-      new Map([[klass.id, klass]]),
-      null,
-    )
+    const offerings = await service.findOfferings({
+      planFilters: { locationIds: [namba.id] },
+      from: FROM,
+      to: TO,
+      locationById: locationMap(namba, a.name),
+      classById: new Map([[klass.id, klass]]),
+      requested: null,
+    })
 
     expect(offerings).toEqual([
       expect.objectContaining({
@@ -216,14 +214,14 @@ describe('ClassOfferingService.findOfferings (#464)', () => {
     await makeRatePlan({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
     await makeBooking({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
 
-    const offerings = await service.findOfferings(
-      { locationIds: [namba.id] },
-      FROM,
-      TO,
-      locationMap(namba, a.name),
-      new Map([[klass.id, klass]]),
-      null,
-    )
+    const offerings = await service.findOfferings({
+      planFilters: { locationIds: [namba.id] },
+      from: FROM,
+      to: TO,
+      locationById: locationMap(namba, a.name),
+      classById: new Map([[klass.id, klass]]),
+      requested: null,
+    })
 
     expect(offerings).toEqual([expect.objectContaining({ availableCount: 1 })])
   })
@@ -236,14 +234,54 @@ describe('ClassOfferingService.findOfferings (#464)', () => {
     await makeRatePlan({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
     await makeBooking({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
 
-    const offerings = await service.findOfferings(
-      { locationIds: [namba.id] },
-      FROM,
-      TO,
-      locationMap(namba, a.name),
-      new Map([[klass.id, klass]]),
-      null,
-    )
+    const offerings = await service.findOfferings({
+      planFilters: { locationIds: [namba.id] },
+      from: FROM,
+      to: TO,
+      locationById: locationMap(namba, a.name),
+      classById: new Map([[klass.id, klass]]),
+      requested: null,
+    })
+
+    expect(offerings).toEqual([])
+  })
+
+  it('emits no offering when the requested ACRISS set excludes the plan class', async () => {
+    const a = await makeOperator('A Rentals', 'a')
+    const klass = await makeClass({ operatorId: a.id, name: 'Compact', acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: a.id, name: 'Namba' })
+    await makeVehicle({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+
+    // requested = only SCAR, but plan class is CCAR — should be filtered out.
+    const offerings = await service.findOfferings({
+      planFilters: { locationIds: [namba.id] },
+      from: FROM,
+      to: TO,
+      locationById: locationMap(namba, a.name),
+      classById: new Map([[klass.id, klass]]),
+      requested: new Set(['SCAR']),
+    })
+
+    expect(offerings).toEqual([])
+  })
+
+  it('emits no offering when the plan location is absent from locationById', async () => {
+    const a = await makeOperator('A Rentals', 'a')
+    const klass = await makeClass({ operatorId: a.id, name: 'Compact', acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: a.id, name: 'Namba' })
+    await makeVehicle({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+
+    // Pass an empty locationById — the plan's location is not in scope.
+    const offerings = await service.findOfferings({
+      planFilters: { locationIds: [namba.id] },
+      from: FROM,
+      to: TO,
+      locationById: new Map(),
+      classById: new Map([[klass.id, klass]]),
+      requested: null,
+    })
 
     expect(offerings).toEqual([])
   })

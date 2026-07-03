@@ -7,6 +7,15 @@ import type {
 } from '../repositories/types'
 import type { ClassRatePlan } from '../stores'
 
+export interface FindOfferingsArgs {
+  planFilters: ClassRatePlanFilters
+  from: Date
+  to: Date
+  locationById: Map<string, ResultLocation>
+  classById: Map<string, VehicleClass>
+  requested: Set<string> | null
+}
+
 /**
  * The CLASS_COMBO producer (#464): each active class rate plan whose pickup
  * location is an in-scope, mappable storefront and whose road-legal supply
@@ -30,14 +39,14 @@ export class ClassOfferingService {
   // one row per (operator, class, location) offered, so P stays small at MVP scale;
   // collapse to one grouped query if plan volume ever grows — the same deferral the
   // SPECIFIC pagination comment records.
-  async findOfferings(
-    planFilters: ClassRatePlanFilters,
-    from: Date,
-    to: Date,
-    locationById: Map<string, ResultLocation>,
-    classById: Map<string, VehicleClass>,
-    requested: Set<string> | null,
-  ): Promise<ClassComboSearchResult[]> {
+  async findOfferings({
+    planFilters,
+    from,
+    to,
+    locationById,
+    classById,
+    requested,
+  }: FindOfferingsArgs): Promise<ClassComboSearchResult[]> {
     const plans = await this.classRatePlanRepo.findActiveRatePlans(planFilters)
     const cards = await Promise.all(
       plans.map((plan) => this.toCombo(plan, from, to, locationById, classById, requested)),
