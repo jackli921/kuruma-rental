@@ -91,7 +91,6 @@ export class BookingService {
     this.creation = new BookingCreationService(
       bookingRepo,
       runInTransaction,
-      userRepo,
       postCommit,
       generateCode,
       verificationGate,
@@ -165,8 +164,11 @@ export class BookingService {
     ctx: CallerContext,
     input: CreateBookingRequest,
     now: Date = new Date(),
+    // #1260: the operator a bypass admin is acting as (?operatorId=). Bound to the
+    // booking's customer + inventory in BookingCreationService; forwarded verbatim.
+    actingOperatorId?: string,
   ): Promise<CreateBookingResult> {
-    return this.creation.create(ctx, input, now)
+    return this.creation.create(ctx, input, now, actingOperatorId)
   }
 
   // --- lifecycle -----------------------------------------------------------

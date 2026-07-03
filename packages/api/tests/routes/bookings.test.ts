@@ -84,8 +84,11 @@ function validBookingInput(overrides: Record<string, unknown> = {}) {
   }
 }
 
+// The default app is a PLATFORM_ADMIN (bypassScope). #1260 binds every booking
+// write to the operator the admin acts as, so a create must name it via
+// ?operatorId= — exactly as the status/cancel calls in this file already do.
 async function createBooking(input: Record<string, unknown> = validBookingInput()) {
-  return app.request('/bookings', {
+  return app.request(`/bookings?operatorId=${OPERATOR}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -681,7 +684,7 @@ describe('Booking Routes', () => {
     async function createNBookings(n: number) {
       const ids: string[] = []
       for (let i = 0; i < n; i++) {
-        const res = await app.request('/bookings', {
+        const res = await app.request(`/bookings?operatorId=${OPERATOR}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(

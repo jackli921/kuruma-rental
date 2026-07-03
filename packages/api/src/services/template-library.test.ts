@@ -1,5 +1,12 @@
+import { slugify } from '@kuruma/shared/i18n/slugify'
+import type { TemplateCreate } from '@kuruma/shared/types/template-admin'
 import { describe, expect, it } from 'vitest'
-import { type CallerContext, ForbiddenError, NotFoundError } from '../middleware/auth'
+import {
+  type CallerContext,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from '../middleware/auth'
 import { InMemoryAddOnTemplateRepository } from '../repositories/in-memory/add-on-template'
 import { InMemoryInsuranceTemplateRepository } from '../repositories/in-memory/insurance-template'
 import type { AddOnTemplate, InsuranceTemplate } from '../stores'
@@ -139,5 +146,74 @@ describe('TemplateLibraryService.updateInsurance', () => {
     await expect(service.updateInsurance(ADMIN, 'nope', { status: 'ARCHIVED' })).rejects.toThrow(
       NotFoundError,
     )
+  })
+})
+
+const skiRack: TemplateCreate = {
+  name: { en: 'Ski rack', ja: 'スキーラック' },
+  description: null,
+  status: 'ACTIVE',
+}
+
+describe('TemplateLibraryService.createAddOn', () => {
+  it('mints a template, deriving key from slugify(name.en), and persists it', async () => {
+    const service = new TemplateLibraryService(addOnStore([]), insuranceStore([]))
+
+    const row = await service.createAddOn(ADMIN, skiRack)
+
+    expect(row).toEqual({
+      id: expect.any(String),
+      key: slugify('Ski rack'),
+      name: { en: 'Ski rack', ja: 'スキーラック' },
+      description: null,
+      status: 'ACTIVE',
+    })
+    const all = await service.listAll(ADMIN)
+    expect(all.addOns.map((t) => t.key)).toContain(slugify('Ski rack'))
+  })
+
+  it('rejects a duplicate key (same slugified name) with ConflictError', async () => {
+    const service = new TemplateLibraryService(addOnStore([]), insuranceStore([]))
+    await service.createAddOn(ADMIN, skiRack)
+
+    await expect(service.createAddOn(ADMIN, skiRack)).rejects.toThrow(ConflictError)
+  })
+
+  it('rejects an operator caller with ForbiddenError before any write', async () => {
+    const service = new TemplateLibraryService(addOnStore([]), insuranceStore([]))
+
+    await expect(service.createAddOn(OPERATOR, skiRack)).rejects.toThrow(ForbiddenError)
+  })
+})
+
+describe('TemplateLibraryService.createInsurance', () => {
+  it('mints an insurance template with the derived key and provided description', async () => {
+    const service = new TemplateLibraryService(addOnStore([]), insuranceStore([]))
+
+    const row = await service.createInsurance(ADMIN, {
+      name: { en: 'Premium cover' },
+      description: { en: 'Zero deductible' },
+      status: 'ACTIVE',
+    })
+
+    expect(row).toEqual({
+      id: expect.any(String),
+      key: slugify('Premium cover'),
+      name: { en: 'Premium cover' },
+      description: { en: 'Zero deductible' },
+      status: 'ACTIVE',
+    })
+  })
+
+  it('rejects a duplicate key with ConflictError', async () => {
+    const service = new TemplateLibraryService(addOnStore([]), insuranceStore([]))
+    const input: TemplateCreate = {
+      name: { en: 'Premium cover' },
+      description: null,
+      status: 'ACTIVE',
+    }
+    await service.createInsurance(ADMIN, input)
+
+    await expect(service.createInsurance(ADMIN, input)).rejects.toThrow(ConflictError)
   })
 })
