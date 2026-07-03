@@ -279,3 +279,48 @@ describe('POST /operators/me/members/:id/deactivate', () => {
     expect(await membershipRepo.findActiveByOperator('op_2')).toHaveLength(1)
   })
 })
+
+describe('read routes thread ?operatorId= for a picker-admin', () => {
+  it('GET /operators/me/members?operatorId=op_2 returns op_2 members for a PLATFORM_ADMIN', async () => {
+    await membershipRepo.create({
+      userId: 'u_b',
+      operatorId: 'op_2',
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+    })
+    const res = await mountFor('PLATFORM_ADMIN').request('/operators/me/members?operatorId=op_2')
+    expect(res.status).toBe(200)
+    const { data } = await res.json()
+    expect(data.map((m: { userId: string }) => m.userId)).toEqual(['u_b'])
+  })
+
+  it('GET /operators/me/members with NO pick is 422 for a PLATFORM_ADMIN (no merged view)', async () => {
+    const res = await mountFor('PLATFORM_ADMIN').request('/operators/me/members')
+    expect(res.status).toBe(422)
+  })
+
+  it('a RENTER is 403 even with ?operatorId= (team is owner-tier internal)', async () => {
+    const res = await mountFor('RENTER').request('/operators/me/members?operatorId=op_1')
+    expect(res.status).toBe(403)
+  })
+
+  it('an operator IGNORES a foreign ?operatorId= and reads its own tenant', async () => {
+    await membershipRepo.create({
+      userId: 'u_owner',
+      operatorId: 'op_1',
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+    })
+    await membershipRepo.create({
+      userId: 'u_b',
+      operatorId: 'op_2',
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+    })
+    const res = await mountFor('OPERATOR_OWNER', 'op_1').request(
+      '/operators/me/members?operatorId=op_2',
+    )
+    const { data } = await res.json()
+    expect(data.map((m: { userId: string }) => m.userId)).toEqual(['u_owner'])
+  })
+})

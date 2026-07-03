@@ -5,11 +5,13 @@ import type { OperatorTeamService } from '../services/operator-team'
 import { ok, parseBody } from './helpers'
 
 /**
- * #904: operator self-service team management. The tenant is ALWAYS the caller's
- * own operator — these are `/operators/me/*` paths with no id segment, so there
- * is no foreign-id surface to scope-check or leak. Owner-vs-member gating and the
- * absent-tenant seal live in `OperatorTeamService`; a denied write surfaces as a
- * 403 via the global `ForbiddenError` handler, so the routes stay HTTP-only.
+ * #904 / #1230: operator self-service team management. An operator always acts on
+ * its OWN tenant — a foreign `?operatorId=` is ignored. A PLATFORM_ADMIN using the
+ * operator-context picker names the target tenant via `?operatorId=` on the reads
+ * (`resolveTeamOperatorId` honors it only for that privileged tier). Owner-vs-member
+ * gating, the picker allowlist, and the absent-tenant seal live in
+ * `OperatorTeamService`; denials surface as 403/422 via the global handlers, so the
+ * routes stay HTTP-only.
  */
 export function createOperatorTeamRoutes(service: OperatorTeamService) {
   const app = new Hono()
@@ -29,7 +31,10 @@ export function createOperatorTeamRoutes(service: OperatorTeamService) {
       return ok(c, { inviteUrl: created.inviteUrl, expiresAt: created.expiresAt }, 201)
     })
     .get('/operators/me/invites', async (c) => {
-      const invites = await service.listInvites(toCallerContext(requireUser(c)))
+      const invites = await service.listInvites(
+        toCallerContext(requireUser(c)),
+        c.req.query('operatorId'),
+      )
       return ok(c, invites)
     })
     .post('/operators/me/invites/:id/revoke', async (c) => {
@@ -40,7 +45,10 @@ export function createOperatorTeamRoutes(service: OperatorTeamService) {
       return ok(c, { id })
     })
     .get('/operators/me/members', async (c) => {
-      const members = await service.listMembers(toCallerContext(requireUser(c)))
+      const members = await service.listMembers(
+        toCallerContext(requireUser(c)),
+        c.req.query('operatorId'),
+      )
       return ok(c, members)
     })
     .post('/operators/me/members/:id/deactivate', async (c) => {
