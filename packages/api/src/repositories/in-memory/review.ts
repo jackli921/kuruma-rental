@@ -1,6 +1,17 @@
-import { PG_ERROR, REVIEWS_SUBJECT_CONSTRAINT } from '../../pg-errors'
-import type { Review } from '../../stores'
-import type { NewReview, ReviewEdit, ReviewRepository } from '../types'
+import type { ReviewModerationStatus } from '@kuruma/shared/enums'
+import {
+  PG_ERROR,
+  REVIEWS_SUBJECT_CONSTRAINT,
+  REVIEW_REPORT_UNIQUE_CONSTRAINT,
+} from '../../pg-errors'
+import type { Review, ReviewReport } from '../../stores'
+import type {
+  NewReview,
+  NewReviewReport,
+  ReportedReview,
+  ReviewEdit,
+  ReviewRepository,
+} from '../types'
 
 // Mirror postgres-js's PostgresError: the violated constraint is exposed as
 // `constraint_name` (what pgConstraintName reads). Faithful mirroring lets the
@@ -17,9 +28,11 @@ function uniqueViolation(
 
 export class InMemoryReviewRepository implements ReviewRepository {
   private readonly store: Map<string, Review>
+  private readonly reports: Map<string, ReviewReport>
 
-  constructor(store?: Map<string, Review>) {
+  constructor(store?: Map<string, Review>, reports?: Map<string, ReviewReport>) {
     this.store = store ?? new Map()
+    this.reports = reports ?? new Map()
   }
 
   async insert(data: NewReview): Promise<Review> {
@@ -92,6 +105,56 @@ export class InMemoryReviewRepository implements ReviewRepository {
 
   async aggregateByClass(classIds: readonly string[]) {
     return this.aggregate(classIds, (r) => r.subjectClassId)
+  }
+
+  async insertReport(data: NewReviewReport): Promise<ReviewReport> {
+    // Mirror the DB unique (reviewId, reporterUserId): a second report by the same user
+    // trips the same constraint name the service branches on (ALREADY_REPORTED).
+    const clash = [...this.reports.values()].some(
+      (r) => r.reviewId === data.reviewId && r.reporterUserId === data.reporterUserId,
+    )
+    if (clash) throw uniqueViolation(REVIEW_REPORT_UNIQUE_CONSTRAINT)
+    const report: ReviewReport = { ...data, id: crypto.randomUUID(), createdAt: new Date() }
+    this.reports.set(report.id, report)
+    return report
+  }
+
+  async setModerationStatus(
+    id: string,
+    status: ReviewModerationStatus,
+  ): Promise<Review | undefined> {
+    const existing = this.store.get(id)
+    if (!existing) return undefined
+    const updated: Review = { ...existing, moderationStatus: status, updatedAt: new Date() }
+    this.store.set(id, updated)
+    return updated
+  }
+
+  async listReported(): Promise<ReportedReview[]> {
+    // Group reports by review; emit each still-present review with its distinct-reporter
+    // count (the unique seal makes report count === reporter count) + reasons, newest
+    // report first. Orphan reports (review gone) are skipped — cascade makes that latent.
+    const byReview = new Map<string, ReviewReport[]>()
+    for (const report of this.reports.values()) {
+      byReview.set(report.reviewId, [...(byReview.get(report.reviewId) ?? []), report])
+    }
+    const withRecency = [...byReview.entries()].flatMap(([reviewId, reports]) => {
+      const review = this.store.get(reviewId)
+      if (!review) return []
+      const newestFirst = [...reports].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      const lastReportedAt = newestFirst[0]?.createdAt.getTime() ?? 0
+      return [
+        {
+          review,
+          reportCount: reports.length,
+          reasons: newestFirst.map((r) => r.reason),
+          lastReportedAt,
+        },
+      ]
+    })
+    return withRecency
+      .sort((a, b) => b.lastReportedAt - a.lastReportedAt)
+      .map(({ review, reportCount, reasons }) => ({ review, reportCount, reasons }))
   }
 
   // Shared predicate (#1085): only published+visible reviews enter aggregates, so a

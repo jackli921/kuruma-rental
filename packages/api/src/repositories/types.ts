@@ -759,7 +759,13 @@ export type {
 
 // Reviews bounded-context data access (#1067 slice 1) lives in its own module;
 // re-exported for callers (mirrors the payment/consent split above).
-export type { NewReview, ReviewEdit, ReviewRepository } from './types-review'
+export type {
+  NewReview,
+  NewReviewReport,
+  ReportedReview,
+  ReviewEdit,
+  ReviewRepository,
+} from './types-review'
 
 // Runtime feature-flag override store (platform control plane) lives in its own
 // module; re-exported for callers.

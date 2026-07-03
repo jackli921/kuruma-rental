@@ -1,8 +1,15 @@
-import { reviews } from '@kuruma/shared/db/schema'
-import { and, asc, count, eq, inArray, isNotNull, isNull, lte, sum } from 'drizzle-orm'
+import type { ReviewModerationStatus } from '@kuruma/shared/enums'
+import { reviewReports, reviews } from '@kuruma/shared/db/schema'
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lte, max, sql, sum } from 'drizzle-orm'
 import type { PgColumn } from 'drizzle-orm/pg-core'
-import type { Review } from '../../stores'
-import type { NewReview, ReviewEdit, ReviewRepository } from '../types'
+import type { Review, ReviewReport } from '../../stores'
+import type {
+  NewReview,
+  NewReviewReport,
+  ReportedReview,
+  ReviewEdit,
+  ReviewRepository,
+} from '../types'
 import { type Db, reviewColumns, toReview } from './shared'
 
 export class DrizzleReviewRepository implements ReviewRepository {
@@ -93,6 +100,59 @@ export class DrizzleReviewRepository implements ReviewRepository {
 
   async aggregateByClass(classIds: readonly string[]) {
     return this.aggregate(classIds, reviews.subjectClassId)
+  }
+
+  async insertReport(data: NewReviewReport): Promise<ReviewReport> {
+    // The DB unique (reviewId, reporterUserId) bubbles up as a PostgresError whose
+    // constraint_name the service reads (ALREADY_REPORTED) — deliberately not swallowed.
+    const [row] = await this.db.insert(reviewReports).values(data).returning()
+    if (!row) throw new Error('review_reports insert returned no row')
+    return row
+  }
+
+  async setModerationStatus(
+    id: string,
+    status: ReviewModerationStatus,
+  ): Promise<Review | undefined> {
+    const [row] = await this.db
+      .update(reviews)
+      .set({ moderationStatus: status, updatedAt: new Date() })
+      .where(eq(reviews.id, id))
+      .returning(reviewColumns)
+    return row ? toReview(row) : undefined
+  }
+
+  async listReported(): Promise<ReportedReview[]> {
+    // One aggregate pass over review_reports (count + reasons + latest per review), newest
+    // reported first, then hydrate the reviews. reportCount === distinct reporters (unique seal).
+    const grouped = await this.db
+      .select({
+        reviewId: reviewReports.reviewId,
+        reportCount: count(),
+        reasons: sql<
+          string[]
+        >`array_agg(${reviewReports.reason} order by ${reviewReports.createdAt} desc)`,
+        lastReportedAt: max(reviewReports.createdAt),
+      })
+      .from(reviewReports)
+      .groupBy(reviewReports.reviewId)
+      .orderBy(desc(max(reviewReports.createdAt)))
+    if (grouped.length === 0) return []
+    const rows = await this.db
+      .select(reviewColumns)
+      .from(reviews)
+      .where(
+        inArray(
+          reviews.id,
+          grouped.map((g) => g.reviewId),
+        ),
+      )
+    const reviewsById = new Map(rows.map((r) => [r.id, toReview(r)]))
+    // Skip an orphan report whose review was hard-deleted (cascade makes this latent).
+    return grouped.flatMap((g) => {
+      const review = reviewsById.get(g.reviewId)
+      return review ? [{ review, reportCount: Number(g.reportCount), reasons: g.reasons }] : []
+    })
   }
 
   // Shared aggregate scan (#1085): SUM(overall) + COUNT(*) per key over published+visible

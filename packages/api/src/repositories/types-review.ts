@@ -1,4 +1,5 @@
-import type { Review } from '../stores'
+import type { ReviewModerationStatus } from '@kuruma/shared/enums'
+import type { Review, ReviewReport } from '../stores'
 
 /** A review to persist. id + createdAt + updatedAt are store-assigned (DB defaults
  *  / in-memory), so the submission service never invents them. `publishedAt` is
@@ -9,6 +10,17 @@ export type NewReview = Omit<Review, 'id' | 'createdAt' | 'updatedAt'>
 /** The only mutable content of a review (the rest is identity/reveal state derived
  *  server-side and never editable). Applied by `update` until the row publishes. */
 export type ReviewEdit = Pick<Review, 'overall' | 'subRatings' | 'comment'>
+
+/** A report to persist. id + createdAt are store-assigned (DB default / in-memory). */
+export type NewReviewReport = Omit<ReviewReport, 'id' | 'createdAt'>
+
+/** A reported review for the admin moderation queue: the review plus how many distinct
+ *  users flagged it and their reasons (newest-reported first from the repo). */
+export interface ReportedReview {
+  review: Review
+  reportCount: number
+  reasons: readonly string[]
+}
 
 /** reviews data access (#1067 slice 1, extended slice 2). The submission service is
  *  the only writer; reveal-on-read (slice 2) and subject aggregates (slice 5) layer on
@@ -55,4 +67,14 @@ export interface ReviewRepository {
   aggregateByClass(
     classIds: readonly string[],
   ): Promise<Map<string, { sum: number; count: number }>>
+  // Persist a report (slice 6 #1086). Throws a PG-shaped UNIQUE_VIOLATION with
+  // constraint_name === REVIEW_REPORT_UNIQUE_CONSTRAINT when this user already reported
+  // the review, so the service maps a duplicate to 409 without a check-then-act race.
+  insertReport(report: NewReviewReport): Promise<ReviewReport>
+  // Flip a review's moderation status (admin hide, slice 6). Returns the updated row, or
+  // undefined when no review has that id (→ 404). Idempotent — re-hiding is a no-op flip.
+  setModerationStatus(id: string, status: ReviewModerationStatus): Promise<Review | undefined>
+  // The admin moderation queue (slice 6): every review with >=1 report, each with its
+  // distinct-reporter count + reasons, newest-reported first. Bounded by reported reviews.
+  listReported(): Promise<ReportedReview[]>
 }

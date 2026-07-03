@@ -665,5 +665,16 @@ export interface Review {
   updatedAt: Date
 }
 
+// A user's report of a review for moderator attention (#1086, slice 6). One per
+// (review, reporter); report-only — a report never auto-hides, it only queues the
+// review for a platform admin. The in-app projection of a review_reports row.
+export interface ReviewReport {
+  id: string
+  reviewId: string
+  reporterUserId: string
+  reason: string
+  createdAt: Date
+}
+
 // Map stores removed — repositories handle data access now.
 // Types remain here as the shared contract between repositories and routes.
