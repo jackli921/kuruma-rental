@@ -30,7 +30,7 @@ function invite(overrides: Partial<OperatorInviteData> = {}): OperatorInviteData
   }
 }
 
-function renderDialog(inv: OperatorInviteData | null) {
+function renderDialog(inv: OperatorInviteData | null, operatorId = 'op_1') {
   const onOpenChange = vi.fn()
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -39,7 +39,12 @@ function renderDialog(inv: OperatorInviteData | null) {
   render(
     <QueryClientProvider client={client}>
       <IntlProvider locale="en" messages={enMessages}>
-        <RevokeInviteDialog invite={inv} onOpenChange={onOpenChange} csrfToken="csrf-token" />
+        <RevokeInviteDialog
+          invite={inv}
+          onOpenChange={onOpenChange}
+          csrfToken="csrf-token"
+          operatorId={operatorId}
+        />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -62,6 +67,7 @@ describe('RevokeInviteDialog', () => {
     await waitFor(() => expect(revokeInvite).toHaveBeenCalledTimes(1))
     expect(revokeInvite.mock.calls[0][0]).toBe('inv_1')
     expect(revokeInvite.mock.calls[0][1]).toBe('csrf-token')
+    expect(revokeInvite.mock.calls[0][2]).toBe('op_1')
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: TEAM_INVITES_QUERY_KEY })
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })

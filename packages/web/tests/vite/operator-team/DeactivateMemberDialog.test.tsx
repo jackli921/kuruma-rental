@@ -31,7 +31,7 @@ function member(overrides: Partial<OperatorMemberData> = {}): OperatorMemberData
   }
 }
 
-function renderDialog(mem: OperatorMemberData | null) {
+function renderDialog(mem: OperatorMemberData | null, operatorId = 'op_1') {
   const onOpenChange = vi.fn()
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -40,7 +40,12 @@ function renderDialog(mem: OperatorMemberData | null) {
   render(
     <QueryClientProvider client={client}>
       <IntlProvider locale="en" messages={enMessages}>
-        <DeactivateMemberDialog member={mem} onOpenChange={onOpenChange} csrfToken="csrf-token" />
+        <DeactivateMemberDialog
+          member={mem}
+          onOpenChange={onOpenChange}
+          csrfToken="csrf-token"
+          operatorId={operatorId}
+        />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -63,6 +68,7 @@ describe('DeactivateMemberDialog', () => {
     await waitFor(() => expect(deactivateMember).toHaveBeenCalledTimes(1))
     expect(deactivateMember.mock.calls[0][0]).toBe('mem_1')
     expect(deactivateMember.mock.calls[0][1]).toBe('csrf-token')
+    expect(deactivateMember.mock.calls[0][2]).toBe('op_1')
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: TEAM_MEMBERS_QUERY_KEY })
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
