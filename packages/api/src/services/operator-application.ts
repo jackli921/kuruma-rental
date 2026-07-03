@@ -3,6 +3,7 @@ import type { OperatorApplicationInput } from '@kuruma/shared/validators/operato
 import { ConflictError, NotFoundError } from '../auth/guards'
 import {
   OPERATOR_APPLICATION_EMAIL_CONSTRAINT,
+  OPERATOR_SLUG_CONSTRAINT,
   PG_ERROR,
   pgConstraintName,
   pgErrorCode,
@@ -157,11 +158,18 @@ export class OperatorApplicationService {
         }
       })
     } catch (err) {
-      // A concurrent approval claimed the slug / invite-email / application first:
-      // any unique-violation inside the approval tx means "someone else won this race".
+      // A concurrent approval claimed the invite-email / application first: a
+      // unique-violation inside the approval tx means "someone else won this race".
       // The ConflictError guards thrown inside the tx (C1 + the markApprovedIfPending
       // fence) are ConflictError instances, not PG errors, so they fall through and rethrow as-is.
       if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION) {
+        // A slug clash is the one case that is NOT "already reviewed": two
+        // different same-named businesses raced the operators.slug index (#1371).
+        // The application is still PENDING — retrying re-resolves the slug and
+        // succeeds — so say so rather than implying it was already handled.
+        if (pgConstraintName(err) === OPERATOR_SLUG_CONSTRAINT) {
+          throw new ConflictError('an operator with a similar name was just approved; please retry')
+        }
         throw new ConflictError('application already reviewed')
       }
       throw err

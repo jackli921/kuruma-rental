@@ -117,6 +117,15 @@ export const PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT = 'provider_invites_pendin
  */
 export const OPERATOR_APPLICATION_EMAIL_CONSTRAINT = 'operator_applications_live_email_unique'
 
+/**
+ * Table-level UNIQUE("slug") on operators (drizzle/0026_slice1_tenancy.sql). A
+ * 23505 on this name means two different same-named businesses were approved
+ * concurrently and raced the slug index (#1371). It is NOT "already reviewed":
+ * the losing approval re-resolves the slug on retry, so it maps to a distinct,
+ * retry-able 409 rather than the generic already-reviewed message.
+ */
+export const OPERATOR_SLUG_CONSTRAINT = 'operators_slug_unique'
+
 /** Extract the Postgres error code from an unknown thrown value, or null.
  *
  * Drizzle + postgres-js wraps the raw PostgresError inside `err.cause`,

@@ -243,14 +243,38 @@ describe('OperatorApplicationService.approve', () => {
     expect((await repos.operators.list()).length).toBe(1)
   })
 
-  it('maps a concurrent unique-violation inside the tx to a 409 ConflictError', async () => {
+  it('maps a concurrent operators.slug clash to a distinct, retry-able 409', async () => {
     const { service, repos } = setupApprove()
     const { id } = await repos.applications.create(base)
-    // Simulate a concurrent approval winning the operators.slug unique index.
+    // Two different same-named businesses approved concurrently: the loser hits
+    // the operators.slug unique index. The message must tell the reviewer to
+    // retry (a retry re-resolves the slug and succeeds), not the misleading
+    // "already reviewed" — that would imply the application was already handled.
     repos.operators.create = () =>
-      Promise.reject(Object.assign(new Error('dup'), { code: '23505' }))
+      Promise.reject(
+        Object.assign(new Error('dup'), {
+          code: '23505',
+          constraint_name: 'operators_slug_unique',
+        }),
+      )
     await expect(service.approve(id, 'admin-1')).rejects.toThrow(ConflictError)
-    await expect(service.approve(id, 'admin-1')).rejects.toThrow('already reviewed')
+    await expect(service.approve(id, 'admin-1')).rejects.toThrow(/retry/i)
+  })
+
+  it('maps a non-slug unique-violation inside the tx to the generic already-reviewed 409', async () => {
+    const { service, repos } = setupApprove()
+    const { id } = await repos.applications.create(base)
+    // A race on the invite pending-email index (not the slug) still means
+    // "someone else won this approval" — keep the generic already-reviewed 409.
+    repos.operators.create = () =>
+      Promise.reject(
+        Object.assign(new Error('dup'), {
+          code: '23505',
+          constraint_name: 'provider_invites_pending_email_unique',
+        }),
+      )
+    await expect(service.approve(id, 'admin-1')).rejects.toThrow(ConflictError)
+    await expect(service.approve(id, 'admin-1')).rejects.toThrow(/already reviewed/)
   })
 
   it('C1 — blocks approval when contactEmail already has a live pending invite', async () => {
