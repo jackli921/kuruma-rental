@@ -53,6 +53,7 @@ function OperatorDashboardRoute() {
       vehicles={vehicles}
       session={session ?? null}
       locale={locale}
+      pickedOperatorId={pickedOperatorId}
     />
   )
 }

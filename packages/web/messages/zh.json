@@ -1005,6 +1005,8 @@
       "subtitle": "您的预订已确认。取车时请出示预订码。",
       "bookingCode": "预订码",
       "vehicleClass": "车型",
+      "vehicle": "车辆",
+      "assignmentNote": "取车前将为您指定具体车辆。",
       "pickupDate": "取车",
       "returnDate": "还车",
       "status": "状态",
@@ -1364,8 +1366,10 @@
     "detail": {
       "backToSearch": "返回搜索",
       "availableVehicles": "可用车辆",
+      "classDeals": "车型套餐",
       "noVehicles": "所选时间内该门店没有可用车辆。",
       "book": "预订此车",
+      "bookClass": "预订此车型",
       "notFound": "未找到门店",
       "notFoundDescription": "该门店不存在或已不可用。"
     }
@@ -1782,6 +1786,7 @@
   "reservation": {
     "title": "完成预订",
     "vehicleHeading": "您正在预订",
+    "classAssignmentNote": "本车型级别的具体车辆将在提车前分配。",
     "steps": {
       "dates": "日期",
       "addOns": "附加项",

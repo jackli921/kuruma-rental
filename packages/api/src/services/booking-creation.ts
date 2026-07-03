@@ -8,9 +8,9 @@ import { BOOKING_CODE_CONSTRAINT, PG_ERROR, pgConstraintName, pgErrorCode } from
 import type { BookingRepository, RunInTransaction, TransactionRepos } from '../repositories/types'
 import type { Location, Vehicle } from '../stores'
 import {
-  assertBookingInventoryWithinOperator,
-  bookingInventoryDenialResult,
+  assertBookingWriteWithinOperator,
   bookingReadScope,
+  fleetWriteDenialResult,
 } from '../tenancy'
 import { resolveBookingActor } from './booking-actor'
 import { rejectIfOperatorDeactivated } from './booking-creation-operator-guard'
@@ -229,12 +229,11 @@ export class BookingCreationService {
     return { ok: true, dropoff, effectiveEndAt }
   }
 
-  // The atomic decision-and-record (FC/IS: the decision; ensureThread is the
-  // imperative shell). Resolution reads run as SYSTEM_CONTEXT — these are
-  // internal pricing/snapshot reads, and insurance/fee reads reject RENTER
-  // callers by design; the booking's tenant is derived from the vehicle, not
-  // the caller. The booking + event WRITES use the caller's ctx (renter-own /
-  // operator scope is enforced at the repo).
+  // The atomic decision-and-record (FC/IS: the decision; ensureThread is the imperative
+  // shell). The ANCHOR read (vehicle/pickup) is ctx-scoped (#1417) — it derives the tenant
+  // AND clamps operators; downstream pricing/snapshot/insurance/fee reads stay SYSTEM_CONTEXT,
+  // cross-checked against that operatorId (insurance/fee also reject RENTER callers). WRITES
+  // use the caller's ctx (scope enforced at the repo).
   private async submitInTx(
     ctx: CallerContext,
     input: CreateBookingInput,
@@ -251,18 +250,19 @@ export class BookingCreationService {
     if (input.fulfillmentMode === 'CLASS_COMBO') {
       return this.submitComboInTx(ctx, input, renterId, now, repos, actingOperatorId)
     }
-    const vehicle = await repos.vehicleRepo.findById(SYSTEM_CONTEXT, input.requestedVehicleId)
+    // #1417: read the ANCHOR vehicle with the caller's own ctx, so operatorReadScope clamps
+    // a tenant operator to its own fleet — a foreign car returns undefined -> the plain
+    // 'Vehicle not found' below (no oracle). Marketplace tiers still resolve `all`, unchanged.
+    const vehicle = await repos.vehicleRepo.findById(ctx, input.requestedVehicleId)
     if (!vehicle) {
       return { ok: false, status: 400, error: 'Vehicle not found' }
     }
     const operatorId = vehicle.operatorId
-    // #1260/#1417: bind BEFORE the vehicle-state gates below. The read is SYSTEM_CONTEXT
-    // (unscoped), so a foreign car is reachable by raw id; binding first refuses a cross-
-    // tenant caller uniformly and stops it probing B's status/class/shaken-expiry via the
-    // 400s that follow. Bypass `all` names its operator (404 no-oracle); a tenant operator
-    // is own-fleet only (foreign -> 403); renters pass through (marketplace).
-    const inventoryDenial = assertBookingInventoryWithinOperator(ctx, operatorId, actingOperatorId)
-    if (inventoryDenial) return bookingInventoryDenialResult(inventoryDenial, 'Vehicle not found')
+    // #1260: only the bypass `all` tier reads cross-operator inventory above, so bind just its
+    // pick-an-operator claim, BEFORE the vehicle-state gates (a mismatched admin pick must not
+    // probe them). Operators/renters/partners already pass — clamped or marketplace.
+    const denial = assertBookingWriteWithinOperator(ctx, operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, 'Vehicle not found')
     if (vehicle.status !== 'AVAILABLE') {
       return { ok: false, status: 400, error: 'Vehicle is not available' }
     }
@@ -477,17 +477,17 @@ export class BookingCreationService {
     // The pickup location anchors the booking's operator + the (op, class, loc)
     // triple every other read keys off (a forged classId from another tenant
     // gets rejected at the class-belongs-to-operator gate below).
-    const pickup = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.pickupLocationId)
+    // #1417: read the ANCHOR pickup with the caller's own ctx (mirrors SPECIFIC's vehicle
+    // read) — a tenant operator's foreign pickup returns undefined -> the plain 'not
+    // available' below (no oracle). Marketplace tiers still resolve `all`, unchanged.
+    const pickup = await repos.locationRepo.findById(ctx, input.pickupLocationId)
     if (!pickup) {
       return { ok: false, status: 400, error: 'Pickup location is not available' }
     }
     const operatorId = pickup.operatorId
-    // #1260/#1417: bind the combo's pickup/inventory operator (mirrors the SPECIFIC
-    // path) — bypass `all` names its operator (404 no-oracle), a tenant operator is
-    // own-fleet only (foreign pickup -> 403), renters pass through (marketplace).
-    const inventoryDenial = assertBookingInventoryWithinOperator(ctx, operatorId, actingOperatorId)
-    if (inventoryDenial)
-      return bookingInventoryDenialResult(inventoryDenial, 'Pickup location is not available')
+    // #1260: bind only the bypass `all` tier's pick-an-operator claim (mirrors SPECIFIC).
+    const denial = assertBookingWriteWithinOperator(ctx, operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, 'Pickup location is not available')
     const operatorBlock = await rejectIfOperatorDeactivated(repos, operatorId)
     if (operatorBlock) return operatorBlock
     const classId = input.classId

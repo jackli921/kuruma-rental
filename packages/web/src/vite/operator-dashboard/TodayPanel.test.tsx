@@ -69,13 +69,20 @@ function renderPanel(
   today: TodayBuckets,
   session: Session | null = OPERATOR_SESSION,
   locale = 'en',
+  pickedOperatorId: string | undefined = undefined,
 ) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
   const view = render(
     <QueryClientProvider client={qc}>
       <IntlProvider locale="en" messages={en}>
-        <TodayPanel today={today} vehicles={VEHICLES} session={session} locale={locale} />
+        <TodayPanel
+          today={today}
+          vehicles={VEHICLES}
+          session={session}
+          locale={locale}
+          pickedOperatorId={pickedOperatorId}
+        />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -143,7 +150,11 @@ describe('TodayPanel', () => {
       buckets({ pickups: [row({ id: 'bk1', status: 'CONFIRMED' })] }),
     )
     fireEvent.click(screen.getByRole('button', { name: M.markPickedUp }))
-    await waitFor(() => expect(updateStatusMock).toHaveBeenCalledWith('bk1', 'ACTIVE', 'test-csrf'))
+    // A tenant operator passes NO operator binding (undefined) — the server infers
+    // scope from the session cookie; only a picker admin sends an explicit operatorId.
+    await waitFor(() =>
+      expect(updateStatusMock).toHaveBeenCalledWith('bk1', 'ACTIVE', 'test-csrf', undefined),
+    )
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: OPERATOR_OVERVIEW_QUERY_KEY })
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: OPERATOR_BOOKINGS_KEY })
@@ -155,7 +166,7 @@ describe('TodayPanel', () => {
     renderPanel(buckets({ returns: [row({ id: 'r1', status: 'ACTIVE' })] }))
     fireEvent.click(screen.getByRole('button', { name: M.markReturned }))
     await waitFor(() =>
-      expect(updateStatusMock).toHaveBeenCalledWith('r1', 'COMPLETED', 'test-csrf'),
+      expect(updateStatusMock).toHaveBeenCalledWith('r1', 'COMPLETED', 'test-csrf', undefined),
     )
   })
 
@@ -164,12 +175,26 @@ describe('TodayPanel', () => {
     renderPanel(buckets({ overdue: [row({ id: 'o1', status: 'ACTIVE' })] }))
     fireEvent.click(screen.getByRole('button', { name: M.markReturned }))
     await waitFor(() =>
-      expect(updateStatusMock).toHaveBeenCalledWith('o1', 'COMPLETED', 'test-csrf'),
+      expect(updateStatusMock).toHaveBeenCalledWith('o1', 'COMPLETED', 'test-csrf', undefined),
     )
   })
 
-  it('renders nothing for a non-operator (bypass admin) session', () => {
+  it('renders nothing for a picker admin who has not yet picked an operator', () => {
     const { container } = renderPanel(buckets({ pickups: [row({ id: 'p1' })] }), ADMIN_SESSION)
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('lets a picker admin advance a booking, binding the write to the picked operator (#1433)', async () => {
+    updateStatusMock.mockResolvedValue({})
+    renderPanel(
+      buckets({ pickups: [row({ id: 'bk1', status: 'CONFIRMED' })] }),
+      ADMIN_SESSION,
+      'en',
+      'op_7',
+    )
+    fireEvent.click(screen.getByRole('button', { name: M.markPickedUp }))
+    await waitFor(() =>
+      expect(updateStatusMock).toHaveBeenCalledWith('bk1', 'ACTIVE', 'test-csrf', 'op_7'),
+    )
   })
 })

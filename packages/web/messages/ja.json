@@ -1005,6 +1005,8 @@
       "subtitle": "ご予約が確定しました。受取時に予約コードをご提示ください。",
       "bookingCode": "予約コード",
       "vehicleClass": "クラス",
+      "vehicle": "車両",
+      "assignmentNote": "お受け取り前に具体的な車両が割り当てられます。",
       "pickupDate": "貸出",
       "returnDate": "返却",
       "status": "ステータス",
@@ -1364,8 +1366,10 @@
     "detail": {
       "backToSearch": "検索に戻る",
       "availableVehicles": "空車",
+      "classDeals": "クラス指定プラン",
       "noVehicles": "選択した日時にこの店舗で利用できるクルマはありません。",
       "book": "このクルマを予約",
+      "bookClass": "このクラスを予約",
       "notFound": "店舗が見つかりません",
       "notFoundDescription": "この店舗は存在しないか、現在ご利用いただけません。"
     }
@@ -1782,6 +1786,7 @@
   "reservation": {
     "title": "予約を完了する",
     "vehicleHeading": "予約するクルマ",
+    "classAssignmentNote": "このクラスの具体的なクルマは、受取時までに割り当てられます。",
     "steps": {
       "dates": "日時",
       "addOns": "オプション",
