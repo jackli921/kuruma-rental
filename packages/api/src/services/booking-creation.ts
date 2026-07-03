@@ -255,6 +255,14 @@ export class BookingCreationService {
     if (!vehicle) {
       return { ok: false, status: 400, error: 'Vehicle not found' }
     }
+    const operatorId = vehicle.operatorId
+    // #1260/#1417: bind BEFORE the vehicle-state gates below. The read is SYSTEM_CONTEXT
+    // (unscoped), so a foreign car is reachable by raw id; binding first refuses a cross-
+    // tenant caller uniformly and stops it probing B's status/class/shaken-expiry via the
+    // 400s that follow. Bypass `all` names its operator (404 no-oracle); a tenant operator
+    // is own-fleet only (foreign -> 403); renters pass through (marketplace).
+    const inventoryDenial = assertBookingInventoryWithinOperator(ctx, operatorId, actingOperatorId)
+    if (inventoryDenial) return bookingInventoryDenialResult(inventoryDenial, 'Vehicle not found')
     if (vehicle.status !== 'AVAILABLE') {
       return { ok: false, status: 400, error: 'Vehicle is not available' }
     }
@@ -274,14 +282,6 @@ export class BookingCreationService {
         code: 'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
       }
     }
-    const operatorId = vehicle.operatorId
-    // #1260/#1417: bind the booked vehicle to the caller's operator — the read above
-    // is SYSTEM_CONTEXT (unscoped), so ANY tier could otherwise book ANY operator's car
-    // by raw id. The bypass `all` tier must name the operator it acts as (404 no-oracle);
-    // a tenant operator is own-fleet only and a foreign car is 403 (#1417). Renters pass
-    // through — booking any storefront vehicle is the marketplace.
-    const inventoryDenial = assertBookingInventoryWithinOperator(ctx, operatorId, actingOperatorId)
-    if (inventoryDenial) return bookingInventoryDenialResult(inventoryDenial, 'Vehicle not found')
     const operatorBlock = await rejectIfOperatorDeactivated(repos, operatorId)
     if (operatorBlock) return operatorBlock
     const classId = vehicle.classId

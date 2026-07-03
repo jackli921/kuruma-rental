@@ -31,7 +31,7 @@ import { InMemoryBookingRepository } from '../../src/repositories/in-memory/book
 import { InMemoryBookingEventRepository } from '../../src/repositories/in-memory/booking-event'
 import type { RunInTransaction, TransactionRepos } from '../../src/repositories/types'
 import { BookingService } from '../../src/services/booking'
-import type { Booking } from '../../src/stores'
+import type { Booking, Operator } from '../../src/stores'
 import {
   assertBookingInventoryWithinOperator,
   assertBookingWriteWithinOperator,
@@ -279,12 +279,26 @@ describe('BookingService.cancel — operator write scope (#1260)', () => {
 // needed — the bind fires before the walk-in renter is minted.
 const OP_B = 'op-write-scope-b'
 
+// #1417 end-to-end (both create paths). Note the layering: the booking repo's own tenant
+// guard (#329) already refuses a cross-tenant INSERT (bookingRepo.create throws
+// ForbiddenError -> 403 'Forbidden'), so a booking never actually persists under B. The
+// #1417 bind sits IN FRONT of that backstop and returns a clean, SPECIFIC 403 early --
+// before any vehicle-state gate can leak B's status/class/shaken-expiry (the hoist in
+// submitInTx) and before wasted work (rental rules, capacity lock). Removing the operator
+// branch of the guard makes create hit the repo backstop instead (ForbiddenError thrown),
+// so these tests genuinely fail on mutation.
 describe('BookingCreationService.create — operator inventory bind (#1417)', () => {
-  it('refuses a tenant operator booking a FOREIGN operator vehicle (403) and writes nothing', async () => {
+  const now = new Date('2027-07-15T00:00:00Z')
+  const startAt = new Date('2027-08-01T09:00:00Z')
+  const endAt = new Date('2027-08-03T09:00:00Z')
+  const foreign403 = {
+    ok: false,
+    status: 403,
+    error: 'This booking references inventory owned by another operator',
+  }
+
+  it('refuses a SPECIFIC booking of a FOREIGN operator vehicle with a clean early 403', async () => {
     const { service, bookingRepo, bVehicleId, bLocationId } = await createHarness()
-    const now = new Date('2027-07-15T00:00:00Z')
-    const startAt = new Date('2027-08-01T09:00:00Z')
-    const endAt = new Date('2027-08-03T09:00:00Z')
 
     const res = await service.create(
       operatorCtxA,
@@ -302,16 +316,50 @@ describe('BookingCreationService.create — operator inventory bind (#1417)', ()
       now,
     )
 
-    expect(res).toMatchObject({
-      ok: false,
-      status: 403,
-      error: 'This booking references inventory owned by another operator',
-    })
-    // The griefing write never lands under operator B.
+    // Specific, typed 403 from the bind -- NOT the repo backstop's generic thrown Forbidden.
+    expect(res).toMatchObject(foreign403)
+    const all = await bookingRepo.findAll(SYSTEM_CONTEXT)
+    expect(all.filter((b) => b.operatorId === OP_B)).toEqual([])
+  })
+
+  it('refuses a CLASS_COMBO booking at a FOREIGN operator pickup with the same 403', async () => {
+    const { service, bookingRepo, bLocationId } = await createHarness()
+
+    // submitComboInTx binds on pickup.operatorId (= B), so the foreign pickup is refused
+    // before the class/capacity gates -- the combo twin of the SPECIFIC path.
+    const res = await service.create(
+      operatorCtxA,
+      {
+        fulfillmentMode: 'CLASS_COMBO',
+        classId: 'b-class-1',
+        pickupLocationId: bLocationId,
+        dropoffLocationId: bLocationId,
+        addOnIds: [],
+        source: 'MANUAL',
+        walkInCustomer: { name: 'Walk In', phone: '+819012345678' },
+        startAt,
+        endAt,
+      },
+      now,
+    )
+
+    expect(res).toMatchObject(foreign403)
     const all = await bookingRepo.findAll(SYSTEM_CONTEXT)
     expect(all.filter((b) => b.operatorId === OP_B)).toEqual([])
   })
 })
+
+function makeOperator(id: string): Operator {
+  return {
+    id,
+    slug: `slug-${id}`,
+    name: `Operator ${id}`,
+    preAuthHandoffUrl: null,
+    createdAt: new Date('2020-01-01T00:00:00Z'),
+    updatedAt: new Date('2020-01-01T00:00:00Z'),
+    deactivatedAt: null,
+  }
+}
 
 async function createHarness() {
   const bookingRepo = new InMemoryBookingRepository()
@@ -320,19 +368,39 @@ async function createHarness() {
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
   const locationRepo = new InMemoryLocationRepository()
   const userRepo = new InMemoryUserRepository()
+  // repos.operatorRepo is REQUIRED (rejectIfOperatorDeactivated reads it). Seed BOTH
+  // tenants active so that with the #1417 bind removed the create runs all the way to the
+  // booking insert, where the repo's own #329 tenant guard throws -- proving the bind is a
+  // real, reachable gate in front of that backstop, not dead code.
+  const operatorRepo = new InMemoryOperatorRepository(
+    new Map<string, Operator>([
+      [OP_A, makeOperator(OP_A)],
+      [OP_B, makeOperator(OP_B)],
+    ]),
+  )
   const availabilityRepo = new InMemoryAvailabilityRepository(
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
-    new InMemoryOperatorRepository(),
+    operatorRepo,
   )
 
-  // Operator B's inventory — public on B's storefront, reachable by raw id.
-  // A fully bookable car (class set, AVAILABLE, docs valid) so EVERY pre-bind gate in
-  // submitInTx passes — the 403 tenant bind is then the ONLY thing refusing the write.
+  // Operator B's PUBLIC storefront location + a fully bookable car parked at it (class
+  // set, AVAILABLE, docs valid, pickup matches) so EVERY pre-bind gate in submitInTx
+  // passes and the write would otherwise land under B.
+  const bLocation = await locationRepo.create({
+    operatorId: OP_B,
+    name: 'B Depot',
+    address: '9-9-9 Foreign',
+    operatingHours: null,
+    timezone: 'Asia/Tokyo',
+    defaultTurnaroundMinutes: 2880,
+    status: 'ACTIVE',
+  } as Parameters<typeof locationRepo.create>[0])
   const bVehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
     operatorId: OP_B,
     classId: 'b-class-1',
+    pickupLocationId: bLocation.id,
     name: 'B Car',
     description: null,
     seats: 4,
@@ -347,15 +415,6 @@ async function createHarness() {
     shakenExpiryDate: '2099-06-15',
     insuranceExpiryDate: '2099-01-01',
   })
-  const bLocation = await locationRepo.create({
-    operatorId: OP_B,
-    name: 'B Depot',
-    address: '9-9-9 Foreign',
-    operatingHours: null,
-    timezone: 'Asia/Tokyo',
-    defaultTurnaroundMinutes: 2880,
-    status: 'ACTIVE',
-  } as Parameters<typeof locationRepo.create>[0])
 
   const repos: TransactionRepos = {
     vehicleRepo,
@@ -363,6 +422,7 @@ async function createHarness() {
     bookingRepo,
     bookingEventRepo,
     locationRepo,
+    operatorRepo,
     insuranceOptionRepo: new InMemoryInsuranceOptionRepository(),
     addOnRepo: new InMemoryAddOnRepository(),
     feeScheduleRepo: new InMemoryFeeScheduleRepository(),
