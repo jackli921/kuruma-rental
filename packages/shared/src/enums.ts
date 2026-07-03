@@ -219,3 +219,16 @@ export type ReviewSubject = (typeof REVIEW_SUBJECTS)[number]
  *  public reads; VISIBLE is the default. */
 export const REVIEW_MODERATION_STATUSES = ['VISIBLE', 'HIDDEN'] as const
 export type ReviewModerationStatus = (typeof REVIEW_MODERATION_STATUSES)[number]
+
+/** Named sub-dimensions a review may carry (epic #1067): renter->operator uses
+ *  cleanliness/accuracy/communication/value; operator->renter uses communication/
+ *  cleanliness/ruleAdherence. The union is the accepted key set; the precise
+ *  per-direction subset is enforced in the submission service (slice 2). */
+export const REVIEW_DIMENSIONS = [
+  'cleanliness',
+  'accuracy',
+  'communication',
+  'value',
+  'ruleAdherence',
+] as const
+export type ReviewDimension = (typeof REVIEW_DIMENSIONS)[number]

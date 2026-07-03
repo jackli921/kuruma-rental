@@ -23,8 +23,7 @@ function ctxFor(userId: string, role: AuthUser['role'] = 'RENTER', operatorId?: 
 }
 
 // Seed a booking+operator thread directly: the booking flow's ensureThread stamps
-// operatorId from the booking, which we shortcut here to exercise the alert trigger
-// (the caller-facing createThread path intentionally leaves operatorId null).
+// operatorId from the booking, which we shortcut here to exercise the alert trigger.
 async function seedBookingThread(): Promise<string> {
   const thread = await threadRepo.create(
     ctxFor(U1, 'RENTER'),
@@ -43,49 +42,11 @@ beforeEach(() => {
   service = new MessageService(threadRepo, messageRepo, notifyOperatorNewMessage)
 })
 
-describe('MessageService.createThread', () => {
-  it('forbids a non-privileged caller from creating a thread they are not in', async () => {
-    const result = await service.createThread(ctxFor(U1, 'RENTER'), { participantIds: [U2, U3] })
-
-    expect(result).toEqual({ kind: 'forbidden' })
-  })
-
-  it('lets a privileged caller create a thread between other users (status 201)', async () => {
-    const result = await service.createThread(ctxFor(U1, 'PLATFORM_ADMIN'), {
-      participantIds: [U2, U3],
-    })
-
-    expect(result.kind).toBe('created')
-    if (result.kind !== 'created') throw new Error('expected created')
-    expect(result.status).toBe(201)
-  })
-
-  it('forbids a legacy STAFF caller from creating a thread between other users — revoked by #487', async () => {
-    const result = await service.createThread(ctxFor(U1, 'STAFF'), { participantIds: [U2, U3] })
-
-    expect(result).toEqual({ kind: 'forbidden' })
-  })
-
-  it('replays an idempotency key: second create returns status 200 and the same thread', async () => {
-    const ctx = ctxFor(U1, 'RENTER')
-    const input = { participantIds: [U1, U2], idempotencyKey: 'key-thread-1' }
-
-    const first = await service.createThread(ctx, input)
-    const second = await service.createThread(ctx, input)
-
-    if (first.kind !== 'created' || second.kind !== 'created') throw new Error('expected created')
-    expect(first.status).toBe(201)
-    expect(second.status).toBe(200)
-    expect(second.thread.id).toBe(first.thread.id)
-  })
-})
-
 describe('MessageService.createMessage', () => {
   it('replays an idempotency key: second send returns status 200 and the same message', async () => {
     const ctx = ctxFor(U1, 'RENTER')
-    const created = await service.createThread(ctx, { participantIds: [U1, U2] })
-    if (created.kind !== 'created') throw new Error('expected created')
-    const threadId = created.thread.id
+    const thread = await threadRepo.create(ctx, null, [U1, U2], null, null)
+    const threadId = thread.id
 
     const first = await service.createMessage(ctx, threadId, 'hi', 'key-msg-1')
     const second = await service.createMessage(ctx, threadId, 'hi', 'key-msg-1')
