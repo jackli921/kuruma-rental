@@ -174,7 +174,9 @@ describe('CLASS_COMBO submit serialization (real pg, #464 slice 2d.5)', () => {
 
     const responses = await Promise.all(
       Array.from({ length: 3 }, () =>
-        app.request('/bookings', {
+        // #1260: the app is a PLATFORM_ADMIN, so the create binds to the operator
+        // it acts as via ?operatorId= (here the booking's own operator).
+        app.request(`/bookings?operatorId=${BEST_CAR_RENTAL_OPERATOR_ID}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -220,7 +222,8 @@ describe('CLASS_COMBO submit serialization (real pg, #464 slice 2d.5)', () => {
     const raceStart = new Date('2027-10-01T09:00:00Z')
     const raceEnd = new Date('2027-10-02T09:00:00Z')
     const post = (body: object) =>
-      app.request('/bookings', {
+      // #1260: PLATFORM_ADMIN app binds the create to the acting operator.
+      app.request(`/bookings?operatorId=${BEST_CAR_RENTAL_OPERATOR_ID}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
