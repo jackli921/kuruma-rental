@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 import { FleetTimeline } from './FleetTimeline'
 import type { CalendarBookingRow } from './api'
+import type { BlockCalendarEvent } from './calendar-events'
 
 const VEHICLES = [
   { id: 'v1', name: 'Corolla' },
@@ -26,17 +27,41 @@ function row(over: Partial<CalendarBookingRow> & { id: string }): CalendarBookin
   }
 }
 
-function renderTimeline(rows: CalendarBookingRow[], onSelectEvent: (id: string) => void = vi.fn()) {
+function block(over: Partial<BlockCalendarEvent> = {}): BlockCalendarEvent {
+  return {
+    type: 'block',
+    id: 'blk1',
+    title: 'Maintenance',
+    start: new Date('2026-07-03T09:00:00.000Z'),
+    end: new Date('2026-07-04T09:00:00.000Z'),
+    resourceId: 'v1',
+    kind: 'MAINTENANCE',
+    reason: 'Maintenance',
+    notes: null,
+    ...over,
+  }
+}
+
+interface RenderOpts {
+  onSelectEvent?: (id: string) => void
+  onSelectBlock?: (block: BlockCalendarEvent) => void
+  blocks?: BlockCalendarEvent[]
+}
+
+function renderTimeline(rows: CalendarBookingRow[], opts: RenderOpts = {}) {
+  const { onSelectEvent = vi.fn(), onSelectBlock = vi.fn(), blocks = [] } = opts
   return render(
     <IntlProvider locale="en" messages={en}>
       <FleetTimeline
         rows={rows}
         vehicles={VEHICLES}
+        blocks={blocks}
         date={new Date('2026-07-01T00:00:00.000Z')}
         locale="en"
         onViewChange={vi.fn()}
         onDateChange={vi.fn()}
         onSelectEvent={onSelectEvent}
+        onSelectBlock={onSelectBlock}
       />
     </IntlProvider>,
   )
@@ -58,11 +83,13 @@ describe('FleetTimeline', () => {
         <FleetTimeline
           rows={[row({ id: 'b2', vehicleId: null, renterName: 'Bob' })]}
           vehicles={VEHICLES}
+          blocks={[]}
           date={new Date('2026-07-01T00:00:00.000Z')}
           locale="en"
           onViewChange={vi.fn()}
           onDateChange={vi.fn()}
           onSelectEvent={vi.fn()}
+          onSelectBlock={vi.fn()}
         />
       </IntlProvider>,
     )
@@ -82,7 +109,7 @@ describe('FleetTimeline', () => {
           effectiveEndAt: '2026-07-04T15:00:00.000Z',
         }),
       ],
-      onSelectEvent,
+      { onSelectEvent },
     )
     const bars = screen.getAllByText('Alice')
     expect(bars.length).toBeGreaterThan(0)
@@ -91,5 +118,25 @@ describe('FleetTimeline', () => {
     fireEvent.mouseDown(bar as Element)
     fireEvent.mouseUp(bar as Element)
     expect(onSelectEvent).toHaveBeenCalledWith('b1')
+  })
+
+  it('paints a scheduled block with its kind band class, not a booking status', () => {
+    renderTimeline([], { blocks: [block({ kind: 'MAINTENANCE' })] })
+    const bar = screen.getByText('Maintenance').closest('.rct-item')
+    expect(bar).not.toBeNull()
+    expect(bar).toHaveClass('rbc-event--block-maintenance')
+    expect(bar).not.toHaveClass('rbc-event--confirmed')
+  })
+
+  it('opens the block detail (not a booking) when a block band is clicked', () => {
+    const onSelectEvent = vi.fn()
+    const onSelectBlock = vi.fn()
+    const blk = block({ id: 'blk7', title: 'Bodywork', reason: 'Bodywork' })
+    renderTimeline([], { blocks: [blk], onSelectEvent, onSelectBlock })
+    const bar = screen.getByText('Bodywork').closest('.rct-item')
+    fireEvent.mouseDown(bar as Element)
+    fireEvent.mouseUp(bar as Element)
+    expect(onSelectBlock).toHaveBeenCalledWith(blk)
+    expect(onSelectEvent).not.toHaveBeenCalled()
   })
 })
