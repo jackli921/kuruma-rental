@@ -6,7 +6,14 @@ import {
   MAX_PHOTOS_PER_VEHICLE,
   type VehiclePhotoService,
 } from '../services/vehicle-photo'
-import { MULTIPART_OVERHEAD_BYTES, fail, ok, parseId, rejectOversizedBody } from './helpers'
+import {
+  MULTIPART_OVERHEAD_BYTES,
+  fail,
+  failResult,
+  ok,
+  parseId,
+  rejectOversizedBody,
+} from './helpers'
 
 // Up to MAX_PHOTOS_PER_VEHICLE files per request; cap the whole multipart body
 // at that many max-sized files plus framing slack.
@@ -50,9 +57,7 @@ export function createVehiclePhotoRoutes(
       )
 
       const result = await service.uploadPhotos(ctx, idResult.id, files, c.req.query('operatorId'))
-      if (!result.ok) {
-        return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)
-      }
+      if (!result.ok) return failResult(c, result)
       return ok(c, { uploaded: result.uploaded, total: result.total }, 201)
     })
     .delete('/vehicles/:id/photos', async (c) => {
@@ -67,9 +72,7 @@ export function createVehiclePhotoRoutes(
       if (!url) return fail(c, 'url query parameter required', 400)
 
       const result = await service.deletePhoto(ctx, idResult.id, url, c.req.query('operatorId'))
-      if (!result.ok) {
-        return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)
-      }
+      if (!result.ok) return failResult(c, result)
       return ok(c, { deleted: url, remaining: result.remaining })
     })
 }
