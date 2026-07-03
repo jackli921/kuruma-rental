@@ -208,16 +208,6 @@ export function threadReadScope(ctx: CallerContext): ThreadReadScope {
 export type FleetWriteDenial = { kind: 'operator-required' } | { kind: 'not-in-scope' }
 
 /**
- * The booking-CREATE superset of {@link FleetWriteDenial} (#1417). Adds:
- * - `foreign-operator` — a tenant operator referenced another operator's PUBLIC
- *                        storefront inventory; an explicit 403 (the vehicle is public,
- *                        so there is no existence oracle to hide behind a 404).
- * Kept OFF `FleetWriteDenial` so the lifecycle/maintenance writes that share
- * {@link fleetWriteDenialResult} never have to model a 403 they can never produce.
- */
-export type BookingInventoryDenial = FleetWriteDenial | { kind: 'foreign-operator' }
-
-/**
  * The core operator-binding denial (#1260): when a caller reached the target
  * through an UNSCOPED `all` read, it must name the operator it is acting as, and
  * that operator must own the target. Row/tenant-scoped callers pass through — the
@@ -268,6 +258,12 @@ export function assertFleetWriteWithinOperator(
  * `!isOperatorRole` (the fleet key): `/cancel` has no route gate and admits
  * renters (self-cancel) and legacy STAFF/ADMIN — both renter-scoped for bookings —
  * who must never be forced to name an operator, and the fleet key would 422 them.
+ *
+ * Also guards booking CREATE (#1417): that path now reads the vehicle/pickup anchor
+ * with the caller's own ctx, so a tenant operator can no longer reach a foreign car
+ * at all (`findById` returns undefined -> a plain 'not found'). Only the bypass `all`
+ * tier still reads cross-operator inventory, so this same pick-an-operator bind is all
+ * create needs — no create-specific denial kind.
  */
 export function assertBookingWriteWithinOperator(
   ctx: CallerContext,
@@ -282,36 +278,10 @@ export function assertBookingWriteWithinOperator(
 }
 
 /**
- * Bind a booking CREATE's inventory (vehicle / pickup) to the caller's tenant (#1417).
- *
- * The create path resolves the vehicle/pickup with SYSTEM_CONTEXT (unscoped) for EVERY
- * tier, so the read-scope clamp {@link operatorBindingDenial} relies on is absent here:
- * a tenant operator can reach a foreign operator's PUBLIC storefront vehicle by raw id
- * and persist a stranger booking under it (availability griefing + cross-tenant PII).
- * So bind explicitly by role:
- *  - OPERATOR_* : manual booking is own-fleet only. A foreign (or absent) operatorId is
- *    `foreign-operator` -> 403. The vehicle is already public on the target's storefront,
- *    so there is no existence oracle to hide; an explicit refusal beats a 404. Fail-closed
- *    when the operator has no operatorId (it owns no inventory).
- *  - everyone else : delegate to {@link assertBookingWriteWithinOperator}. The bypass
- *    `all` tier keeps its pick-an-operator bind; renters/partners pass through, because a
- *    renter booking ANY operator's storefront vehicle is the marketplace, not a leak.
- */
-export function assertBookingInventoryWithinOperator(
-  ctx: CallerContext,
-  targetOperatorId: string,
-  actingOperatorId: string | undefined,
-): BookingInventoryDenial | null {
-  if (isOperatorRole(ctx.role)) {
-    return ctx.operatorId === targetOperatorId ? null : { kind: 'foreign-operator' }
-  }
-  return assertBookingWriteWithinOperator(ctx, targetOperatorId, actingOperatorId)
-}
-
-/**
  * Map a {@link FleetWriteDenial} to the shape a fleet-write service returns
- * (#1260). Wired to booking status writes today; the block/vehicle slices adopt
- * the same mapper so the refusal contract stays identical everywhere:
+ * (#1260). Wired to booking status writes and booking CREATE (#1417); the
+ * block/vehicle slices adopt the same mapper so the refusal contract stays
+ * identical everywhere:
  * - operator-required -> 422 carrying the same OPERATOR_REQUIRED code the global
  *   OperatorRequiredError emits, so the web can discriminate "pick an operator".
  * - not-in-scope      -> 404 with the CALLER's own not-found message: from the
@@ -331,25 +301,6 @@ export function fleetWriteDenialResult(
         code: 'OPERATOR_REQUIRED',
       }
     : { ok: false, status: 404, error: notFoundError }
-}
-
-/**
- * Map a {@link BookingInventoryDenial} to a booking-create service result (#1417).
- * Superset of {@link fleetWriteDenialResult}: `foreign-operator` becomes a uniform 403
- * (same message for the vehicle and the pickup-location paths), everything else defers to
- * the shared mapper. Kept separate so only the create path carries the 403 in its type.
- */
-export function bookingInventoryDenialResult(
-  denial: BookingInventoryDenial,
-  notFoundError: string,
-): { ok: false; status: 422 | 404 | 403; error: string; code?: ErrorCode } {
-  return denial.kind === 'foreign-operator'
-    ? {
-        ok: false,
-        status: 403,
-        error: 'This booking references inventory owned by another operator',
-      }
-    : fleetWriteDenialResult(denial, notFoundError)
 }
 
 /**

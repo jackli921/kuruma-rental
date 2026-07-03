@@ -33,10 +33,8 @@ import type { RunInTransaction, TransactionRepos } from '../../src/repositories/
 import { BookingService } from '../../src/services/booking'
 import type { Booking, Operator } from '../../src/stores'
 import {
-  assertBookingInventoryWithinOperator,
   assertBookingWriteWithinOperator,
   assertFleetWriteWithinOperator,
-  bookingInventoryDenialResult,
   fleetWriteDenialResult,
 } from '../../src/tenancy'
 
@@ -111,58 +109,6 @@ describe('assertBookingWriteWithinOperator — bypass keying (#1260)', () => {
   })
 })
 
-// #1417: the booking CREATE path reads inventory (vehicle/pickup) with SYSTEM_CONTEXT
-// (unscoped) for EVERY tier, so the read-scope clamp the binding model relies on is
-// absent -- an operator can reach a foreign operator's PUBLIC storefront vehicle by raw
-// id. This bind makes an OPERATOR_* own-fleet only. Renters/partners still pass through
-// (booking any storefront vehicle is the marketplace); the bypass `all` tier keeps its
-// pick-an-operator bind unchanged.
-describe('assertBookingInventoryWithinOperator — operator-tier create bind (#1417)', () => {
-  const FOREIGN_OP = 'op-foreign-b'
-
-  it('denies a tenant operator that books FOREIGN inventory (403 forbidden)', () => {
-    expect(assertBookingInventoryWithinOperator(operatorCtxA, FOREIGN_OP, undefined)).toEqual({
-      kind: 'foreign-operator',
-    })
-  })
-
-  it('allows a tenant operator that books its OWN inventory', () => {
-    expect(assertBookingInventoryWithinOperator(operatorCtxA, OP_A, undefined)).toBeNull()
-  })
-
-  it('binds an operator to its OWN operatorId, ignoring a stray acting id naming the target', () => {
-    expect(assertBookingInventoryWithinOperator(operatorCtxA, FOREIGN_OP, FOREIGN_OP)).toEqual({
-      kind: 'foreign-operator',
-    })
-  })
-
-  it('fails closed for an OPERATOR_* with no operatorId (owns no inventory)', () => {
-    const noOpCtx: CallerContext = {
-      userId: 'op-user-x',
-      role: 'OPERATOR_OWNER',
-      bypassScope: false,
-    }
-    expect(assertBookingInventoryWithinOperator(noOpCtx, OP_A, undefined)).toEqual({
-      kind: 'foreign-operator',
-    })
-  })
-
-  it('is a no-op for a renter (booking any storefront vehicle is the marketplace)', () => {
-    const renterCtx: CallerContext = { userId: RENTER_ID, role: 'RENTER', bypassScope: false }
-    expect(assertBookingInventoryWithinOperator(renterCtx, FOREIGN_OP, undefined)).toBeNull()
-  })
-
-  it('still binds the bypass admin (no pick -> required, wrong pick -> not-in-scope, own -> ok)', () => {
-    expect(assertBookingInventoryWithinOperator(adminCtx, OP_A, undefined)).toEqual({
-      kind: 'operator-required',
-    })
-    expect(assertBookingInventoryWithinOperator(adminCtx, OP_A, 'op-else')).toEqual({
-      kind: 'not-in-scope',
-    })
-    expect(assertBookingInventoryWithinOperator(adminCtx, OP_A, OP_A)).toBeNull()
-  })
-})
-
 describe('fleetWriteDenialResult — denial -> service result (#1260)', () => {
   it('maps operator-required to 422 carrying OPERATOR_REQUIRED', () => {
     expect(fleetWriteDenialResult({ kind: 'operator-required' }, 'Booking not found')).toEqual({
@@ -178,29 +124,6 @@ describe('fleetWriteDenialResult — denial -> service result (#1260)', () => {
       ok: false,
       status: 404,
       error: 'Booking not found',
-    })
-  })
-})
-
-describe('bookingInventoryDenialResult — create denial -> service result (#1417)', () => {
-  it('maps foreign-operator to 403 forbidden (operator referenced another tenant)', () => {
-    expect(bookingInventoryDenialResult({ kind: 'foreign-operator' }, 'Vehicle not found')).toEqual(
-      {
-        ok: false,
-        status: 403,
-        error: 'This booking references inventory owned by another operator',
-      },
-    )
-  })
-
-  it('delegates non-foreign denials to the shared mapper (422 required, 404 not-found)', () => {
-    expect(
-      bookingInventoryDenialResult({ kind: 'operator-required' }, 'Vehicle not found'),
-    ).toMatchObject({ status: 422, code: 'OPERATOR_REQUIRED' })
-    expect(bookingInventoryDenialResult({ kind: 'not-in-scope' }, 'Vehicle not found')).toEqual({
-      ok: false,
-      status: 404,
-      error: 'Vehicle not found',
     })
   })
 })
@@ -272,32 +195,23 @@ describe('BookingService.cancel — operator write scope (#1260)', () => {
 })
 
 // #1417 end-to-end repro: a tenant operator (A) manual-books a car owned by operator B.
-// It is reachable because submitInTx reads the vehicle with SYSTEM_CONTEXT (unscoped),
-// so B's PUBLIC storefront car is found by raw id. Before the fix the operator-tier bind
-// no-ops and the booking persists under B (availability griefing + cross-tenant PII);
-// the fix refuses it 403 and writes nothing under B. Walk-in so no renter seeding is
-// needed — the bind fires before the walk-in renter is minted.
+// submitInTx/submitComboInTx now read the ANCHOR vehicle/pickup with the CALLER's own ctx,
+// so operatorReadScope clamps A to its own fleet -- B's PUBLIC storefront car resolves to
+// undefined for A and never enters the create path. Walk-in so no renter seeding is needed.
 const OP_B = 'op-write-scope-b'
 
-// #1417 end-to-end (both create paths). Note the layering: the booking repo's own tenant
-// guard (#329) already refuses a cross-tenant INSERT (bookingRepo.create throws
-// ForbiddenError -> 403 'Forbidden'), so a booking never actually persists under B. The
-// #1417 bind sits IN FRONT of that backstop and returns a clean, SPECIFIC 403 early --
-// before any vehicle-state gate can leak B's status/class/shaken-expiry (the hoist in
-// submitInTx) and before wasted work (rental rules, capacity lock). Removing the operator
-// branch of the guard makes create hit the repo backstop instead (ForbiddenError thrown),
-// so these tests genuinely fail on mutation.
-describe('BookingCreationService.create — operator inventory bind (#1417)', () => {
+// #1417 end-to-end (both create paths), Option B (structural). The foreign row is now
+// UNREACHABLE at the repo read, so create returns the very same not-found ('Vehicle not
+// found' / 'Pickup location is not available') a truly-unknown id yields -- no distinguishable
+// 403 to confirm existence, and no vehicle-state gate ever runs to leak B's status/class/
+// shaken-expiry. Mutation check: reverting the anchor read to SYSTEM_CONTEXT makes B's car
+// reachable to A again, so create no longer returns the not-found -- these tests fail.
+describe('BookingCreationService.create — operator inventory clamp (#1417)', () => {
   const now = new Date('2027-07-15T00:00:00Z')
   const startAt = new Date('2027-08-01T09:00:00Z')
   const endAt = new Date('2027-08-03T09:00:00Z')
-  const foreign403 = {
-    ok: false,
-    status: 403,
-    error: 'This booking references inventory owned by another operator',
-  }
 
-  it('refuses a SPECIFIC booking of a FOREIGN operator vehicle with a clean early 403', async () => {
+  it('refuses a SPECIFIC booking of a FOREIGN operator vehicle as an unfound vehicle (no oracle)', async () => {
     const { service, bookingRepo, bVehicleId, bLocationId } = await createHarness()
 
     const res = await service.create(
@@ -316,13 +230,14 @@ describe('BookingCreationService.create — operator inventory bind (#1417)', ()
       now,
     )
 
-    // Specific, typed 403 from the bind -- NOT the repo backstop's generic thrown Forbidden.
-    expect(res).toMatchObject(foreign403)
+    // The ctx-scoped read makes B's car unreachable to A -> the same not-found a
+    // truly-unknown id yields, NOT a distinguishable 403 existence oracle.
+    expect(res).toMatchObject({ ok: false, status: 400, error: 'Vehicle not found' })
     const all = await bookingRepo.findAll(SYSTEM_CONTEXT)
     expect(all.filter((b) => b.operatorId === OP_B)).toEqual([])
   })
 
-  it('refuses a CLASS_COMBO booking at a FOREIGN operator pickup with the same 403', async () => {
+  it('refuses a CLASS_COMBO booking at a FOREIGN operator pickup as an unfound pickup', async () => {
     const { service, bookingRepo, bLocationId } = await createHarness()
 
     // submitComboInTx binds on pickup.operatorId (= B), so the foreign pickup is refused
@@ -343,7 +258,11 @@ describe('BookingCreationService.create — operator inventory bind (#1417)', ()
       now,
     )
 
-    expect(res).toMatchObject(foreign403)
+    expect(res).toMatchObject({
+      ok: false,
+      status: 400,
+      error: 'Pickup location is not available',
+    })
     const all = await bookingRepo.findAll(SYSTEM_CONTEXT)
     expect(all.filter((b) => b.operatorId === OP_B)).toEqual([])
   })
