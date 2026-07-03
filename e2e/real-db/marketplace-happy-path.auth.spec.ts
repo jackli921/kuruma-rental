@@ -37,10 +37,22 @@ const OPERATOR_NAME = 'Best Car Rental'
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 
 // A far-future window, clear of the seeded bookings (which span demo-time-relative
-// ~-5..+7 days). Keeps a fleet of vehicles available and isolates the new booking.
-// `datetime-local` wall-clock (parsed as JST).
-const FROM = '2026-07-15T10:00'
-const TO = '2026-07-17T10:00'
+// ~-5..+7 days) AND of a month grid's neighbouring-week spillover, so the operator
+// month view for this window renders ONLY the booking this run creates. Anchored to
+// the 15th of the month TWO months out and computed RELATIVE TO TODAY: a hard-coded
+// calendar date silently rotted into the seed range as real time advanced, and a
+// seeded same-renter booking's chip then shadowed the one we click (#1401).
+const pad = (n: number) => String(n).padStart(2, '0')
+const isoDate = (d: Date) =>
+  `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
+const NOW = new Date()
+// Date.UTC normalises a month index past 11 into the next year, so +2 stays year-safe.
+const WINDOW_START = new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth() + 2, 15))
+const WINDOW_END = new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth() + 2, 17))
+// `datetime-local` wall-clock (parsed as JST); the month anchor drives the operator view.
+const FROM = `${isoDate(WINDOW_START)}T10:00`
+const TO = `${isoDate(WINDOW_END)}T10:00`
+const CALENDAR_ANCHOR = isoDate(WINDOW_START)
 
 // KIX seeds only 4 vehicles, so every run consumes one for the window. afterAll
 // deletes the bookings this spec created (+ their RESTRICT children, in FK order:
@@ -92,6 +104,7 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
     })
 
     let bookingCode = ''
+    let bookingId = ''
     await test.step('4-5. step through the wizard; booking confirms with a no-confusables code', async () => {
       // 5-step wizard (#460): dates → addOns → insurance → confirm → payment.
       // Dates are pre-filled & read-only; add-ons are optional (skip); insurance
@@ -116,6 +129,11 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
       await expect(renter).toHaveURL(/\/bookings\/confirmation\?bookingId=.+/)
       await expect(renter.getByRole('heading', { name: 'Booking confirmed' })).toBeVisible()
 
+      // The confirmation URL carries THIS run's booking id — the token used in step 6a
+      // to prove the operator opens this booking's detail, not a seeded same-renter one.
+      bookingId = new URL(renter.url()).searchParams.get('bookingId') ?? ''
+      expect(bookingId).toMatch(new RegExp(`^${UUID}$`))
+
       bookingCode = (await renter.locator('span.font-mono').first().innerText()).trim()
       expect(bookingCode).toMatch(BOOKING_CODE_RE)
       await expect(renter.getByText('Confirmed', { exact: true })).toBeVisible()
@@ -128,15 +146,21 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
       // run's booking is the only event in view). Month view ignores the day-view
       // vehicle-resource columns, so the event renders regardless of car assignment.
       // The event is a quick-view chip titled with the renter (#1099): clicking it
-      // pins a card, and the card is the Link that opens the trip detail — which
-      // carries the per-run unique reservation code, the token that ties it to THIS run.
-      await page.goto('/en/manage/bookings?view=month&date=2026-07-15')
+      // pins a card whose Link opens the trip detail. The chip is titled ONLY with the
+      // renter name, so before following the card we assert its Link resolves to THIS
+      // run's booking id — a seeded same-renter chip can otherwise shadow it (#1401).
+      await page.goto(`/en/manage/bookings?view=month&date=${CALENDAR_ANCHOR}`)
       await expect(page.getByRole('heading', { name: 'Bookings' })).toBeVisible()
       const chip = page.getByRole('button', { name: new RegExp(RENTER_NAME) }).first()
       await expect(chip).toBeVisible({ timeout: 20_000 })
       await chip.click() // pins the quick-view card (the click no longer navigates)
-      await page.getByRole('link', { name: /View full details/ }).click()
-      await expect(page).toHaveURL(new RegExp(`/manage/bookings/${UUID}`))
+      const detailsLink = page.getByRole('link', { name: /View full details/ })
+      await expect(detailsLink).toHaveAttribute(
+        'href',
+        new RegExp(`/manage/bookings/${bookingId}$`),
+      )
+      await detailsLink.click()
+      await expect(page).toHaveURL(new RegExp(`/manage/bookings/${bookingId}`))
       await expect(page.getByText(bookingCode)).toBeVisible({ timeout: 20_000 })
     })
 
