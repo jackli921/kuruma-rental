@@ -1,7 +1,8 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { OperatorInboxView, threadsQueryOptions } from '@/vite/messaging'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
+import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
 // Operator inbox (#1205 slice 3). Gated by `_business` (business role) + the
@@ -37,20 +38,14 @@ function OperatorMessagesRoute() {
 
 function MessagesError(_props: ErrorComponentProps) {
   const t = useTranslations('messaging.threadList')
-  const router = useRouter()
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl py-20 text-center">
-        <p className="text-lg text-muted-foreground">{t('loadError')}</p>
-        <button
-          type="button"
-          onClick={() => router.invalidate()}
-          className="mt-4 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-        >
-          {t('retry')}
-        </button>
-      </div>
+      <RouteRetryError
+        message={t('loadError')}
+        retryLabel={t('retry')}
+        className="mx-auto max-w-3xl py-20 text-center"
+      />
     </main>
   )
 }
