@@ -9,13 +9,21 @@ import { useForm } from 'react-hook-form'
 import { useTranslations } from 'use-intl'
 import { z } from 'zod'
 
-// Catalog i18n (slice 2): the operator no longer types a free-text name. In CREATE
-// mode they pick a platform template (the picker already excludes ones they offer);
-// in EDIT mode the template is the add-on's fixed identity, shown read-only. Both
-// modes edit the price and a single description slot in the caller's UI locale — the
-// dialog maps that slot into the LocalizedTextOverride bag (see description-override).
+// Catalog i18n: an add-on is one of two shapes (#1437). PICKED — the operator selects
+// a platform template (the picker already excludes ones they offer) and the template
+// owns the localized name. SELF-AUTHORED ("custom") — the operator writes their own
+// en/ja/zh name bundle. In CREATE mode a toggle chooses the path; in EDIT mode the
+// identity is fixed (a picked template is read-only; a custom name stays editable so
+// the operator can add ja/zh or fix en later, D5). Both edit the price and a single
+// description slot in the caller's UI locale (the dialog maps it into the bag).
+export type AddOnIdentityMode = 'template' | 'custom'
+
 export interface AddOnFormValues {
+  identityMode: AddOnIdentityMode
   templateId: string
+  nameEn: string
+  nameJa: string
+  nameZh: string
   priceJpy: number
   description: string
 }
@@ -25,18 +33,35 @@ const priceField = z
   .int('Price must be a whole number of yen')
   .min(0, 'Price cannot be negative')
 
-// Two schemas so a template selection is required only when creating; an edit never
-// re-picks the template, so its (carried, ignored) id is unconstrained.
-const createSchema = z.object({
-  templateId: z.string().min(1, 'Select an add-on template'),
-  priceJpy: priceField,
-  description: z.string(),
-})
-const editSchema = z.object({
-  templateId: z.string(),
-  priceJpy: priceField,
-  description: z.string(),
-})
+// One schema for both modes: `identityMode` decides which identity field is required.
+// A PICKED create needs a templateId; a CUSTOM create/edit needs an English name (the
+// guaranteed fallback). ja/zh stay optional — nudged, never required.
+const formSchema = z
+  .object({
+    identityMode: z.enum(['template', 'custom']),
+    templateId: z.string(),
+    nameEn: z.string(),
+    nameJa: z.string(),
+    nameZh: z.string(),
+    priceJpy: priceField,
+    description: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    if (values.identityMode === 'template' && values.templateId.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['templateId'],
+        message: 'Select an add-on template',
+      })
+    }
+    if (values.identityMode === 'custom' && values.nameEn.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nameEn'],
+        message: 'Enter an English name',
+      })
+    }
+  })
 
 interface AddOnFormProps {
   mode: 'create' | 'edit'
@@ -45,8 +70,10 @@ interface AddOnFormProps {
   isSubmitting?: boolean
   /** CREATE: the templates to pick from (already excludes ones the operator offers). */
   templates?: readonly AddOnTemplatePickerData[]
-  /** EDIT: the fixed template's resolved name, shown read-only. */
+  /** EDIT (picked): the fixed template's resolved name, shown read-only. */
   templateName?: string
+  /** EDIT: which identity the edited row uses. A custom row edits its name (D5). */
+  editIdentity?: AddOnIdentityMode
   defaultValues?: Partial<AddOnFormValues>
 }
 
@@ -57,26 +84,38 @@ export function AddOnForm({
   isSubmitting,
   templates,
   templateName,
+  editIdentity,
   defaultValues,
 }: AddOnFormProps) {
   const t = useTranslations('business.addOns')
 
   // The 3-generic useForm + valueAsNumber lets the zod resolver coerce the numeric
-  // input: an empty field is NaN, so a `0` default keeps the integer schema
-  // satisfied until the operator types a price (per-booking, flat).
+  // input: an empty field is NaN, so a `0` default keeps the integer schema satisfied
+  // until the operator types a price (per-booking, flat).
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<AddOnFormValues>({
-    resolver: zodResolver(mode === 'create' ? createSchema : editSchema),
+    resolver: zodResolver(formSchema),
     defaultValues: {
+      identityMode: mode === 'edit' ? (editIdentity ?? 'template') : 'template',
       templateId: '',
+      nameEn: '',
+      nameJa: '',
+      nameZh: '',
       priceJpy: 0,
       description: '',
       ...defaultValues,
     },
   })
+
+  // In CREATE mode the operator toggles the path; in EDIT it is fixed by the row.
+  const identityMode = watch('identityMode')
+  const showPicker = mode === 'create' && identityMode === 'template'
+  const showCustomName = identityMode === 'custom'
+  const showReadOnlyTemplate = mode === 'edit' && identityMode === 'template'
 
   return (
     <form
@@ -85,11 +124,25 @@ export function AddOnForm({
       })}
       className="space-y-4"
     >
-      <div>
-        <Label htmlFor={mode === 'create' ? 'addon-template' : undefined}>
-          {t('form.template')}
-        </Label>
-        {mode === 'create' ? (
+      {mode === 'create' && (
+        <fieldset className="space-y-1">
+          <legend className="text-sm font-medium">{t('form.identityLegend')}</legend>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="radio" value="template" {...register('identityMode')} />
+              {t('form.identityTemplate')}
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="radio" value="custom" {...register('identityMode')} />
+              {t('form.identityCustom')}
+            </label>
+          </div>
+        </fieldset>
+      )}
+
+      {showPicker && (
+        <div>
+          <Label htmlFor="addon-template">{t('form.template')}</Label>
           <NativeSelect
             id="addon-template"
             aria-invalid={errors.templateId ? true : undefined}
@@ -102,18 +155,45 @@ export function AddOnForm({
               </option>
             ))}
           </NativeSelect>
-        ) : (
-          <>
-            <p className="flex h-9 items-center px-3 text-sm text-muted-foreground">
-              {templateName}
-            </p>
-            <input type="hidden" {...register('templateId')} />
-          </>
-        )}
-        {errors.templateId && (
-          <p className="text-sm text-destructive mt-1">{errors.templateId.message}</p>
-        )}
-      </div>
+          {errors.templateId && (
+            <p className="text-sm text-destructive mt-1">{errors.templateId.message}</p>
+          )}
+        </div>
+      )}
+
+      {showReadOnlyTemplate && (
+        <div>
+          <Label>{t('form.template')}</Label>
+          <p className="flex h-9 items-center px-3 text-sm text-muted-foreground">{templateName}</p>
+          <input type="hidden" {...register('templateId')} />
+        </div>
+      )}
+
+      {showCustomName && (
+        <fieldset className="space-y-2">
+          <div>
+            <Label htmlFor="addon-name-en">{t('form.nameEn')}</Label>
+            <Input
+              id="addon-name-en"
+              aria-invalid={errors.nameEn ? true : undefined}
+              {...register('nameEn')}
+            />
+            {errors.nameEn && (
+              <p className="text-sm text-destructive mt-1">{errors.nameEn.message}</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="addon-name-ja">{t('form.nameJa')}</Label>
+            <Input id="addon-name-ja" {...register('nameJa')} />
+          </div>
+          <div>
+            <Label htmlFor="addon-name-zh">{t('form.nameZh')}</Label>
+            <Input id="addon-name-zh" {...register('nameZh')} />
+          </div>
+          {/* Tourists read English wherever ja/zh are blank — nudge, never require. */}
+          <p className="text-xs text-muted-foreground">{t('form.customNameNudge')}</p>
+        </fieldset>
+      )}
 
       <div>
         <Label htmlFor="addon-description">{t('form.description')}</Label>
