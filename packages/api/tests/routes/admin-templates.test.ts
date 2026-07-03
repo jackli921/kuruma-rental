@@ -164,10 +164,12 @@ describe('PATCH /admin/templates/add-ons/:id', () => {
     expect(res.status).toBe(404)
   })
 
-  it('400s an empty patch body (no-op guard)', async () => {
+  it('400s an empty patch body (no-op guard) with a surfaced message', async () => {
     const app = mountWrite('PLATFORM_ADMIN')
     const res = await patch(app, `/admin/templates/add-ons/${ADDON_UUID}`, {})
     expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error.status).toContain('at least one of name, description, status is required')
   })
 
   it('400s a malformed (non-uuid) id', async () => {

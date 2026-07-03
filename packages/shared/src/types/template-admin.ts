@@ -49,6 +49,9 @@ export const templatePatchSchema = z
     status: z.enum(CATALOG_TEMPLATE_STATUSES).optional(),
   })
   .refine((patch) => Object.values(patch).some((v) => v !== undefined), {
+    // Pin to a field path so the message lands in zod's `fieldErrors` (which the
+    // API's parseBody forwards) rather than the dropped top-level `formErrors`.
+    path: ['status'],
     message: 'at least one of name, description, status is required',
   })
 
