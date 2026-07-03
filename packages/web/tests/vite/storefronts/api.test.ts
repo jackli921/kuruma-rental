@@ -231,4 +231,17 @@ describe('fetchStorefrontDetail', () => {
     )
     await expect(fetchStorefrontDetail('loc1', range)).rejects.toBeInstanceOf(ParseError)
   })
+
+  it('rejects with a ParseError when a class offering drifts (missing availableCount)', async () => {
+    const [offering] = fullDetail.classOfferings as Record<string, unknown>[]
+    const badDetail = {
+      ...fullDetail,
+      classOfferings: [{ ...offering, availableCount: undefined }],
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: badDetail })),
+    )
+    await expect(fetchStorefrontDetail('loc1', range)).rejects.toBeInstanceOf(ParseError)
+  })
 })

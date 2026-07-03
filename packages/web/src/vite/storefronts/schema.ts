@@ -1,4 +1,5 @@
 import { LUGGAGE_SIZES, TRANSMISSIONS } from '@kuruma/shared/enums'
+import type { ClassComboSearchResult } from '@kuruma/shared/types/search-result'
 import { z } from 'zod'
 
 // #711/#785: Zod schemas for the public storefront *response* bodies (#391),
@@ -114,7 +115,11 @@ const classOfferingSchema = z.object({
   photos: z.array(z.string()),
   classId: z.string(),
   availableCount: z.number(),
-})
+  // #464: `satisfies z.ZodType<ClassComboSearchResult>` pins this hand-written
+  // mirror to the shared DTO (as `search/api.ts` pins its own mirror), so a new
+  // renter-safe field on the shared type fails to compile here instead of being
+  // silently stripped off the store page.
+}) satisfies z.ZodType<ClassComboSearchResult>
 
 export const storefrontDetailResultSchema = z.object({
   storefront: storefrontSummarySchema,
