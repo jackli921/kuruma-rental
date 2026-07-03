@@ -117,6 +117,9 @@ export function StorefrontDetailView({
                 locationId={storefront.locationId}
                 from={from}
                 to={to}
+                classFilter={classFilter}
+                pickupLocationId={pickupLocationId}
+                region={region}
               />
             ))}
           </div>

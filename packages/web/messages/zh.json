@@ -1692,6 +1692,7 @@
   "reservation": {
     "title": "完成预订",
     "vehicleHeading": "您正在预订",
+    "classAssignmentNote": "本车型级别的具体车辆将在提车前分配。",
     "steps": {
       "dates": "日期",
       "addOns": "附加项",

@@ -1692,6 +1692,7 @@
   "reservation": {
     "title": "予約を完了する",
     "vehicleHeading": "予約するクルマ",
+    "classAssignmentNote": "このクラスの具体的なクルマは、受取時までに割り当てられます。",
     "steps": {
       "dates": "日時",
       "addOns": "オプション",

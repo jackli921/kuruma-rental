@@ -1,7 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { formatJstDateTimeLocal } from '@/lib/datetime'
 import type { CreateBookingDraft } from '@/vite/bookings/api'
-import type { AvailableVehicleData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
@@ -15,11 +14,14 @@ import { PaymentStep } from './PaymentStep'
 import { ReservationSummaryBar } from './ReservationSummaryBar'
 import type { ReservationAddOn, ReservationInsuranceOption } from './api'
 import { estimateReservation } from './pricing'
+import { type ReservationSubject, subjectDisplay, subjectRates } from './subject'
 
 interface ReservationWizardProps {
   readonly locale: string
-  readonly vehicle: AvailableVehicleData
-  /** Storefront the vehicle belongs to — pickup and dropoff for the MVP (one location). */
+  /** What the renter is booking: a concrete car (SPECIFIC) or a class-combo deal
+   *  where the operator assigns the exact car before pickup (CLASS_COMBO) — #464. */
+  readonly subject: ReservationSubject
+  /** Storefront the subject belongs to — pickup and dropoff for the MVP (one location). */
   readonly locationId: string
   readonly addOns: ReservationAddOn[]
   readonly insuranceOptions: ReservationInsuranceOption[]
@@ -44,7 +46,7 @@ type Step = (typeof STEPS)[number]
  */
 export function ReservationWizard({
   locale,
-  vehicle,
+  subject,
   locationId,
   addOns,
   insuranceOptions,
@@ -63,21 +65,24 @@ export function ReservationWizard({
   const [idempotencyKey] = useState(() => crypto.randomUUID())
 
   const step: Step = STEPS[stepIndex] ?? 'dates'
+  const display = subjectDisplay(subject)
   const selectedAddOns = addOns.filter((addOn) => selectedAddOnIds.includes(addOn.id))
   const insurance = insuranceOptions.find((option) => option.id === insuranceOptionId) ?? null
   const estimate = estimateReservation({
-    vehicle: { dailyRateJpy: vehicle.dailyRateJpy, hourlyRateJpy: vehicle.hourlyRateJpy },
+    // A class-combo prices off the class rate plan (hourly always null); the shared
+    // pricing floors a partial day to the day rate, so the up-front quote matches
+    // the server total the operator's assigned car will carry (#464).
+    vehicle: subjectRates(subject),
     from,
     to,
     insuranceDailyPriceJpy: insurance?.dailyPriceJpy ?? null,
     addOnPricesJpy: selectedAddOns.map((addOn) => addOn.priceJpy),
   })
   // `disclaimerAccepted` is intentionally absent — consent is a payment-step gate
-  // (#613), supplied by PaymentStep at submit, not a wizard selection. This wizard
-  // only books a concrete car (SPECIFIC); the CLASS_COMBO arm is Task 6 (#464).
-  const bookingInput: CreateBookingDraft = {
-    fulfillmentMode: 'SPECIFIC',
-    requestedVehicleId: vehicle.id,
+  // (#613), supplied by PaymentStep at submit, not a wizard selection. The body
+  // matches one arm of the server's discriminated union (#464): a concrete car
+  // (SPECIFIC) or a vehicle class (CLASS_COMBO), the operator assigns the car later.
+  const bookingCommon = {
     pickupLocationId: locationId,
     dropoffLocationId: locationId,
     startAt: from.toISOString(),
@@ -86,6 +91,13 @@ export function ReservationWizard({
     addOnIds: selectedAddOnIds,
     idempotencyKey,
   }
+  const bookingInput: CreateBookingDraft =
+    subject.kind === 'SPECIFIC'
+      ? { fulfillmentMode: 'SPECIFIC', requestedVehicleId: subject.vehicle.id, ...bookingCommon }
+      : { fulfillmentMode: 'CLASS_COMBO', classId: subject.offering.classId, ...bookingCommon }
+  // Only a class-combo carries the "car assigned before pickup" note; a SPECIFIC
+  // booking already names its car, so the note would be false there.
+  const assignmentNote = subject.kind === 'CLASS_COMBO' ? t('classAssignmentNote') : null
 
   const toggleAddOn = (id: string): void =>
     setSelectedAddOnIds((ids) =>
@@ -122,7 +134,7 @@ export function ReservationWizard({
       </header>
 
       {step === 'dates' ? (
-        <DateRangeStep locale={locale} vehicleName={vehicle.name} from={from} to={to} />
+        <DateRangeStep locale={locale} vehicleName={display.label} from={from} to={to} />
       ) : null}
       {step === 'addOns' ? (
         <AddOnsStep addOns={addOns} selectedIds={selectedAddOnIds} onToggle={toggleAddOn} />
@@ -140,6 +152,7 @@ export function ReservationWizard({
           selectedAddOns={selectedAddOns}
           insuranceName={insurance?.name ?? null}
           pickupAt={from}
+          assignmentNote={assignmentNote}
         />
       ) : null}
       {step === 'payment' ? (

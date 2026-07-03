@@ -1692,6 +1692,7 @@
   "reservation": {
     "title": "Complete your booking",
     "vehicleHeading": "You're booking",
+    "classAssignmentNote": "A specific car in this class will be assigned before pickup.",
     "steps": {
       "dates": "Dates",
       "addOns": "Extras",

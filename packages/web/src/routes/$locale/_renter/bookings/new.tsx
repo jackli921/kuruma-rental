@@ -1,6 +1,7 @@
 import { DEFAULT_LOCALE, isLocale } from '@/vite/i18n/locale'
 import { ReservationWizard } from '@/vite/reservation/ReservationWizard'
 import { fetchAddOns, fetchInsuranceOptions } from '@/vite/reservation/api'
+import type { ReservationSubject } from '@/vite/reservation/subject'
 import { fetchStorefrontDetail } from '@/vite/storefronts/api'
 import { carryForwardFilters, parseSearchRange } from '@/vite/storefronts/params'
 import { createFileRoute, redirect } from '@tanstack/react-router'
@@ -47,6 +48,7 @@ export const Route = createFileRoute('/$locale/_renter/bookings/new')({
   validateSearch,
   loaderDeps: ({ search }) => ({
     vehicleId: search.vehicleId,
+    classId: search.classId,
     locationId: search.locationId,
     from: search.from,
     to: search.to,
@@ -61,7 +63,9 @@ export const Route = createFileRoute('/$locale/_renter/bookings/new')({
       region: deps.region,
     })
     const range = parseSearchRange(deps.from, deps.to)
-    if (!range || !deps.locationId || !deps.vehicleId) {
+    // A class-combo entry (#464) carries a classId and no vehicleId, so either id
+    // is enough — a classId-only entry must survive the guard to resolve below.
+    if (!range || !deps.locationId || (!deps.vehicleId && !deps.classId)) {
       throw redirect({ to: '/$locale/search', params: { locale: params.locale }, search: filters })
     }
 
@@ -69,15 +73,26 @@ export const Route = createFileRoute('/$locale/_renter/bookings/new')({
     if (!detail)
       throw redirect({ to: '/$locale/search', params: { locale: params.locale }, search: filters })
 
-    const vehicle = detail.vehicles.find((v) => v.id === deps.vehicleId)
-    if (!vehicle) {
-      // The car is no longer available for these dates: let the renter pick
-      // another, keeping their dates and filters so they don't restart the search.
-      throw redirect({
-        to: '/$locale/storefronts/$locationId',
-        params: { locale: params.locale, locationId: deps.locationId },
-        search: { from: deps.from, to: deps.to, ...filters },
-      })
+    // The subject is no longer offered for these dates (a car taken since search,
+    // or a class the storefront no longer lists): let the renter pick another,
+    // keeping their dates and filters so they don't restart the search (#1291).
+    const bounceToStorefront = redirect({
+      to: '/$locale/storefronts/$locationId',
+      params: { locale: params.locale, locationId: deps.locationId },
+      search: { from: deps.from, to: deps.to, ...filters },
+    })
+
+    // #464: resolve a vehicle-OR-class subject. classId books a CLASS (the operator
+    // assigns the exact car before pickup); vehicleId books that concrete car.
+    let subject: ReservationSubject
+    if (deps.classId) {
+      const offering = detail.classOfferings.find((o) => o.classId === deps.classId)
+      if (!offering) throw bounceToStorefront
+      subject = { kind: 'CLASS_COMBO', offering }
+    } else {
+      const vehicle = detail.vehicles.find((v) => v.id === deps.vehicleId)
+      if (!vehicle) throw bounceToStorefront
+      subject = { kind: 'SPECIFIC', vehicle }
     }
 
     // The $locale layout already 404s an invalid param; narrow it to satisfy the
@@ -89,7 +104,7 @@ export const Route = createFileRoute('/$locale/_renter/bookings/new')({
       fetchInsuranceOptions(deps.locationId),
     ])
     return {
-      vehicle,
+      subject,
       locationId: deps.locationId,
       addOns,
       insuranceOptions,
@@ -106,7 +121,7 @@ export const Route = createFileRoute('/$locale/_renter/bookings/new')({
 function NewBookingRoute() {
   const { locale } = Route.useParams()
   const {
-    vehicle,
+    subject,
     locationId,
     addOns,
     insuranceOptions,
@@ -121,7 +136,7 @@ function NewBookingRoute() {
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
       <ReservationWizard
         locale={locale}
-        vehicle={vehicle}
+        subject={subject}
         locationId={locationId}
         addOns={addOns}
         insuranceOptions={insuranceOptions}

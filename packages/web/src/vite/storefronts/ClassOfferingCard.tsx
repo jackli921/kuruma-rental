@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { IndicativeNote } from '@/vite/currency'
 import { PhotoGallery } from '@/vite/storefronts/PhotoGallery'
 import type { ClassOfferingData } from '@/vite/storefronts/api'
+import { carryForwardFilters } from '@/vite/storefronts/params'
 import { Link } from '@tanstack/react-router'
 import { Car, Users } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
@@ -16,6 +17,12 @@ interface ClassOfferingCardProps {
   /** Selected JST date range (datetime-local strings), carried into the wizard. */
   readonly from: string
   readonly to: string
+  /** Active search filters carried into the booking wizard so backing out of it
+   *  returns to a listing that still has the renter's class/region/pickup (#1291),
+   *  mirroring AvailableVehicleCard. */
+  readonly classFilter?: string | string[] | undefined
+  readonly pickupLocationId?: string | undefined
+  readonly region?: string | undefined
 }
 
 /**
@@ -25,7 +32,15 @@ interface ClassOfferingCardProps {
  * single car's identity. The CTA mirrors the specific-vehicle link but carries
  * `classId` instead of `vehicleId` — a combo has no assigned car yet.
  */
-export function ClassOfferingCard({ offering, locationId, from, to }: ClassOfferingCardProps) {
+export function ClassOfferingCard({
+  offering,
+  locationId,
+  from,
+  to,
+  classFilter,
+  pickupLocationId,
+  region,
+}: ClassOfferingCardProps) {
   const t = useTranslations('search')
   const locale = useLocale()
 
@@ -70,6 +85,7 @@ export function ClassOfferingCard({ offering, locationId, from, to }: ClassOffer
             locationId,
             from,
             to,
+            ...carryForwardFilters({ class: classFilter, pickupLocationId, region }),
           }}
           className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'w-full')}
         >
