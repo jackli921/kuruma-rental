@@ -1,8 +1,10 @@
 import { addOnTemplates } from '@kuruma/shared/db/schema'
+import type { TemplatePatch } from '@kuruma/shared/types/template-admin'
 import { asc, eq } from 'drizzle-orm'
 import type { AddOnTemplate } from '../../stores'
 import type { AddOnTemplateRepository } from '../types'
 import type { Db } from './shared'
+import { templatePatchColumns } from './template-patch-columns'
 
 /**
  * The platform-owned add-on template catalog (catalog i18n, epic #385). Global,
@@ -33,6 +35,15 @@ export class DrizzleAddOnTemplateRepository implements AddOnTemplateRepository {
       .from(addOnTemplates)
       .where(eq(addOnTemplates.id, id))
       .limit(1)
+    return row
+  }
+
+  async update(id: string, patch: TemplatePatch): Promise<AddOnTemplate | undefined> {
+    const [row] = await this.db
+      .update(addOnTemplates)
+      .set({ ...templatePatchColumns(patch), updatedAt: new Date() })
+      .where(eq(addOnTemplates.id, id))
+      .returning(TEMPLATE_COLUMNS)
     return row
   }
 }

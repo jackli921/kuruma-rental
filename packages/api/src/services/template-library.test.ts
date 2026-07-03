@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type CallerContext, ForbiddenError } from '../middleware/auth'
+import { type CallerContext, ForbiddenError, NotFoundError } from '../middleware/auth'
 import { InMemoryAddOnTemplateRepository } from '../repositories/in-memory/add-on-template'
 import { InMemoryInsuranceTemplateRepository } from '../repositories/in-memory/insurance-template'
 import type { AddOnTemplate, InsuranceTemplate } from '../stores'
@@ -68,5 +68,76 @@ describe('TemplateLibraryService.listAll', () => {
     const operator: CallerContext = { userId: 'op', role: 'OPERATOR_OWNER', operatorId: 'op_1' }
 
     await expect(service.listAll(operator)).rejects.toThrow(ForbiddenError)
+  })
+})
+
+const OPERATOR: CallerContext = { userId: 'op', role: 'OPERATOR_OWNER', operatorId: 'op_1' }
+
+describe('TemplateLibraryService.updateAddOn', () => {
+  it('translates + promotes a backfill-minted row, returning the raw admin row (no timestamps)', async () => {
+    const service = new TemplateLibraryService(addOnStore([archivedAddOn]), insuranceStore([]))
+
+    const row = await service.updateAddOn(ADMIN, 'a1', {
+      name: { en: 'Baby seat', ja: 'ベビーシート', zh: '婴儿座椅' },
+      status: 'ACTIVE',
+    })
+
+    expect(row).toEqual({
+      id: 'a1',
+      key: 'baby-seat',
+      name: { en: 'Baby seat', ja: 'ベビーシート', zh: '婴儿座椅' },
+      description: null,
+      status: 'ACTIVE',
+    })
+  })
+
+  it('rejects an operator caller with ForbiddenError (requirePlatformAdmin)', async () => {
+    const service = new TemplateLibraryService(addOnStore([archivedAddOn]), insuranceStore([]))
+
+    await expect(service.updateAddOn(OPERATOR, 'a1', { status: 'ACTIVE' })).rejects.toThrow(
+      ForbiddenError,
+    )
+  })
+
+  it('throws NotFoundError for an unknown id', async () => {
+    const service = new TemplateLibraryService(addOnStore([archivedAddOn]), insuranceStore([]))
+
+    await expect(service.updateAddOn(ADMIN, 'nope', { status: 'ACTIVE' })).rejects.toThrow(
+      NotFoundError,
+    )
+  })
+})
+
+describe('TemplateLibraryService.updateInsurance', () => {
+  it('edits the insurance bundle, returning the raw admin row', async () => {
+    const service = new TemplateLibraryService(addOnStore([]), insuranceStore([activeInsurance]))
+
+    const row = await service.updateInsurance(ADMIN, 'i1', {
+      description: { en: 'Updated cover.' },
+    })
+
+    expect(row).toEqual({
+      id: 'i1',
+      key: 'normal',
+      name: { en: 'Normal', ja: 'ノーマル', zh: '标准' },
+      description: { en: 'Updated cover.' },
+      status: 'ACTIVE',
+    })
+  })
+
+  it('rejects an operator caller with ForbiddenError', async () => {
+    const service = new TemplateLibraryService(addOnStore([]), insuranceStore([activeInsurance]))
+
+    await expect(service.updateInsurance(OPERATOR, 'i1', { status: 'ARCHIVED' })).rejects.toThrow(
+      ForbiddenError,
+    )
+  })
+
+  it('throws NotFoundError for an unknown id', async () => {
+    const service = new TemplateLibraryService(addOnStore([]), insuranceStore([activeInsurance]))
+
+    await expect(service.updateInsurance(ADMIN, 'nope', { status: 'ARCHIVED' })).rejects.toThrow(
+      NotFoundError,
+    )
   })
 })
