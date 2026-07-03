@@ -991,7 +991,7 @@
       "bookingCode": "予約コード",
       "vehicleClass": "クラス",
       "vehicle": "車両",
-      "assignmentNote": "取車前に具体的な車両が割り当てられます。",
+      "assignmentNote": "お受け取り前に具体的な車両が割り当てられます。",
       "pickupDate": "貸出",
       "returnDate": "返却",
       "status": "ステータス",

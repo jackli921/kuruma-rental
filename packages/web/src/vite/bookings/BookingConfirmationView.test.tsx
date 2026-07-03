@@ -98,4 +98,23 @@ describe('BookingConfirmationView — #464 class-combo float pre/post assign', (
     expect(screen.getByText('Toyota Aqua Hybrid')).toBeTruthy()
     expect(screen.queryByText(en.bookings.confirmation.assignmentNote)).toBeNull()
   })
+
+  it('assigned-then-deleted: shows the class label but suppresses the assignment note', () => {
+    // A car WAS assigned (assignedVehicleId set) but its expansion is absent —
+    // the vehicle was deleted. The note must NOT promise a future assignment; the
+    // guard keys on assignedVehicleId === null, so this third state falls through
+    // to the plain class row.
+    const assignedThenDeleted: RenterBookingDetail = {
+      ...baseBooking,
+      assignedVehicleId: '00000000-0000-0000-0000-000000000010',
+      vehicle: undefined,
+    }
+    renderView(assignedThenDeleted, economyClass)
+
+    expect(screen.getByText(en.bookings.confirmation.vehicleClass)).toBeTruthy()
+    expect(screen.getByText('Economy')).toBeTruthy()
+    expect(screen.queryByText(en.bookings.confirmation.assignmentNote)).toBeNull()
+    // No concrete-vehicle row either — the expansion is gone.
+    expect(screen.queryByText(en.bookings.confirmation.vehicle)).toBeNull()
+  })
 })
