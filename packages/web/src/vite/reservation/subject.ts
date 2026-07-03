@@ -5,9 +5,9 @@ import type { VehicleRates } from '@kuruma/shared/lib/pricing'
  * What the reservation wizard is booking (#464). A `SPECIFIC` subject is a
  * concrete car the renter picked; a `CLASS_COMBO` subject is a vehicle class —
  * the operator assigns the exact car before pickup. Both flow through the same
- * wizard; this discriminated union is the single place the two diverge, so the
- * render and submit paths read pricing + display from the helpers below instead
- * of branching on the kind themselves.
+ * wizard; this discriminated union is the single place the two diverge. Pricing
+ * and display read through the pure helpers below; the submit path branches on
+ * `kind` to build the matching booking discriminant (requestedVehicleId vs classId).
  */
 export type ReservationSubject =
   | { readonly kind: 'SPECIFIC'; readonly vehicle: AvailableVehicleData }
