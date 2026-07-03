@@ -236,6 +236,7 @@ describe('POST /webhooks/stripe (public)', () => {
     gateway.nextRefund = () => {
       throw new RefundRejectedError('charge already refunded', 'charge_already_refunded')
     }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await app.request('/webhooks/stripe', {
       method: 'POST',
@@ -247,6 +248,28 @@ describe('POST /webhooks/stripe (public)', () => {
     expect(error).toHaveBeenCalledWith(
       '[payment:webhook] amount mismatch',
       expect.objectContaining({ refund: 'failed', stranded: true, bookingId: BOOKING_ID }),
+    )
+    // A stranded alert must be an ALERT, not a soft warning.
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+    error.mockRestore()
+  })
+
+  it('ALERTS when a mismatch is unrefundable (no PaymentIntent to reverse) (#1378)', async () => {
+    const { app, gateway } = publicApp()
+    gateway.event = { ...mismatch(), paymentIntentId: null }
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await app.request('/webhooks/stripe', {
+      method: 'POST',
+      headers: { 'stripe-signature': 't=1,v1=good' },
+      body: 'raw',
+    })
+    expect(res.status).toBe(200)
+    // No PI → we never call Stripe, but the funds are unaccounted → alert.
+    expect(gateway.refundCalls).toEqual([])
+    expect(error).toHaveBeenCalledWith(
+      '[payment:webhook] amount mismatch',
+      expect.objectContaining({ refund: 'unrefundable', stranded: true }),
     )
     error.mockRestore()
   })

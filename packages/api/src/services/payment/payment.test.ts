@@ -337,6 +337,10 @@ describe('PaymentService.handleWebhook', () => {
       expect.objectContaining({
         paymentIntentId: 'pi_1',
         amountJpy: 99_999,
+        // The dedup key MUST be namespaced away from #851's `refund:${bookingId}`:
+        // a collision would cross-fire the cancellation refund's idempotency (same
+        // booking, different params → Stripe reuse error). This assertion pins it.
+        idempotencyKey: 'refund:mismatch:evt_1',
         metadata: { bookingId: 'bk-1' },
       }),
     ])
@@ -376,6 +380,11 @@ describe('PaymentService.handleWebhook', () => {
     }
     await expect(service.handleWebhook('raw', 'sig')).rejects.toThrow('stripe 503 timeout')
     // The anomaly was still captured before the refund attempt threw.
+    expect(await anomalyRepo.listUnresolved()).toHaveLength(1)
+    // Stripe retries the same event; the refund now succeeds and the anomaly stays
+    // single (recordAnomaly is idempotent on stripeEventId) — the retry converges.
+    gateway.nextRefund = stripeRefund({ amount: 99_999 })
+    expect(await service.handleWebhook('raw', 'sig')).toMatchObject({ refund: 'refunded' })
     expect(await anomalyRepo.listUnresolved()).toHaveLength(1)
   })
 
