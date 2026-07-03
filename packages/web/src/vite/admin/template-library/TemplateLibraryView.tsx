@@ -1,7 +1,9 @@
+import { Button } from '@/components/ui/button'
 import { SUPPORTED_LOCALES } from '@kuruma/shared/i18n/locales'
 import type { TemplateAdminRow } from '@kuruma/shared/types/template-admin'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
+import { TemplateCreateDialog } from './TemplateCreateDialog'
 import { TemplateEditDialog } from './TemplateEditDialog'
 import type { TemplateCatalog } from './api'
 
@@ -29,6 +31,7 @@ interface TemplateLibraryViewProps {
 export function TemplateLibraryView({ addOns, insurance }: TemplateLibraryViewProps) {
   const t = useTranslations('admin.templateLibrary')
   const [tab, setTab] = useState<CatalogKey>('addOns')
+  const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<{
     catalog: TemplateCatalog
     row: TemplateAdminRow
@@ -44,18 +47,23 @@ export function TemplateLibraryView({ addOns, insurance }: TemplateLibraryViewPr
         <p className="mt-1 text-muted-foreground text-sm">{t('subtitle')}</p>
       </div>
 
-      <div className="flex gap-1 rounded-lg border border-border p-1 w-fit">
-        {CATALOGS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            onClick={() => setTab(c)}
-            aria-pressed={tab === c}
-            className="rounded-md px-3 py-1.5 font-medium text-sm transition-colors aria-pressed:bg-muted aria-[pressed=false]:text-muted-foreground aria-[pressed=false]:hover:bg-muted/50"
-          >
-            {t(`tab.${c}`, { count: rowsByTab[c].length })}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1 rounded-lg border border-border p-1 w-fit">
+          {CATALOGS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setTab(c)}
+              aria-pressed={tab === c}
+              className="rounded-md px-3 py-1.5 font-medium text-sm transition-colors aria-pressed:bg-muted aria-[pressed=false]:text-muted-foreground aria-[pressed=false]:hover:bg-muted/50"
+            >
+              {t(`tab.${c}`, { count: rowsByTab[c].length })}
+            </button>
+          ))}
+        </div>
+        <Button type="button" size="sm" onClick={() => setCreating(true)}>
+          {t('action.create')}
+        </Button>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border">
@@ -117,6 +125,10 @@ export function TemplateLibraryView({ addOns, insurance }: TemplateLibraryViewPr
           </tbody>
         </table>
       </div>
+
+      {creating && (
+        <TemplateCreateDialog catalog={CATALOG_PATH[tab]} open onOpenChange={setCreating} />
+      )}
 
       {editing && (
         <TemplateEditDialog

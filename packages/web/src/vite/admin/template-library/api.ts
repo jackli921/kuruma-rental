@@ -2,6 +2,7 @@ import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import {
   type TemplateAdminRow,
+  type TemplateCreate,
   type TemplateLibraryResponse,
   type TemplatePatch,
   templateAdminRowSchema,
@@ -51,5 +52,24 @@ export async function updateTemplate(params: {
       body: JSON.stringify(patch),
     },
   )
+  return unwrap(res, templateAdminRowSchema)
+}
+
+// Platform-admin template CREATE (#1319 slice 3). Cookie-authenticated + CSRF-gated
+// like the PATCH. The client never sends `key` — the server derives it from
+// slugify(name.en) and 409s a duplicate. Returns the minted raw row; the caller
+// invalidates TEMPLATE_LIBRARY_QUERY_KEY to refetch the table.
+export async function createTemplate(params: {
+  catalog: TemplateCatalog
+  body: TemplateCreate
+  csrfToken: string
+}): Promise<TemplateAdminRow> {
+  const { catalog, body, csrfToken } = params
+  const res = await fetch(`${getApiBaseUrl()}/admin/templates/${catalog}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify(body),
+  })
   return unwrap(res, templateAdminRowSchema)
 }

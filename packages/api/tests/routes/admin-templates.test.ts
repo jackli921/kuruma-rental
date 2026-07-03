@@ -198,3 +198,74 @@ describe('PATCH /admin/templates/insurance/:id', () => {
     expect(res.status).toBe(403)
   })
 })
+
+function post(app: Hono, path: string, body: unknown) {
+  return app.request(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+describe('POST /admin/templates/add-ons', () => {
+  it('mints a template for a platform admin (201), deriving key + defaulting status/description', async () => {
+    const app = mountWrite('PLATFORM_ADMIN')
+    const res = await post(app, '/admin/templates/add-ons', {
+      name: { en: 'Ski rack', ja: 'スキーラック' },
+    })
+
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.data).toMatchObject({
+      key: 'ski_rack',
+      name: { en: 'Ski rack', ja: 'スキーラック' },
+      description: null,
+      status: 'ACTIVE',
+    })
+    expect(body.data.id).toEqual(expect.any(String))
+  })
+
+  it('rejects an operator owner with 403 (requirePlatformAdmin)', async () => {
+    const app = mountWrite('OPERATOR_OWNER', 'op_1')
+    const res = await post(app, '/admin/templates/add-ons', { name: { en: 'Ski rack' } })
+    expect(res.status).toBe(403)
+  })
+
+  it('409s a duplicate name (same derived key)', async () => {
+    const app = mountWrite('PLATFORM_ADMIN')
+    await post(app, '/admin/templates/add-ons', { name: { en: 'Ski rack' } })
+
+    const res = await post(app, '/admin/templates/add-ons', { name: { en: 'Ski rack' } })
+    expect(res.status).toBe(409)
+  })
+
+  it('400s a body with no name', async () => {
+    const app = mountWrite('PLATFORM_ADMIN')
+    const res = await post(app, '/admin/templates/add-ons', { description: { en: 'orphan' } })
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('POST /admin/templates/insurance', () => {
+  it('mints an insurance template for a platform admin (201)', async () => {
+    const app = mountWrite('PLATFORM_ADMIN')
+    const res = await post(app, '/admin/templates/insurance', {
+      name: { en: 'Premium cover' },
+      description: { en: 'Zero deductible' },
+    })
+
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.data).toMatchObject({
+      key: 'premium_cover',
+      description: { en: 'Zero deductible' },
+      status: 'ACTIVE',
+    })
+  })
+
+  it('rejects a renter with 403', async () => {
+    const app = mountWrite('RENTER')
+    const res = await post(app, '/admin/templates/insurance', { name: { en: 'Premium cover' } })
+    expect(res.status).toBe(403)
+  })
+})

@@ -1,8 +1,8 @@
 import type { TemplateAdminRow } from '@kuruma/shared/types/template-admin'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../../messages/en.json'
 import { TemplateLibraryView } from './TemplateLibraryView'
 
@@ -101,5 +101,57 @@ describe('TemplateLibraryView edit dialog', () => {
 
     expect(screen.getByRole('heading', { name: 'Edit template' })).toBeInTheDocument()
     expect(screen.getByLabelText('Name EN')).toHaveValue('Baby seat')
+  })
+})
+
+describe('TemplateLibraryView create dialog', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('opens a blank create dialog and keeps Create disabled until the en name is filled', () => {
+    renderViewWithProviders()
+    expect(screen.queryByRole('heading', { name: 'New template' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'New template' }))
+
+    expect(screen.getByRole('heading', { name: 'New template' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Name EN')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled()
+  })
+
+  it('POSTs a new template to the active catalog when the form is submitted', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            id: 'n1',
+            key: 'ski_rack',
+            name: { en: 'Ski rack' },
+            description: null,
+            status: 'ACTIVE',
+          },
+        }),
+        { status: 201, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    renderViewWithProviders()
+
+    fireEvent.click(screen.getByRole('button', { name: 'New template' }))
+    fireEvent.change(screen.getByLabelText('Name EN'), { target: { value: 'Ski rack' } })
+    const submit = screen.getByRole('button', { name: 'Create' })
+    expect(submit).not.toBeDisabled()
+    fireEvent.click(submit)
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    // Default tab is add-ons, so the create targets that catalog's collection.
+    expect(url).toContain('/admin/templates/add-ons')
+    expect(init.method).toBe('POST')
+    expect((init.headers as Record<string, string>)['X-CSRF-Token']).toBe('csrf_1')
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      name: { en: 'Ski rack' },
+      description: null,
+      status: 'ACTIVE',
+    })
   })
 })
