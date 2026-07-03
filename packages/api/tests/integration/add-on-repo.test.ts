@@ -26,6 +26,7 @@ const ctxFor = (operatorId: string): CallerContext => ({
 
 const PG_UNIQUE_VIOLATION = '23505'
 const PG_FK_VIOLATION = '23503'
+const PG_CHECK_VIOLATION = '23514'
 const violationCode = (p: Promise<unknown>): Promise<string | null> =>
   p.then(
     () => null,
@@ -37,7 +38,8 @@ const opReadId = `op_addon_read_${uniq}`
 const opDupId = `op_addon_dup_${uniq}`
 const opFkId = `op_addon_fk_${uniq}`
 const opLocaleId = `op_addon_loc_${uniq}`
-const allOpIds = [opReadId, opDupId, opFkId, opLocaleId]
+const opSelfId = `op_addon_self_${uniq}`
+const allOpIds = [opReadId, opDupId, opFkId, opLocaleId, opSelfId]
 
 const CHILD_SEAT_KEY = `test_tmpl_child_${uniq}`
 const childSeatId = crypto.randomUUID()
@@ -53,6 +55,22 @@ const addOnInput = (
   description: null,
   templateId,
   descriptionOverride: null,
+  nameI18n: null,
+  priceJpy: 1500,
+  status: 'ACTIVE',
+})
+
+// A SELF-AUTHORED row (#1437): templateId null, nameI18n set, name mirrors en.
+const selfAuthoredInput = (
+  operatorId: string,
+  nameI18n: { en: string; ja?: string; zh?: string },
+): Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'> => ({
+  operatorId,
+  name: nameI18n.en,
+  description: null,
+  templateId: null,
+  descriptionOverride: null,
+  nameI18n,
   priceJpy: 1500,
   status: 'ACTIVE',
 })
@@ -119,6 +137,56 @@ describe('add-on template FK + active-template uniqueness (Drizzle)', () => {
     const recreated = await repo.create(addOnInput(opDupId, childSeatId, 'Child seat'))
     expect(recreated.status).toBe('ACTIVE')
     expect(recreated.id).not.toBe(active)
+  })
+})
+
+describe('add-on self-authored path (#1437, Drizzle)', () => {
+  const service = new AddOnService(repo, new DrizzleAddOnTemplateRepository(db))
+
+  it('round-trips a self-authored nameI18n bundle through jsonb (no template)', async () => {
+    const bundle = { en: 'GPS unit', ja: 'GPS ユニット', zh: 'GPS 装置' }
+    const created = await repo.create(selfAuthoredInput(opSelfId, bundle))
+    expect(created.templateId).toBeNull()
+    expect(created.templateName).toBeNull()
+    expect(created.nameI18n).toEqual(bundle)
+
+    const readBack = await repo.findById(ctxFor(opSelfId), created.id)
+    expect(readBack?.nameI18n).toEqual(bundle)
+  })
+
+  it('resolves a self-authored name to the requested locale through the service', async () => {
+    const res = await service.create(
+      ctxFor(opSelfId),
+      {
+        operatorId: opSelfId,
+        nameI18n: { en: 'Dashcam', ja: 'ドライブレコーダー' },
+        descriptionOverride: null,
+        priceJpy: 3000,
+      },
+      'ja',
+    )
+    expect(res).toMatchObject({
+      ok: true,
+      option: { resolvedName: 'ドライブレコーダー', templateId: null },
+    })
+  })
+
+  it('the DB CHECK rejects a row carrying BOTH a templateId and a nameI18n (23514)', async () => {
+    expect(
+      await violationCode(
+        repo.create({
+          ...addOnInput(opSelfId, childSeatId, `Both ${uniq}`),
+          nameI18n: { en: `Both ${uniq}` },
+        }),
+      ),
+    ).toBe(PG_CHECK_VIOLATION)
+  })
+
+  it('seals a self-authored name under active_name_unique (second ACTIVE same name -> 23505)', async () => {
+    await repo.create(selfAuthoredInput(opSelfId, { en: `Unique ${uniq}` }))
+    expect(
+      await violationCode(repo.create(selfAuthoredInput(opSelfId, { en: `Unique ${uniq}` }))),
+    ).toBe(PG_UNIQUE_VIOLATION)
   })
 })
 

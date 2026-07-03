@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, isNull } from 'drizzle-orm'
 import type { AddOnStatus } from '../enums'
 import type { LocalizedText, LocalizedTextOverride } from '../i18n/localized-text'
 import { slugify } from '../i18n/slugify'
@@ -195,6 +195,11 @@ export async function backfillCatalogTemplates(db: DbOrTx): Promise<CatalogBackf
       createdAt: addOnOptions.createdAt,
     })
     .from(addOnOptions)
+    // Never touch a SELF-AUTHORED row (#1437): it is legitimately null-templateId but
+    // stamping it a templateId would trip the add_on_options_not_both_identities CHECK.
+    // Self-authored rows (nameI18n NOT NULL) are excluded; templated and legacy rows
+    // (nameI18n NULL) still backfill as before. (Full backfill retirement: slice 3, D2.)
+    .where(isNull(addOnOptions.nameI18n))
 
   const plan = planCatalogBackfill(
     templateRows.map((t) => ({
@@ -239,19 +244,37 @@ export interface DuplicateActiveTemplateGroup {
   readonly rowIds: readonly string[]
 }
 
+/**
+ * INSURANCE audit report — insurance is still template-bound (its self-authored
+ * cutover is #1437 slice 3), so its null-templateId gate is still genuine and
+ * `auditInsuranceTemplates` returns this shape. The ADD-ON audit no longer uses it:
+ * a self-authored add-on is legitimately null-templateId (#1437), so it returns the
+ * narrowed {@link AddOnCatalogAuditReport} instead.
+ */
 export interface CatalogAuditReport {
-  /** add_on_options ids still carrying a null templateId (must be empty before PR2). */
+  /** insurance_options ids still carrying a null templateId (must be empty before its NOT-NULL flip). */
   readonly nullTemplateIdRowIds: readonly string[]
   /** Operators holding two ACTIVE rows on one templateId (backfill must leave none). */
   readonly duplicateActiveTemplateGroups: readonly DuplicateActiveTemplateGroup[]
 }
 
 /**
- * Read-only pre-PR2 gate (slice 5): names the OFFENDING rows rather than bare
- * counts (mirrors backfill-regions' `unassigned: string[]`). Merge is safe to
- * flip NOT NULL only when BOTH arrays are empty against prod-shaped data.
+ * ADD-ON audit report (#1437): the null-templateId gate is DROPPED — a self-authored
+ * add-on is legitimately null-templateId, so flagging it is a false alarm. Only the
+ * duplicate-template check remains (the partial unique already makes a duplicate
+ * unreachable, so this is a cheap prod cross-check). The add-on backfill/audit fully
+ * retires when slice 3 lands (design D2).
  */
-export async function auditCatalogTemplates(db: DbOrTx): Promise<CatalogAuditReport> {
+export interface AddOnCatalogAuditReport {
+  readonly duplicateActiveTemplateGroups: readonly DuplicateActiveTemplateGroup[]
+}
+
+/**
+ * Read-only add-on audit: names operators holding two ACTIVE rows on one templateId
+ * (mirrors backfill-regions' `unassigned: string[]`). The former null-templateId
+ * half was removed (#1437) — a self-authored add-on is legitimately null there.
+ */
+export async function auditCatalogTemplates(db: DbOrTx): Promise<AddOnCatalogAuditReport> {
   const rows = await db
     .select({
       id: addOnOptions.id,
@@ -260,11 +283,6 @@ export async function auditCatalogTemplates(db: DbOrTx): Promise<CatalogAuditRep
       status: addOnOptions.status,
     })
     .from(addOnOptions)
-
-  const nullTemplateIdRowIds = rows
-    .filter((r) => r.templateId === null)
-    .map((r) => r.id)
-    .sort()
 
   const groups = new Map<string, { operatorId: string; templateId: string; rowIds: string[] }>()
   for (const r of rows) {
@@ -276,7 +294,7 @@ export async function auditCatalogTemplates(db: DbOrTx): Promise<CatalogAuditRep
   }
   const duplicateActiveTemplateGroups = [...groups.values()].filter((g) => g.rowIds.length > 1)
 
-  return { nullTemplateIdRowIds, duplicateActiveTemplateGroups }
+  return { duplicateActiveTemplateGroups }
 }
 
 // Composite Map key for an (operatorId, templateId) pair. A visible delimiter
