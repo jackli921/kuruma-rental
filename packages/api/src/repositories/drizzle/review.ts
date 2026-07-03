@@ -1,5 +1,5 @@
 import { reviews } from '@kuruma/shared/db/schema'
-import { and, asc, count, eq, inArray, isNotNull, isNull, lte, sum } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lte, sum } from 'drizzle-orm'
 import type { PgColumn } from 'drizzle-orm/pg-core'
 import type { Review } from '../../stores'
 import type { NewReview, ReviewEdit, ReviewRepository } from '../types'
@@ -95,13 +95,31 @@ export class DrizzleReviewRepository implements ReviewRepository {
     return this.aggregate(classIds, reviews.subjectClassId)
   }
 
-  // Public review-list read (review-display slice). Real Drizzle query lands in Task 2.
+  // Public review-list read (review-display slice, #1067).
+  // subject='OPERATOR' keys on the denormalized operatorId (idx_reviews_operator_published
+  // covers filter+order); 'VEHICLE' keys on subjectVehicleId.
   async listPublishedForSubject(
     subject: 'OPERATOR' | 'VEHICLE',
     subjectId: string,
     limit: number,
   ): Promise<Review[]> {
-    throw new Error('listPublishedForSubject: not yet implemented (Task 2)')
+    const key = subject === 'OPERATOR' ? reviews.operatorId : reviews.subjectVehicleId
+    const rows = await this.db
+      .select(reviewColumns)
+      .from(reviews)
+      .where(
+        and(
+          eq(reviews.subject, subject),
+          eq(key, subjectId),
+          isNotNull(reviews.publishedAt),
+          eq(reviews.moderationStatus, 'VISIBLE'),
+        ),
+      )
+      // desc(id) tiebreak: the reveal sweep stamps a batch with one identical publishedAt,
+      // so date alone is an unstable order. Mirrors the InMemory sort.
+      .orderBy(desc(reviews.publishedAt), desc(reviews.id))
+      .limit(limit)
+    return rows.map(toReview)
   }
 
   // Shared aggregate scan (#1085): SUM(overall) + COUNT(*) per key over published+visible
