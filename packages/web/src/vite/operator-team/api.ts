@@ -120,7 +120,7 @@ export async function revokeInvite(
   operatorId: string,
 ): Promise<void> {
   const res = await fetch(
-    `${getApiBaseUrl()}/operators/me/invites/${id}/revoke?operatorId=${encodeURIComponent(operatorId)}`,
+    `${getApiBaseUrl()}/operators/me/invites/${encodeURIComponent(id)}/revoke?operatorId=${encodeURIComponent(operatorId)}`,
     { method: 'POST', credentials: 'include', headers: { 'X-CSRF-Token': csrfToken } },
   )
   await unwrap(res, mutatedEntitySchema)
@@ -132,7 +132,7 @@ export async function deactivateMember(
   operatorId: string,
 ): Promise<void> {
   const res = await fetch(
-    `${getApiBaseUrl()}/operators/me/members/${id}/deactivate?operatorId=${encodeURIComponent(operatorId)}`,
+    `${getApiBaseUrl()}/operators/me/members/${encodeURIComponent(id)}/deactivate?operatorId=${encodeURIComponent(operatorId)}`,
     { method: 'POST', credentials: 'include', headers: { 'X-CSRF-Token': csrfToken } },
   )
   await unwrap(res, mutatedEntitySchema)

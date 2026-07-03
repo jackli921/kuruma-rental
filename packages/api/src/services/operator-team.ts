@@ -61,6 +61,9 @@ export class OperatorTeamService {
     )
   }
 
+  // Reads intentionally return an empty list (never 404) for an unknown/foreign
+  // operatorId — unlike the writes. An empty roster is not an existence oracle, and
+  // only a PLATFORM_ADMIN can even reach a foreign id here; do NOT "fix" this to 404.
   async listInvites(ctx: CallerContext, inputOperatorId?: string): Promise<OperatorInviteData[]> {
     const operatorId = resolveTeamOperatorId(ctx, inputOperatorId)
     const rows = await this.invites.listByOperator(operatorId)
