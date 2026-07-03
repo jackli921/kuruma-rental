@@ -12,6 +12,11 @@ import enMessages from '../../../messages/en.json'
 
 const d = enMessages.bookings.operator.detail
 
+// #1361: the picked operator the route reads via useOperatorContext ->
+// businessRoute.useSearch(). Hoisted so the router mock can close over it; each test
+// sets it. Undefined = a tenant operator (no pick).
+const routeCtx = vi.hoisted(() => ({ operator: undefined as string | undefined }))
+
 // Render the route component outside a RouterProvider: stub createFileRoute
 // (Route.useParams / useLoaderData), Link (-> anchor), and useRouter, then seed
 // every useSuspenseQuery from cache. Mirrors OperatorFleetRoute.test.tsx (#598).
@@ -22,6 +27,10 @@ vi.mock('@tanstack/react-router', async () => ({
     useLoaderData: () => ({ detail: detailDto('CONFIRMED') }),
   }),
   useRouter: () => ({ invalidate: vi.fn() }),
+  getRouteApi: () => ({
+    useSearch: () => ({ operator: routeCtx.operator }),
+    useNavigate: () => vi.fn(),
+  }),
   Link: ({ children, ...rest }: { children: ReactNode }) => <a {...rest}>{children}</a>,
 }))
 
@@ -56,14 +65,17 @@ const operatorSession: Session = {
   csrfToken: 't',
 }
 
+// A picker admin (PLATFORM_ADMIN, no operatorId) — acts only through a chosen operator.
+const bypassSession: Session = { user: { id: 'a', role: 'PLATFORM_ADMIN' }, csrfToken: 't' }
+
 // staleTime=Infinity stops a mount-time background refetch, so the seeded CONFIRMED
 // detail only changes when a mutation's invalidateQueries forces a refetch — which
 // is exactly the behaviour under test.
-function renderRoute() {
+function renderRoute(session: Session = operatorSession) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
   })
-  queryClient.setQueryData(['session'], operatorSession)
+  queryClient.setQueryData(['session'], session)
   queryClient.setQueryData(
     api.operatorBookingDetailQueryOptions('bk-1').queryKey,
     detailDto('CONFIRMED'),
@@ -82,6 +94,7 @@ function renderRoute() {
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  routeCtx.operator = undefined
 })
 
 describe('TripDetailRoute refreshes after an operator action (#616)', () => {
@@ -117,5 +130,21 @@ describe('TripDetailRoute refreshes after an operator action (#616)', () => {
       expect(screen.getByRole('button', { name: d.markCompleted })).toBeInTheDocument(),
     )
     expect(screen.queryByRole('button', { name: d.markActive })).not.toBeInTheDocument()
+  })
+})
+
+// #1361: locks the route -> panel handoff. tsc can't catch a dropped optional
+// `pickedOperatorId` prop, so prove the picked operator (from useOperatorContext)
+// actually reaches the status write for a picker admin.
+describe('TripDetailRoute threads the picked operator into the write (#1361)', () => {
+  it('a picker admin advancing carries the chosen operator as ?operatorId=', async () => {
+    routeCtx.operator = 'op_7'
+    const user = userEvent.setup()
+    const spy = vi.spyOn(api, 'updateBookingStatus').mockResolvedValue(detailDto('ACTIVE') as never)
+    renderRoute(bypassSession)
+
+    await user.click(screen.getByRole('button', { name: d.markActive }))
+
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('bk-1', 'ACTIVE', 't', 'op_7'))
   })
 })
