@@ -3,14 +3,10 @@ import { MyBookingsView } from '@/vite/bookings/MyBookingsView'
 import { myBookingsQueryOptions } from '@/vite/bookings/api'
 import { indexThreadIdsByBooking, threadsQueryOptions } from '@/vite/messaging'
 import { renterReviewedSubjects, reviewsForBookingQueryOptions } from '@/vite/reviews'
+import { RouteRetryError } from '@/vite/route-error'
 import { sessionQueryOptions } from '@/vite/session'
 import { useQueries, useQuery, useSuspenseQuery } from '@tanstack/react-query'
-import {
-  type ErrorComponentProps,
-  createFileRoute,
-  redirect,
-  useRouter,
-} from '@tanstack/react-router'
+import { type ErrorComponentProps, createFileRoute, redirect } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
 // Renter "My Bookings" (#543). Gated by `_renter` (session required). The loader
@@ -84,20 +80,14 @@ function MyBookingsRoute() {
 
 function MyBookingsError(_props: ErrorComponentProps) {
   const t = useTranslations('bookings.list')
-  const router = useRouter()
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl py-20 text-center">
-        <p className="text-lg text-muted-foreground">{t('loadError')}</p>
-        <button
-          type="button"
-          onClick={() => router.invalidate()}
-          className="mt-4 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-        >
-          {t('retry')}
-        </button>
-      </div>
+      <RouteRetryError
+        message={t('loadError')}
+        retryLabel={t('retry')}
+        className="mx-auto max-w-3xl py-20 text-center"
+      />
     </main>
   )
 }

@@ -7,15 +7,11 @@ import { InviteStaffDialog } from '@/vite/operator-team/InviteStaffDialog'
 import { RevokeInviteDialog } from '@/vite/operator-team/RevokeInviteDialog'
 import { TeamView } from '@/vite/operator-team/TeamView'
 import { teamInvitesQueryOptions, teamMembersQueryOptions } from '@/vite/operator-team/api'
+import { RouteRetryError } from '@/vite/route-error'
 import { sessionQueryOptions } from '@/vite/session'
 import type { OperatorInviteData, OperatorMemberData } from '@kuruma/shared/types/operator-team'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import {
-  type ErrorComponentProps,
-  createFileRoute,
-  redirect,
-  useRouter,
-} from '@tanstack/react-router'
+import { type ErrorComponentProps, createFileRoute, redirect } from '@tanstack/react-router'
 import { UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
@@ -122,20 +118,14 @@ export function OperatorTeamRoute() {
 
 function OperatorTeamError(_props: ErrorComponentProps) {
   const t = useTranslations('business.team')
-  const router = useRouter()
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl py-20 text-center">
-        <p className="text-lg text-muted-foreground">{t('loadError')}</p>
-        <button
-          type="button"
-          onClick={() => router.invalidate()}
-          className="mt-4 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-        >
-          {t('retry')}
-        </button>
-      </div>
+      <RouteRetryError
+        message={t('loadError')}
+        retryLabel={t('retry')}
+        className="mx-auto max-w-7xl py-20 text-center"
+      />
     </main>
   )
 }
