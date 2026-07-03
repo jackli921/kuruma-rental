@@ -52,7 +52,12 @@ export const operatorApplications = pgTable(
     reviewedAt: timestamp('reviewedAt', { withTimezone: true }),
     reviewerNotes: text('reviewerNotes'),
     rejectionReason: text('rejectionReason'),
-    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    // Millisecond precision (#1371): createdAt is the admin-queue keyset sort key,
+    // and the opaque cursor encodes it via Date.toISOString() (millisecond). A
+    // plain microsecond timestamptz let two same-millisecond rows fall into the
+    // seek's dead zone and be silently skipped across a page boundary. Pinning the
+    // column to (3) keeps stored == read == cursor so the tiebreak always applies.
+    createdAt: timestamp('createdAt', { withTimezone: true, precision: 3 }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

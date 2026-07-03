@@ -694,6 +694,13 @@
       "when": 1783032888677,
       "tag": "0098_operator_registration",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1783044605254,
+      "tag": "0099_lonely_thor_girl",
+      "breakpoints": true
     }
   ]
 }

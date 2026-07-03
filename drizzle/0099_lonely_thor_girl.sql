@@ -1,0 +1,2 @@
+ALTER TABLE "operator_applications" ALTER COLUMN "createdAt" SET DATA TYPE timestamp (3) with time zone;--> statement-breakpoint
+ALTER TABLE "operator_applications" ALTER COLUMN "createdAt" SET DEFAULT now();
