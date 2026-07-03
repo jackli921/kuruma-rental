@@ -3,6 +3,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { CATALOG_TEMPLATE_STATUSES } from '@kuruma/shared/enums'
 import { SUPPORTED_LOCALES } from '@kuruma/shared/i18n/locales'
+import { useId } from 'react'
 import { type TemplateForm, isCatalogTemplateStatus } from './patch-form'
 
 type SetForm = (updater: (prev: TemplateForm) => TemplateForm) => void
@@ -23,6 +24,9 @@ export function TemplateFormFields({
   readonly form: TemplateForm
   readonly setForm: SetForm
 }) {
+  // Unique per mounted instance so the create + edit dialogs never collide on a
+  // shared DOM id / label binding (they render the same component).
+  const statusId = useId()
   return (
     <>
       <BundleFields
@@ -40,9 +44,9 @@ export function TemplateFormFields({
       />
 
       <div className="space-y-1.5">
-        <Label htmlFor="template-status">{t('edit.statusLabel')}</Label>
+        <Label htmlFor={statusId}>{t('edit.statusLabel')}</Label>
         <NativeSelect
-          id="template-status"
+          id={statusId}
           value={form.status}
           onChange={(e) => {
             const { value } = e.target
