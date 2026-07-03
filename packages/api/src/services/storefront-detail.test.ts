@@ -1,5 +1,5 @@
 import { seedId } from '@kuruma/shared/db/seed-id'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PUBLIC_CONTEXT, SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryAddOnRepository } from '../repositories/in-memory/add-on'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
@@ -35,6 +35,7 @@ let classRepo: InMemoryVehicleClassRepository
 let insuranceRepo: InMemoryInsuranceOptionRepository
 let addOnRepo: InMemoryAddOnRepository
 let classRatePlanRepo: InMemoryClassRatePlanRepository
+let classOfferingService: ClassOfferingService
 let service: StorefrontDetailService
 
 beforeEach(() => {
@@ -53,7 +54,7 @@ beforeEach(() => {
     new InMemoryVehicleBlockRepository(),
     operatorRepo,
   )
-  const classOfferingService = new ClassOfferingService(classRatePlanRepo, availabilityRepo)
+  classOfferingService = new ClassOfferingService(classRatePlanRepo, availabilityRepo)
   service = new StorefrontDetailService(
     storefrontRepo,
     availabilityRepo,
@@ -515,6 +516,52 @@ describe('StorefrontDetailService.getDetail (#391)', () => {
     if (result.ok) throw new Error('expected a failure result for a malformed cursor')
     expect(result.status).toBe(400)
     expect(result.error).toMatch(/cursor/i)
+  })
+
+  it('skips the class-combo scan on a cursor page — offerings ship on the first page only (#1422)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, name: 'Compact', acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    const base = { operatorId: op.id, classId: compact.id, pickupLocationId: namba.id }
+    await makeVehicle({ ...base, name: 'Car A' })
+    await makeVehicle({ ...base, name: 'Car B' })
+    await makeRatePlan({
+      operatorId: op.id,
+      classId: compact.id,
+      pickupLocationId: namba.id,
+      dayRateJpy: 6000,
+    })
+
+    const scan = vi.spyOn(classOfferingService, 'findOfferings')
+
+    // First page runs the producer scan once and carries the offering.
+    const page1 = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, {
+        locationId: namba.id,
+        from: FROM,
+        to: TO,
+        limit: 1,
+      }),
+    )
+    expect(page1.classOfferings).toHaveLength(1)
+    expect(scan).toHaveBeenCalledTimes(1)
+    const cursor = page1.nextCursor
+    if (cursor === null) throw new Error('expected a nextCursor for page 1')
+
+    // The load-more (cursor) page must NOT re-run the scan (1 plan + 2 counts/plan)
+    // and ships no offerings — the client already has them from page 1 (#1422).
+    const page2 = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, {
+        locationId: namba.id,
+        from: FROM,
+        to: TO,
+        limit: 1,
+        cursor,
+      }),
+    )
+    expect(scan).toHaveBeenCalledTimes(1)
+    expect(page2.classOfferings).toEqual([])
+    expect(page2.vehicles.map((v) => v.name)).toEqual(['Car B'])
   })
 })
 
