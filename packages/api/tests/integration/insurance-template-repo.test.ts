@@ -60,3 +60,61 @@ describe('DrizzleInsuranceTemplateRepository.findAll', () => {
     await db.delete(insuranceTemplates).where(inArray(insuranceTemplates.key, [key]))
   })
 })
+
+describe('DrizzleInsuranceTemplateRepository.update', () => {
+  const OLD = new Date('2020-01-01T00:00:00Z')
+
+  it('translates + promotes an ARCHIVED row, persisting bundles and bumping updatedAt', async () => {
+    const id = crypto.randomUUID()
+    const key = `test_ins_promote_${uniq}`
+    await db.insert(insuranceTemplates).values({
+      id,
+      key,
+      name: { en: 'Retired tier' },
+      description: null,
+      status: 'ARCHIVED',
+      updatedAt: OLD,
+    })
+    const repo = new DrizzleInsuranceTemplateRepository(db)
+
+    const updated = await repo.update(id, {
+      name: { en: 'Retired tier', ja: '旧プラン', zh: '旧套餐' },
+      status: 'ACTIVE',
+    })
+
+    expect(updated?.name).toEqual({ en: 'Retired tier', ja: '旧プラン', zh: '旧套餐' })
+    expect(updated?.status).toBe('ACTIVE')
+    expect(updated?.updatedAt.getTime()).toBeGreaterThan(OLD.getTime())
+    // Re-read proves the write hit the row, not just the returning() projection.
+    const reread = await repo.findById(id)
+    expect(reread?.status).toBe('ACTIVE')
+    expect(reread?.name).toEqual({ en: 'Retired tier', ja: '旧プラン', zh: '旧套餐' })
+
+    await db.delete(insuranceTemplates).where(inArray(insuranceTemplates.key, [key]))
+  })
+
+  it('clears the description when the patch sets it null, leaving name untouched', async () => {
+    const id = crypto.randomUUID()
+    const key = `test_ins_clear_${uniq}`
+    await db.insert(insuranceTemplates).values({
+      id,
+      key,
+      name: { en: 'Has desc' },
+      description: { en: 'Remove me.' },
+      status: 'ACTIVE',
+    })
+    const repo = new DrizzleInsuranceTemplateRepository(db)
+
+    const updated = await repo.update(id, { description: null })
+
+    expect(updated?.description).toBeNull()
+    expect(updated?.name).toEqual({ en: 'Has desc' })
+
+    await db.delete(insuranceTemplates).where(inArray(insuranceTemplates.key, [key]))
+  })
+
+  it('returns undefined for an unknown id, writing nothing', async () => {
+    const repo = new DrizzleInsuranceTemplateRepository(db)
+    expect(await repo.update(crypto.randomUUID(), { status: 'ACTIVE' })).toBeUndefined()
+  })
+})

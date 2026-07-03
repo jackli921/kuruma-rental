@@ -2,9 +2,16 @@ import { SUPPORTED_LOCALES } from '@kuruma/shared/i18n/locales'
 import type { TemplateAdminRow } from '@kuruma/shared/types/template-admin'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
+import { TemplateEditDialog } from './TemplateEditDialog'
+import type { TemplateCatalog } from './api'
 
 const CATALOGS = ['addOns', 'insurance'] as const
 type CatalogKey = (typeof CATALOGS)[number]
+// Tab key -> the URL path segment the write endpoint uses.
+const CATALOG_PATH: Record<CatalogKey, TemplateCatalog> = {
+  addOns: 'add-ons',
+  insurance: 'insurance',
+}
 
 interface TemplateLibraryViewProps {
   readonly addOns: readonly TemplateAdminRow[]
@@ -12,16 +19,20 @@ interface TemplateLibraryViewProps {
 }
 
 /**
- * Platform-admin template library (#1319), slice 1: read-only. Two catalogs
- * (add-ons / insurance) behind a tab, each a table of RAW rows — every status,
- * including the ARCHIVED en-only rows the backfill mints. The per-locale
- * translation chips make an untranslated (en-only) row visible at a glance, which
- * is what a later slice will let the admin fix + promote. Pure props (FC/IS — the
- * route owns the query).
+ * Platform-admin template library (#1319). Two catalogs (add-ons / insurance)
+ * behind a tab, each a table of RAW rows — every status, including the ARCHIVED
+ * en-only rows the backfill mints. The per-locale translation chips flag an
+ * untranslated row at a glance; slice 2's per-row Edit opens {@link TemplateEditDialog}
+ * to fix + promote it. Rows arrive as props (the route owns the query); the only
+ * local state is the active tab and the row being edited.
  */
 export function TemplateLibraryView({ addOns, insurance }: TemplateLibraryViewProps) {
   const t = useTranslations('admin.templateLibrary')
   const [tab, setTab] = useState<CatalogKey>('addOns')
+  const [editing, setEditing] = useState<{
+    catalog: TemplateCatalog
+    row: TemplateAdminRow
+  } | null>(null)
   const rowsByTab: Record<CatalogKey, readonly TemplateAdminRow[]> = { addOns, insurance }
   const rows = rowsByTab[tab]
   const head = 'px-3 py-2 text-left font-medium text-muted-foreground'
@@ -63,12 +74,15 @@ export function TemplateLibraryView({ addOns, insurance }: TemplateLibraryViewPr
               <th scope="col" className={head}>
                 {t('colTranslations')}
               </th>
+              <th scope="col" className={head}>
+                {t('colActions')}
+              </th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
                   {t('empty')}
                 </td>
               </tr>
@@ -87,12 +101,32 @@ export function TemplateLibraryView({ addOns, insurance }: TemplateLibraryViewPr
                   <td className="px-3 py-3">
                     <TranslationChips row={row} />
                   </td>
+                  <td className="px-3 py-3">
+                    <button
+                      type="button"
+                      onClick={() => setEditing({ catalog: CATALOG_PATH[tab], row })}
+                      aria-label={t('action.editNamed', { name: row.name.en })}
+                      className="rounded-md border border-border px-2.5 py-1 font-medium text-xs hover:bg-muted/50"
+                    >
+                      {t('action.edit')}
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
+
+      {editing && (
+        <TemplateEditDialog
+          catalog={editing.catalog}
+          row={editing.row}
+          onOpenChange={(open) => {
+            if (!open) setEditing(null)
+          }}
+        />
+      )}
     </div>
   )
 }

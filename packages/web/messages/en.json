@@ -1437,11 +1437,27 @@
       "colKey": "Key",
       "colStatus": "Status",
       "colTranslations": "Translations",
+      "colActions": "Actions",
       "active": "Active",
       "archived": "Archived",
       "empty": "No templates in this catalog yet.",
       "loadError": "Couldn't load the template library.",
-      "retry": "Retry"
+      "retry": "Retry",
+      "action": {
+        "edit": "Edit",
+        "editNamed": "Edit {name}"
+      },
+      "edit": {
+        "title": "Edit template",
+        "description": "Translate each locale, then set the status. Promote a backfill-minted template by switching it to Active.",
+        "nameSection": "Name",
+        "descriptionSection": "Description",
+        "statusLabel": "Status",
+        "nameEnRequired": "An English name is required.",
+        "save": "Save",
+        "saving": "Saving…",
+        "cancel": "Cancel"
+      }
     },
     "featureFlags": {
       "title": "Feature flags",
