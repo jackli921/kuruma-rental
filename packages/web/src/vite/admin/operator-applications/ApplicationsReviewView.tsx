@@ -29,8 +29,12 @@ interface ApplicationsReviewViewProps {
   onRemint?: (id: string) => void | Promise<void>
   /** Id of the row whose re-mint is in flight, if any. */
   remintingId?: string | null
-  /** Id of the row whose last re-mint failed, if any. */
-  remintErrorId?: string | null
+  /**
+   * The row whose last re-mint failed, plus whether it was terminal (404/409 —
+   * not approved / owner already onboarded) vs a generic retryable failure, so the
+   * card shows "no longer available" instead of an infinite "try again".
+   */
+  remintError?: { id: string | null; terminal: boolean } | null
 }
 
 // Pure presentation of the platform-admin operator-application review queue
@@ -49,7 +53,7 @@ export function ApplicationsReviewView({
   approvedInvites = {},
   onRemint,
   remintingId = null,
-  remintErrorId = null,
+  remintError = null,
 }: ApplicationsReviewViewProps) {
   const t = useTranslations('admin.applications')
 
@@ -71,6 +75,10 @@ export function ApplicationsReviewView({
               ? 'alreadyReviewed'
               : 'approveFailed'
             const approveErrorText = approveError?.id === app.id ? t(approveErrorKey) : null
+            const remintErrorKey = remintError?.terminal
+              ? 'regenerateUnavailable'
+              : 'regenerateFailed'
+            const remintErrorText = remintError?.id === app.id ? t(remintErrorKey) : null
             return (
               <li key={app.id}>
                 <ApplicationReviewCard
@@ -86,7 +94,7 @@ export function ApplicationsReviewView({
                   // passing undefined when no remint handler is wired.
                   {...(onRemint ? { onRemint: () => onRemint(app.id) } : {})}
                   isReminting={remintingId === app.id}
-                  remintError={remintErrorId === app.id ? t('regenerateFailed') : null}
+                  remintError={remintErrorText}
                 />
               </li>
             )

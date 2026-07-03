@@ -88,14 +88,25 @@ describe('ApplicationsReviewView', () => {
     expect(onRemint).toHaveBeenCalledWith('a1')
   })
 
-  it('shows the remint error only on the matching row', () => {
+  it('shows the generic retry remint error only on the matching row', () => {
     renderView([app('a1', 'Osaka Cars'), app('a2', 'Kyoto Wheels')], {
       approvedInvites: { a1: '/provider/invite/tok_a1', a2: '/provider/invite/tok_a2' },
       onRemint: vi.fn(),
-      remintErrorId: 'a2',
+      remintError: { id: 'a2', terminal: false },
     })
     const alerts = screen.getAllByRole('alert')
     expect(alerts).toHaveLength(1)
     expect(alerts[0]).toHaveTextContent(en.admin.applications.regenerateFailed)
+  })
+
+  it('shows the terminal "no longer available" message for a 404/409 remint error', () => {
+    renderView([app('a1', 'Osaka Cars')], {
+      approvedInvites: { a1: '/provider/invite/tok_a1' },
+      onRemint: vi.fn(),
+      remintError: { id: 'a1', terminal: true },
+    })
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(en.admin.applications.regenerateUnavailable)
+    expect(alert).not.toHaveTextContent(en.admin.applications.regenerateFailed)
   })
 })

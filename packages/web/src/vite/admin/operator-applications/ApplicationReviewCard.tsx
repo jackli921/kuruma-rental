@@ -5,7 +5,7 @@ import type {
   OperatorApplicationBusinessType,
   OperatorApplicationFleetSize,
 } from '@kuruma/shared/enums'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
 import type { OperatorApplicationDto } from './api'
 
@@ -82,6 +82,20 @@ export function ApplicationReviewCard({
   const reasonId = `reason-${application.id}`
   const inviteInputId = `invite-url-${application.id}`
   const canReject = rejectionReason.trim() !== '' && !isSubmitting
+
+  // Regenerate swaps the shown link in place (A -> B). Reset the copied flag so the
+  // button can't keep vouching "Copied" while the clipboard still holds the old,
+  // possibly-revoked link. On a genuine swap (both non-null) also move focus to the
+  // fresh link: a readonly <input value> change isn't reliably announced to screen
+  // readers, and the Regenerate button still holds focus.
+  const shownInviteUrl = useRef(inviteUrl)
+  useEffect(() => {
+    if (inviteUrl === shownInviteUrl.current) return
+    const wasReplaced = inviteUrl !== null && shownInviteUrl.current !== null
+    shownInviteUrl.current = inviteUrl
+    setCopied(false)
+    if (wasReplaced) document.getElementById(inviteInputId)?.focus()
+  }, [inviteUrl, inviteInputId])
 
   const handleCopy = async () => {
     if (!inviteUrl) return

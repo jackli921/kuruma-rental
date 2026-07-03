@@ -1419,6 +1419,7 @@
       "regenerate": "重新生成链接",
       "regenerating": "重新生成中…",
       "regenerateFailed": "无法重新生成邀请链接。请重试。",
+      "regenerateUnavailable": "此邀请无法再重新生成。负责人可能已完成入驻。",
       "alreadyReviewed": "该申请已被审核，或该邮箱已归属某运营商。",
       "approveFailed": "无法批准该申请，请重试。",
       "loadError": "无法加载申请队列。",

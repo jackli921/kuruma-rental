@@ -1419,6 +1419,7 @@
       "regenerate": "Regenerate link",
       "regenerating": "Regenerating…",
       "regenerateFailed": "Couldn't regenerate the invite link. Try again.",
+      "regenerateUnavailable": "This invite can no longer be regenerated. The owner may already be onboarded.",
       "alreadyReviewed": "This application was already reviewed, or the email already belongs to an operator.",
       "approveFailed": "Couldn't approve the application. Try again.",
       "loadError": "Couldn't load the applications queue.",

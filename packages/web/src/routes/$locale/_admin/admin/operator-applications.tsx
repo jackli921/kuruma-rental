@@ -85,7 +85,19 @@ function ApplicationsRoute() {
       approvedInvites={approvedInvites}
       onRemint={(id) => remintMutation.mutate({ id, csrfToken })}
       remintingId={remintMutation.isPending ? (remintMutation.variables?.id ?? null) : null}
-      remintErrorId={remintMutation.isError ? (remintMutation.variables?.id ?? null) : null}
+      remintError={
+        remintMutation.isError
+          ? {
+              id: remintMutation.variables?.id ?? null,
+              // 404 (unknown / not approved) and 409 (owner already onboarded) are
+              // terminal: a retry can't succeed, so show "no longer available"
+              // instead of "try again". Anything else is a retryable failure.
+              terminal:
+                remintMutation.error instanceof ApiError &&
+                (remintMutation.error.status === 404 || remintMutation.error.status === 409),
+            }
+          : null
+      }
     />
   )
 }
