@@ -45,7 +45,7 @@ export function ReviewList({ reviews }: ReviewListProps) {
                 <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
                   {Object.entries(r.subRatings).map(([dim, stars]) => (
                     <div key={dim} className="flex items-center gap-2">
-                      <dt className="text-muted-foreground">{tDim(dim)}</dt>
+                      <dt className="text-muted-foreground">{tDim.has(dim) ? tDim(dim) : dim}</dt>
                       <dd>{t('dimensionValue', { n: stars })}</dd>
                     </div>
                   ))}

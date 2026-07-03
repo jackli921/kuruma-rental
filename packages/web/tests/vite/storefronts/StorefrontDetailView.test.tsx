@@ -1,3 +1,4 @@
+import { operatorReviewsQueryOptions } from '@/vite/reviews'
 import { StorefrontDetailView } from '@/vite/storefronts/StorefrontDetailView'
 import type { AvailableVehicleData, StorefrontDetailData } from '@/vite/storefronts/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -77,13 +78,18 @@ function makeDetail(vehicles: AvailableVehicleData[]): StorefrontDetailData {
   }
 }
 
-function renderDetail(detail: StorefrontDetailData, extra: { region?: string } = {}) {
+function renderDetail(
+  detail: StorefrontDetailData,
+  extra: { region?: string; seedFn?: (qc: QueryClient) => void } = {},
+) {
   // #1085 slice 5: the view now batches operator + class review aggregates via
   // useQuery, so the test wraps in a fresh QueryClient that never retries (a
   // missing handler would otherwise spin forever).
+  const { seedFn, ...rest } = extra
   const qc = new QueryClient({
     defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
   })
+  seedFn?.(qc)
   return render(
     <QueryClientProvider client={qc}>
       <IntlProvider locale="en" messages={en}>
@@ -91,7 +97,7 @@ function renderDetail(detail: StorefrontDetailData, extra: { region?: string } =
           detail={detail}
           from="2026-07-01T10:00"
           to="2026-07-03T10:00"
-          {...extra}
+          {...rest}
         />
       </IntlProvider>
     </QueryClientProvider>,
@@ -175,5 +181,34 @@ describe('StorefrontDetailView', () => {
     vi.stubEnv('VITE_FEATURE_REVIEWS', undefined)
     renderDetail(makeDetail([makeVehicle({ id: 'v-classed', classId: 'cls-compact' })]))
     expect(screen.queryByTestId('rating-badge-skeleton')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Reviews' })).toBeNull()
+  })
+
+  it('renders the reviews section (empty state) when the REVIEWS flag is on', () => {
+    renderDetail(makeDetail([]), {
+      seedFn: (qc) => qc.setQueryData(operatorReviewsQueryOptions('op-best').queryKey, []),
+    })
+    expect(screen.getByRole('heading', { name: 'Reviews' })).toBeInTheDocument()
+    expect(screen.getByText('No reviews yet')).toBeInTheDocument()
+  })
+
+  it('shows nothing for the reviews section while the query is in-flight', () => {
+    renderDetail(makeDetail([]))
+    expect(screen.queryByRole('heading', { name: 'Reviews' })).toBeNull()
+    expect(screen.queryByText('No reviews yet')).toBeNull()
+  })
+
+  it('wires pre-seeded reviews from the query cache into ReviewList', () => {
+    const review = {
+      id: 'r1',
+      overall: 5,
+      subRatings: {},
+      comment: 'Fantastic trip',
+      publishedAt: '2026-06-01T00:00:00.000Z',
+    }
+    renderDetail(makeDetail([]), {
+      seedFn: (qc) => qc.setQueryData(operatorReviewsQueryOptions('op-best').queryKey, [review]),
+    })
+    expect(screen.getByText('Fantastic trip')).toBeInTheDocument()
   })
 })

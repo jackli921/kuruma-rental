@@ -1,4 +1,10 @@
-import { RatingBadge, reviewAggregatesQueryOptions } from '@/vite/reviews'
+import { useFeatureFlag } from '@/vite/config'
+import {
+  RatingBadge,
+  ReviewList,
+  operatorReviewsQueryOptions,
+  reviewAggregatesQueryOptions,
+} from '@/vite/reviews'
 import { AvailableVehicleCard } from '@/vite/storefronts/AvailableVehicleCard'
 import type { StorefrontDetailData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
@@ -36,6 +42,7 @@ export function StorefrontDetailView({
 }: StorefrontDetailViewProps) {
   const t = useTranslations('search')
   const locale = useLocale()
+  const reviewsEnabled = useFeatureFlag('REVIEWS')
   const { storefront, vehicles } = detail
 
   // #1085 slice 5: one query for the storefront's operator badge + one batched
@@ -47,6 +54,10 @@ export function StorefrontDetailView({
   )
   const classIds = vehicles.map((v) => v.classId).filter((id): id is string => id !== null)
   const { data: classRatings } = useQuery(reviewAggregatesQueryOptions('classes', classIds))
+  const { data: operatorReviews } = useQuery({
+    ...operatorReviewsQueryOptions(storefront.operatorId),
+    enabled: reviewsEnabled,
+  })
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -100,6 +111,7 @@ export function StorefrontDetailView({
           ))}
         </div>
       )}
+      {operatorReviews !== undefined ? <ReviewList reviews={operatorReviews} /> : null}
     </div>
   )
 }
