@@ -89,11 +89,15 @@ Everything downstream already keys off the resolved `operatorId`, so the hazards
 - Last-owner-lockout (`:116-121`) counts owners **within the picked tenant** — a picker-admin cannot deactivate operator X's last owner.
 - The `OPERATOR_MEMBER_DEACTIVATED` audit event stamps `operatorId` (picked tenant) + `actorUserId` (the admin) + `targetUserId` — a correct, attributable trail.
 
-The no-existence-oracle seal above governs *member/invite* ids (a foreign one is indistinguishable from a missing one). A bogus *operator* id is a different matter: reads return an empty 200, and `inviteStaff` surfaces `OperatorNotFoundError` -> 404 (`provider-invite.ts:73`). That operator-id oracle is acceptable — a picker-admin's legitimate pick source is the `/operators` list it can already enumerate, so no id is revealed that it could not already see.
+The no-existence-oracle seal above governs *member/invite* ids (a foreign one is indistinguishable from a missing one). A bogus *operator* id is a different matter: reads return an empty 200; `inviteStaff` calls `inviteService.createInvite`, which throws `OperatorNotFoundError` (`provider-invite.ts:20,73`) for an unknown operator.
+
+**Bug to fix in slice 2 (c1):** `OperatorNotFoundError extends Error`, NOT `NotFoundError`, and the global handler (`error-handlers.ts`) has no branch for it — the only 404 mapping is a *local* catch in `routes/admin.ts:47`. Today the team path never reaches it (an operator's own id always exists), but this design makes it reachable for the first time (a picker-admin can supply an arbitrary `?operatorId=`), so it would currently 500. Slice 2 must map it: add an `instanceof OperatorNotFoundError -> 404` branch to `error-handlers.ts` (which also DRYs the `routes/admin.ts:47` local catch) — or make `OperatorNotFoundError extends NotFoundError` — with a route/integration test asserting a bogus `?operatorId=` on invite is 404, not 500.
+
+With that mapping in place, the operator-id oracle (empty-200 reads / 404 invite) is acceptable — a picker-admin's legitimate pick source is the `/operators` list it can already enumerate, so no id is revealed that it could not already see.
 
 ### 3. Routes — `routes/operator-team.ts`
 
-Each handler reads the picked id with a direct `c.req.query('operatorId')` and passes it through. This is the picker's newest write transport precedent — booking writes (slice 5b) thread the same `?operatorId=` on state-changing POSTs (`routes/bookings.ts:255,302`), so team matches it rather than inventing a shape. Do **not** reuse `parseCrossOperatorRead(c)` here — that is a *read*-scope helper carrying an unused `includeAll` (team has no merged view). Routes stay HTTP-only; the resolver's throws map via the global handler (403 / 422 / 404 / 409).
+Each handler reads the picked id with a direct `c.req.query('operatorId')` and passes it through. An empty-string `?operatorId=` reads as no-pick (falsy), so a picker-admin gets the 422 "specify a target operator" — consistent with `resolveOperatorIdForWrite`'s `if (inputOperatorId)` truthiness check. This is the picker's newest write transport precedent — booking writes (slice 5b) thread the same `?operatorId=` on state-changing POSTs (`routes/bookings.ts:255,302`), so team matches it rather than inventing a shape. Do **not** reuse `parseCrossOperatorRead(c)` here — that is a *read*-scope helper carrying an unused `includeAll` (team has no merged view). Routes stay HTTP-only; the resolver's throws map via the global handler (403 / 422 / 404 / 409).
 
 Note the transport is deliberately query, not body: the codebase already has three write-operatorId transports — path (`operators.ts:60` settings/profile), body (`parseScopedCreate`, `helpers.ts`), and query (booking writes 5b). Query is chosen to match 5b and to leave the invite body validator (`{email}`) untouched.
 
@@ -102,8 +106,9 @@ Note the transport is deliberately query, not body: the codebase already has thr
 ### `operator-team/api.ts`
 
 - `fetchTeamMembers(operatorId?)` / `fetchTeamInvites(operatorId?)`: append `?operatorId=` when a pick is present (operator sessions pass `undefined` and omit it).
-- Query keys fold in the id: `['operator-team','members', operatorId ?? 'self']` so switching tenants refetches instead of serving a stale roster.
-- `inviteStaff` / `revokeInvite` / `deactivateMember`: accept `operatorId?` and append the same query param; bodies/headers unchanged.
+- Query keys fold in the id: `teamMembersQueryOptions(operatorId)` / `teamInvitesQueryOptions(operatorId)` gain the arg (they take none today) and key on `[...TEAM_MEMBERS_QUERY_KEY, operatorId ?? 'self']` so switching tenants refetches instead of serving a stale roster.
+- **Invalidation rule (c4):** keep the exported `TEAM_INVITES_QUERY_KEY` / `TEAM_MEMBERS_QUERY_KEY` as the **2-element prefix**; the dialogs keep invalidating that prefix. React Query prefix-matches, so a prefix invalidation still hits every folded `[...prefix, operatorId]` key (safe over-invalidation). Do NOT convert the dialogs to invalidate a specific `[...prefix, id]` — that can invalidate `'self'` while a pick is active and leave a stale roster.
+- `inviteStaff` / `revokeInvite` / `deactivateMember`: accept a trailing `operatorId?` and append the same query param; bodies/headers unchanged.
 
 ### `routes/$locale/_business/manage/team.tsx`
 
@@ -113,12 +118,14 @@ Note the transport is deliberately query, not body: the codebase already has thr
   - add `loaderDeps: ({ search }) => ({ operator: search.operator })`;
   - resolve `operatorId = session?.user.operatorId ?? deps.operator`;
   - guard `if (operatorId) { prefetch }` — so all-mode (no pick) fires **no** read;
-  - parameterize `teamMembersQueryOptions(operatorId)` / `teamInvitesQueryOptions(operatorId)` (their keys already fold in the id).
-  The component resolves the same `operatorId = session.user.operatorId ?? pickedOperatorId` (loader + component in lockstep).
-- **All-mode** (a picker-admin with no pick, i.e. `isCrossOperatorReader(session) && !pickedOperatorId`): render the pick-prompt empty state; no team read fires (the loader guard above is what enforces it).
-- **Own / picked mode**: render `TeamView` with reads threaded by the resolved id, and every write affordance gated on `canWriteAsOperatorOwner(session, pickedOperatorId)` (already exists, `guards.ts:70-78`) instead of the current owner-session-only gate.
-- **Picked-operator badge (G1 — label source).** Show an `OperatorBadge` when `canPick && Boolean(pickedOperatorId)`. Unlike settings (which labels from its own `operator.name` profile read), team reads carry only the *user's* name, not the operator's. Source the label from the operators list — already in cache from `BusinessLayout`'s picker on this route — via a `useQuery(operatorsQueryOptions(), { enabled: canPick && Boolean(pickedOperatorId) })` reading `operatorNameById.get(pickedOperatorId)`. No new endpoint; the fetch is a cache hit. (`useOperatorScope`'s own operators fetch stays all-mode-only — do not widen it; read the cached query directly here.)
-- `TeamView` + the invite/revoke/deactivate dialogs thread `operatorId` into their mutation calls and take the owner-tier gate as a prop.
+  - parameterize `teamMembersQueryOptions(operatorId)` / `teamInvitesQueryOptions(operatorId)` (their keys now fold in the id, per the api.ts change above).
+  The component resolves the same `operatorId = session.user.operatorId ?? pickedOperatorId` (loader + component in lockstep; `session.user.operatorId?: string` exists on the web session type, `session.ts:15`).
+- **Component gate swap.** Replace the current `hasOperator = isOperatorSession(session)` / `canManage = isOperatorOwnerSession(session)` derivations (`team.tsx:63,66`) with `hasOperator = Boolean(operatorId)` (the resolved id) and `canManage = canWriteAsOperatorOwner(session, pickedOperatorId)` (`guards.ts:70-78`), mirroring `settings.tsx:73,79`. This is what opens the write affordances for a picker-admin.
+- **All-mode** (a picker-admin with no pick, i.e. `isCrossOperatorReader(session) && !pickedOperatorId`): render the pick-prompt empty state; no team read fires (the loader guard above is what enforces it). The empty state uses `canPick ? t('pickOperatorPrompt') : t('noOperatorContext')` (mirroring `settings.tsx:84`).
+- **New i18n key (c2).** Add `business.team.pickOperatorPrompt` to `messages/{en,ja,zh}.json` (team block, ~line 879 — today it has only `noOperatorContext`). Model the copy on the shipped `business.settings.pickOperatorPrompt`. The badge needs no new key (`OperatorBadge` reuses `business.operatorContext.badge`).
+- **Own / picked mode**: render `TeamView` with reads threaded by the resolved id and `canManage` fed from the gate above.
+- **Picked-operator badge (G1 — label source).** Show an `OperatorBadge` when `canPick && Boolean(pickedOperatorId)`. Unlike settings (which labels from its own `operator.name` profile read), team reads carry only the *user's* name, not the operator's. Source the label from the operators list — already in cache from `BusinessLayout`'s picker on this route — via `useQuery(operatorsQueryOptions(), { enabled: canPick && Boolean(pickedOperatorId) })` reading `operatorNameById.get(pickedOperatorId)`. **Import `operatorsQueryOptions` from `@/vite/operator-context`** (c3) — NOT the same-named `@/vite/admin/operators` export (different key `['admin-operators']` + shape; wrong import breaks the cache-hit and fires an extra request). `OperatorBadge` returns `null` on an undefined name, so a cold direct-nav is a graceful late-pop, not a crash (c5); optionally `ensureQueryData(operatorsQueryOptions())` in the loader when `canPick && operatorId` for parity. (`useOperatorScope`'s own operators fetch stays all-mode-only — do not widen it.)
+- **Mutation call sites (b3):** only the three dialogs mutate — `InviteStaffDialog.tsx:34`, `RevokeInviteDialog.tsx:29`, `DeactivateMemberDialog.tsx:33` — each gains an `operatorId?` prop passed down from `team.tsx` and threads it into its api call. `TeamView` itself has no mutation (it only fires `onRevokeInvite`/`onDeactivateMember` callbacks); it takes `canManage` only, not `operatorId`.
 
 ## Testing
 
@@ -131,12 +138,13 @@ TDD, vertical, per slice. Mutation-resistant assertions.
 - **Integration, real-pg** (`tests/integration/`): admin picks operator X — invite/deactivate land on X (not the admin's absent tenant); a member id belonging to Y under the picked X scope -> 404; X's last-owner deactivate -> 409; the audit event carries `operatorId = X`.
 - **Conformance:** extend the cross-operator read-scope suite (`tests/routes/tenancy-context.test.ts` / `tests/integration/tenancy-isolation.test.ts`) with the two team read endpoints — a picker-admin honors `?operatorId=`, a non-privileged caller cannot.
 - **Web** (`tests/vite/.../team...test.tsx`): all-mode renders the prompt and fires no fetch; picked mode threads the id into fetch + mutations and refetches on tenant switch (query-key change); write affordances hidden for a non-owner / no-pick; mutation-verified (mirror #1264's `VehicleDetailRoute.test.tsx`).
+  - **Must-update existing seam tests (c6):** `tests/vite/operator-team-api.test.ts` (fetch/mutation signatures + folded query keys), plus `RevokeInviteDialog.test.tsx`, `DeactivateMemberDialog.test.tsx`, `TeamView.test.tsx` (new `operatorId`/`canManage` props). There is no `InviteStaffDialog.test.tsx` today — add one, since invite is the path that reaches the c1 error mapping.
 
 ## Slices (one PR, `Refs #1230` — do NOT close the epic)
 
 1. **API read scope + resolver.** Add `resolveTeamOperatorId`; thread the id into `listMembers`/`listInvites` and the two read routes; unit + route + conformance tests.
-2. **API writes.** Thread the id into `inviteStaff`/`revokeInvite`/`deactivateMember` via the resolver, owner-tier gate + last-owner + audit under the picked operator; route + real-pg integration tests.
-3. **Web wiring.** `api.ts` threading + query keys; route registration in `OPERATOR_CONTEXT_ROUTE_IDS`; pick-prompt all-mode; owner-tier affordance gating + picked-operator badge; route/component tests.
+2. **API writes.** Thread the id into `inviteStaff`/`revokeInvite`/`deactivateMember` via the resolver, owner-tier gate + last-owner + audit under the picked operator; map `OperatorNotFoundError -> 404` in `error-handlers.ts` (c1); route + real-pg integration tests (incl. bogus-`operatorId` invite -> 404).
+3. **Web wiring.** `api.ts` threading + folded query keys (2-element invalidation prefix kept); route registration in `OPERATOR_CONTEXT_ROUTE_IDS`; loader rework; component gate swap; pick-prompt all-mode + `business.team.pickOperatorPrompt` in en/ja/zh; picked-operator badge; route/component tests + the must-update seam tests.
 
 ## Non-goals
 
