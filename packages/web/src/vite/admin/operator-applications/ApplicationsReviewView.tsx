@@ -18,8 +18,19 @@ interface ApplicationsReviewViewProps {
    * show the right message instead of silently swallowing non-409 errors.
    */
   approveError?: { id: string | null; alreadyReviewed: boolean } | null
-  /** Set after a successful approval — hides controls and reveals the invite link. */
-  approvedInvite?: { id: string; inviteUrl: string } | null
+  /**
+   * Invite links revealed after successful approvals, keyed by application id.
+   * Keyed (not a single row) so approving a second application never drops the
+   * first one's still-uncopied invite link. A card enters its terminal reveal
+   * state when its id is present here.
+   */
+  approvedInvites?: Record<string, string>
+  /** Re-mint the OWNER invite for a revealed row (#1370). */
+  onRemint?: (id: string) => void | Promise<void>
+  /** Id of the row whose re-mint is in flight, if any. */
+  remintingId?: string | null
+  /** Id of the row whose last re-mint failed, if any. */
+  remintErrorId?: string | null
 }
 
 // Pure presentation of the platform-admin operator-application review queue
@@ -35,7 +46,10 @@ export function ApplicationsReviewView({
   onApprove,
   approvingId = null,
   approveError = null,
-  approvedInvite = null,
+  approvedInvites = {},
+  onRemint,
+  remintingId = null,
+  remintErrorId = null,
 }: ApplicationsReviewViewProps) {
   const t = useTranslations('admin.applications')
 
@@ -67,7 +81,12 @@ export function ApplicationsReviewView({
                   onApprove={() => onApprove(app.id)}
                   isApproving={approvingId === app.id}
                   approveError={approveErrorText}
-                  inviteUrl={approvedInvite?.id === app.id ? approvedInvite.inviteUrl : null}
+                  inviteUrl={approvedInvites[app.id] ?? null}
+                  // exactOptionalPropertyTypes: omit onRemint entirely rather than
+                  // passing undefined when no remint handler is wired.
+                  {...(onRemint ? { onRemint: () => onRemint(app.id) } : {})}
+                  isReminting={remintingId === app.id}
+                  remintError={remintErrorId === app.id ? t('regenerateFailed') : null}
                 />
               </li>
             )

@@ -88,6 +88,35 @@ export async function approveApplication(params: {
   return unwrap(res, approveResultDtoSchema)
 }
 
+// The re-mint result DTO (#1370): just the fresh one-time OWNER invite link and
+// its expiry — no operatorId (the operator already exists). Non-strict.
+const remintResultDtoSchema = z.object({
+  inviteUrl: z.string(),
+  expiresAt: z.string(),
+})
+export type RemintResultDto = z.infer<typeof remintResultDtoSchema>
+
+// Re-mint the OWNER invite for an already-approved application (#1370). The
+// original link can expire or be lost before the applicant accepts; this issues a
+// fresh one without a second approval. Cookie-authed + CSRF-gated (header, never
+// body). No request body. A 404 (unknown id) / 409 (not approved / owner already
+// onboarded) surfaces as an ApiError the caller maps to an inline message.
+export async function remintInvite(params: {
+  id: string
+  csrfToken: string
+}): Promise<RemintResultDto> {
+  const { id, csrfToken } = params
+  const res = await fetch(
+    `${getApiBaseUrl()}/admin/operator-applications/${encodeURIComponent(id)}/remint-invite`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    },
+  )
+  return unwrap(res, remintResultDtoSchema)
+}
+
 // Record a rejection verdict (#1277). Cookie-authed + CSRF-gated, so the caller
 // echoes the session CSRF token in the header — NEVER the body. The REJECT
 // endpoint returns { success: true, data: {row} } — data is the row directly.

@@ -1393,6 +1393,16 @@
       "serviceAreaLabel": "Service area",
       "fleetSizeLabel": "Fleet size",
       "businessTypeLabel": "Business type",
+      "fleetSize": {
+        "1-5": "1-5 vehicles",
+        "6-20": "6-20 vehicles",
+        "21-50": "21-50 vehicles",
+        "50+": "50+ vehicles"
+      },
+      "businessType": {
+        "INDIVIDUAL": "Individual",
+        "COMPANY": "Company"
+      },
       "websiteLabel": "Website",
       "messageLabel": "Message",
       "submittedLabel": "Submitted",
@@ -1406,6 +1416,9 @@
       "copy": "Copy",
       "copied": "Copied",
       "approved": "Approved",
+      "regenerate": "Regenerate link",
+      "regenerating": "Regenerating…",
+      "regenerateFailed": "Couldn't regenerate the invite link. Try again.",
       "alreadyReviewed": "This application was already reviewed, or the email already belongs to an operator.",
       "approveFailed": "Couldn't approve the application. Try again.",
       "loadError": "Couldn't load the applications queue.",

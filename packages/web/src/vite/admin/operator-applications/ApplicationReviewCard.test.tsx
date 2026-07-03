@@ -46,6 +46,12 @@ describe('ApplicationReviewCard', () => {
     expect(screen.queryByText('taro@example.com')).not.toBeNull()
   })
 
+  it('renders a localized fleet-size label, never the raw enum value', () => {
+    renderCard()
+    expect(screen.queryByText('6-20 vehicles')).not.toBeNull()
+    expect(screen.queryByText('6-20')).toBeNull()
+  })
+
   it('disables the Reject button when the textarea is empty', () => {
     renderCard()
     const button = screen.getByRole('button', { name: en.admin.applications.reject })
@@ -74,7 +80,9 @@ describe('ApplicationReviewCard', () => {
         website: 'https://osaka-cars.example.com',
       },
     })
-    expect(screen.queryByText('COMPANY')).not.toBeNull()
+    // Business type renders as a localized label, not the raw enum value.
+    expect(screen.queryByText('Company')).not.toBeNull()
+    expect(screen.queryByText('COMPANY')).toBeNull()
     expect(screen.queryByText('We run a fleet in Kansai.')).not.toBeNull()
     const link = screen.getByRole('link', { name: 'https://osaka-cars.example.com' })
     expect(link).toHaveAttribute('href', 'https://osaka-cars.example.com')
@@ -122,5 +130,36 @@ describe('ApplicationReviewCard', () => {
     const alerts = screen.getAllByRole('alert')
     const texts = alerts.map((el) => el.textContent)
     expect(texts.some((t) => t?.includes(en.admin.applications.alreadyReviewed))).toBe(true)
+  })
+
+  it('in the reveal state, renders a Regenerate button that calls onRemint when clicked', async () => {
+    const onRemint = vi.fn()
+    renderCard({ inviteUrl: '/provider/invite/tok_abc', onRemint })
+    const button = screen.getByRole('button', { name: en.admin.applications.regenerate })
+    await userEvent.click(button)
+    expect(onRemint).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables the Regenerate button and shows a pending label while reminting', () => {
+    renderCard({ inviteUrl: '/provider/invite/tok_abc', onRemint: vi.fn(), isReminting: true })
+    const button = screen.getByRole('button', { name: en.admin.applications.regenerating })
+    expect(button).toBeDisabled()
+  })
+
+  it('announces a remint error via role=alert in the reveal state', () => {
+    renderCard({
+      inviteUrl: '/provider/invite/tok_abc',
+      onRemint: vi.fn(),
+      remintError: en.admin.applications.regenerateFailed,
+    })
+    const alerts = screen.getAllByRole('alert')
+    expect(
+      alerts.some((el) => el.textContent?.includes(en.admin.applications.regenerateFailed)),
+    ).toBe(true)
+  })
+
+  it('omits the Regenerate button when no onRemint handler is provided', () => {
+    renderCard({ inviteUrl: '/provider/invite/tok_abc' })
+    expect(screen.queryByRole('button', { name: en.admin.applications.regenerate })).toBeNull()
   })
 })

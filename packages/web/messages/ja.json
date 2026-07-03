@@ -1393,6 +1393,16 @@
       "serviceAreaLabel": "サービスエリア",
       "fleetSizeLabel": "想定車両台数",
       "businessTypeLabel": "事業形態",
+      "fleetSize": {
+        "1-5": "1〜5台",
+        "6-20": "6〜20台",
+        "21-50": "21〜50台",
+        "50+": "50台以上"
+      },
+      "businessType": {
+        "INDIVIDUAL": "個人",
+        "COMPANY": "法人"
+      },
       "websiteLabel": "ウェブサイト",
       "messageLabel": "メッセージ",
       "submittedLabel": "申請日",
@@ -1406,6 +1416,9 @@
       "copy": "コピー",
       "copied": "コピーしました",
       "approved": "承認済み",
+      "regenerate": "リンクを再発行",
+      "regenerating": "再発行中…",
+      "regenerateFailed": "招待リンクを再発行できませんでした。もう一度お試しください。",
       "alreadyReviewed": "この申請はすでに審査済みか、メールアドレスがすでに事業者に登録されています。",
       "approveFailed": "申請を承認できませんでした。もう一度お試しください。",
       "loadError": "申請キューを読み込めませんでした。",

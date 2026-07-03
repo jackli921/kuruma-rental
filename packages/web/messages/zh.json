@@ -1393,6 +1393,16 @@
       "serviceAreaLabel": "服务区域",
       "fleetSizeLabel": "预计车队规模",
       "businessTypeLabel": "经营类型",
+      "fleetSize": {
+        "1-5": "1-5 辆",
+        "6-20": "6-20 辆",
+        "21-50": "21-50 辆",
+        "50+": "50+ 辆"
+      },
+      "businessType": {
+        "INDIVIDUAL": "个人",
+        "COMPANY": "公司"
+      },
       "websiteLabel": "网站",
       "messageLabel": "留言",
       "submittedLabel": "提交日期",
@@ -1406,6 +1416,9 @@
       "copy": "复制",
       "copied": "已复制",
       "approved": "已批准",
+      "regenerate": "重新生成链接",
+      "regenerating": "重新生成中…",
+      "regenerateFailed": "无法重新生成邀请链接。请重试。",
       "alreadyReviewed": "该申请已被审核，或该邮箱已归属某运营商。",
       "approveFailed": "无法批准该申请，请重试。",
       "loadError": "无法加载申请队列。",

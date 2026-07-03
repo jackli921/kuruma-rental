@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../../messages/en.json'
@@ -67,5 +68,34 @@ describe('ApplicationsReviewView', () => {
       approveError: { id: 'a1', alreadyReviewed: false },
     })
     expect(screen.getByRole('alert')).toHaveTextContent(en.admin.applications.approveFailed)
+  })
+
+  it('reveals every approved invite link, so approving a second row never drops the first', () => {
+    renderView([app('a1', 'Osaka Cars'), app('a2', 'Kyoto Wheels')], {
+      approvedInvites: { a1: '/provider/invite/tok_a1', a2: '/provider/invite/tok_a2' },
+    })
+    expect(screen.getByDisplayValue('/provider/invite/tok_a1')).not.toBeNull()
+    expect(screen.getByDisplayValue('/provider/invite/tok_a2')).not.toBeNull()
+  })
+
+  it('calls onRemint with the row id when its Regenerate button is clicked', async () => {
+    const onRemint = vi.fn()
+    renderView([app('a1', 'Osaka Cars')], {
+      approvedInvites: { a1: '/provider/invite/tok_a1' },
+      onRemint,
+    })
+    await userEvent.click(screen.getByRole('button', { name: en.admin.applications.regenerate }))
+    expect(onRemint).toHaveBeenCalledWith('a1')
+  })
+
+  it('shows the remint error only on the matching row', () => {
+    renderView([app('a1', 'Osaka Cars'), app('a2', 'Kyoto Wheels')], {
+      approvedInvites: { a1: '/provider/invite/tok_a1', a2: '/provider/invite/tok_a2' },
+      onRemint: vi.fn(),
+      remintErrorId: 'a2',
+    })
+    const alerts = screen.getAllByRole('alert')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]).toHaveTextContent(en.admin.applications.regenerateFailed)
   })
 })
