@@ -275,9 +275,12 @@ export class BookingCreationService {
       }
     }
     const operatorId = vehicle.operatorId
-    // #1260: bind the booked vehicle to the picked operator, else a bypass admin
-    // could book ANY operator's car by raw id (the read is SYSTEM_CONTEXT). 404 = no
-    // oracle; tenant operators are unaffected (only the bypass `all` tier is bound).
+    // #1260: bind the booked vehicle to the picked operator — the read above is
+    // SYSTEM_CONTEXT (unscoped), so a bypass admin could otherwise book ANY
+    // operator's car by raw id. 404 (via fleetWriteDenialResult) reveals no more than
+    // the admin already sees. This binds ONLY the bypass `all` tier; the operator
+    // tier is deliberately left unbound here — a tenant operator booking a foreign
+    // operator's car is a separate, pre-existing gap tracked in #1417.
     const inventoryDenial = assertBookingWriteWithinOperator(ctx, operatorId, actingOperatorId)
     if (inventoryDenial) return fleetWriteDenialResult(inventoryDenial, 'Vehicle not found')
     const operatorBlock = await rejectIfOperatorDeactivated(repos, operatorId)
@@ -480,7 +483,8 @@ export class BookingCreationService {
       return { ok: false, status: 400, error: 'Pickup location is not available' }
     }
     const operatorId = pickup.operatorId
-    // #1260: bind the combo's pickup/inventory operator (mirrors the SPECIFIC path).
+    // #1260: bind the combo's pickup/inventory operator (mirrors the SPECIFIC path);
+    // bypass tier only, operator tier deferred to #1417.
     const inventoryDenial = assertBookingWriteWithinOperator(ctx, operatorId, actingOperatorId)
     if (inventoryDenial)
       return fleetWriteDenialResult(inventoryDenial, 'Pickup location is not available')
