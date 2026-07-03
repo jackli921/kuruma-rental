@@ -84,6 +84,11 @@ export class FlatSearchService {
     const locationById = new Map<string, ResultLocation>(
       storefronts.map((sf) => [sf.id, toResultLocation(sf)]),
     )
+    // Per-location turnaround so the combo producer scans the same turnaround-inclusive
+    // occupancy window booking creation checks (each storefront sets its own buffer).
+    const turnaroundByLocationId = new Map<string, number>(
+      storefronts.map((sf) => [sf.id, sf.defaultTurnaroundMinutes]),
+    )
 
     // ONE availability scan per page — the same call slice 5 makes (N+1 guard).
     // Bound the scan to the in-region storefronts (#651 §1c): `storefronts` is
@@ -129,6 +134,7 @@ export class FlatSearchService {
       to,
       locationById,
       classById,
+      turnaroundByLocationId,
       requested,
     })
 

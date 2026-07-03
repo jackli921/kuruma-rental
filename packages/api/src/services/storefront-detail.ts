@@ -227,6 +227,7 @@ export class StorefrontDetailService {
       to,
       locationById: singleLocationMap(storefront),
       classById,
+      turnaroundByLocationId: new Map([[storefront.id, storefront.defaultTurnaroundMinutes]]),
       requested,
     })
 

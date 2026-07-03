@@ -9,7 +9,7 @@ import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleBlockRepository } from '../repositories/in-memory/vehicle-block'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
-import type { ClassRatePlan, Location, Operator, Vehicle, VehicleClass } from '../stores'
+import type { Booking, ClassRatePlan, Location, Operator, Vehicle, VehicleClass } from '../stores'
 import { ClassOfferingService } from './class-offering'
 
 const FROM = new Date('2026-08-01T10:00:00Z')
@@ -121,11 +121,13 @@ function makeRatePlan(overrides: Partial<Omit<ClassRatePlan, 'id' | 'createdAt' 
 
 // A CONFIRMED booking of the class overlapping [FROM, TO) — consumes one unit of
 // class demand at the (operator, class, location) triple.
-function makeBooking(overrides: {
-  operatorId: string
-  classId: string
-  pickupLocationId: string
-}) {
+function makeBooking(
+  overrides: {
+    operatorId: string
+    classId: string
+    pickupLocationId: string
+  } & Partial<Pick<Booking, 'startAt' | 'endAt' | 'effectiveEndAt'>>,
+) {
   return bookingRepo.create(SYSTEM_CONTEXT, {
     renterId: 'u1',
     requestedVehicleId: null,
@@ -192,6 +194,7 @@ describe('ClassOfferingService.findOfferings (#464)', () => {
       locationById: locationMap(namba, a.name),
       classById: new Map([[klass.id, klass]]),
       requested: null,
+      turnaroundByLocationId: new Map([[namba.id, 60]]),
     })
 
     expect(offerings).toEqual([
@@ -221,6 +224,72 @@ describe('ClassOfferingService.findOfferings (#464)', () => {
       locationById: locationMap(namba, a.name),
       classById: new Map([[klass.id, klass]]),
       requested: null,
+      turnaroundByLocationId: new Map([[namba.id, 60]]),
+    })
+
+    expect(offerings).toEqual([expect.objectContaining({ availableCount: 1 })])
+  })
+
+  it('excludes a combo blocked only within the turnaround gap after `to` (write-side parity)', async () => {
+    const a = await makeOperator('A Rentals', 'a')
+    const klass = await makeClass({ operatorId: a.id, name: 'Compact', acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: a.id, name: 'Namba' })
+    // Capacity 1: a single road-legal AVAILABLE car of the class at the store.
+    await makeVehicle({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+    // A CONFIRMED booking whose startAt lands INSIDE the turnaround gap [TO, TO+60min):
+    // invisible to the renter window [FROM, TO) but blocking to booking creation, which
+    // scans [startAt, endAt + turnaround). TO = 14:00Z, turnaround 60 → gap = [14:00, 15:00).
+    await makeBooking({
+      operatorId: a.id,
+      classId: klass.id,
+      pickupLocationId: namba.id,
+      startAt: new Date('2026-08-01T14:30:00Z'),
+      endAt: new Date('2026-08-01T16:30:00Z'),
+      effectiveEndAt: new Date('2026-08-01T17:30:00Z'),
+    })
+
+    const offerings = await service.findOfferings({
+      planFilters: { locationIds: [namba.id] },
+      from: FROM,
+      to: TO,
+      locationById: locationMap(namba, a.name),
+      classById: new Map([[klass.id, klass]]),
+      requested: null,
+      turnaroundByLocationId: new Map([[namba.id, 60]]),
+    })
+
+    // The write-side rejects this combo (demand 1 >= capacity 1 over the
+    // turnaround-inclusive window), so the read-side must not advertise it.
+    expect(offerings).toEqual([])
+  })
+
+  it('still offers a combo when the only booking starts clear of the turnaround gap', async () => {
+    const a = await makeOperator('A Rentals', 'a')
+    const klass = await makeClass({ operatorId: a.id, name: 'Compact', acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: a.id, name: 'Namba' })
+    await makeVehicle({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+    // startAt = TO + turnaround (15:00Z) — the half-open effective window [FROM, 15:00)
+    // ends exactly here, so this booking does NOT overlap. Proves the window is not
+    // over-extended beyond the write-side's [startAt, endAt + turnaround).
+    await makeBooking({
+      operatorId: a.id,
+      classId: klass.id,
+      pickupLocationId: namba.id,
+      startAt: new Date('2026-08-01T15:00:00Z'),
+      endAt: new Date('2026-08-01T17:00:00Z'),
+      effectiveEndAt: new Date('2026-08-01T18:00:00Z'),
+    })
+
+    const offerings = await service.findOfferings({
+      planFilters: { locationIds: [namba.id] },
+      from: FROM,
+      to: TO,
+      locationById: locationMap(namba, a.name),
+      classById: new Map([[klass.id, klass]]),
+      requested: null,
+      turnaroundByLocationId: new Map([[namba.id, 60]]),
     })
 
     expect(offerings).toEqual([expect.objectContaining({ availableCount: 1 })])
@@ -241,6 +310,7 @@ describe('ClassOfferingService.findOfferings (#464)', () => {
       locationById: locationMap(namba, a.name),
       classById: new Map([[klass.id, klass]]),
       requested: null,
+      turnaroundByLocationId: new Map([[namba.id, 60]]),
     })
 
     expect(offerings).toEqual([])
@@ -261,6 +331,7 @@ describe('ClassOfferingService.findOfferings (#464)', () => {
       locationById: locationMap(namba, a.name),
       classById: new Map([[klass.id, klass]]),
       requested: new Set(['SCAR']),
+      turnaroundByLocationId: new Map([[namba.id, 60]]),
     })
 
     expect(offerings).toEqual([])
@@ -281,6 +352,7 @@ describe('ClassOfferingService.findOfferings (#464)', () => {
       locationById: new Map(),
       classById: new Map([[klass.id, klass]]),
       requested: null,
+      turnaroundByLocationId: new Map([[namba.id, 60]]),
     })
 
     expect(offerings).toEqual([])

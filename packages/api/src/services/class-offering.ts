@@ -6,6 +6,7 @@ import type {
   VehicleClass,
 } from '../repositories/types'
 import type { ClassRatePlan } from '../stores'
+import { MS_PER_MINUTE } from './booking-pricing-helpers'
 
 export interface FindOfferingsArgs {
   planFilters: ClassRatePlanFilters
@@ -13,6 +14,12 @@ export interface FindOfferingsArgs {
   to: Date
   locationById: Map<string, ResultLocation>
   classById: Map<string, VehicleClass>
+  /** Per-location turnaround buffer (minutes). The occupancy window scanned for
+   *  demand/capacity is extended to `to + turnaround` so the read-side matches the
+   *  turnaround-inclusive window booking creation checks — a plan whose location is
+   *  absent here is not a mappable storefront and its combo is dropped (parity with
+   *  `locationById`). */
+  turnaroundByLocationId: Map<string, number>
   requested: Set<string> | null
 }
 
@@ -45,11 +52,14 @@ export class ClassOfferingService {
     to,
     locationById,
     classById,
+    turnaroundByLocationId,
     requested,
   }: FindOfferingsArgs): Promise<ClassComboSearchResult[]> {
     const plans = await this.classRatePlanRepo.findActiveRatePlans(planFilters)
     const cards = await Promise.all(
-      plans.map((plan) => this.toCombo(plan, from, to, locationById, classById, requested)),
+      plans.map((plan) =>
+        this.toCombo(plan, from, to, locationById, classById, turnaroundByLocationId, requested),
+      ),
     )
     return cards.filter((c): c is ClassComboSearchResult => c !== null)
   }
@@ -60,11 +70,18 @@ export class ClassOfferingService {
     to: Date,
     locationById: Map<string, ResultLocation>,
     classById: Map<string, VehicleClass>,
+    turnaroundByLocationId: Map<string, number>,
     requested: Set<string> | null,
   ): Promise<ClassComboSearchResult | null> {
     // The plan's pickup location must be an in-scope active storefront (mappable).
     const location = locationById.get(plan.pickupLocationId)
     if (!location) return null
+
+    // The turnaround always comes from the storefront (notNull column), so a map
+    // miss means the same thing as a locationById miss: not a mappable storefront.
+    const turnaroundMinutes = turnaroundByLocationId.get(plan.pickupLocationId)
+    if (turnaroundMinutes === undefined) return null
+    const effectiveEndAt = new Date(to.getTime() + turnaroundMinutes * MS_PER_MINUTE)
 
     const vc = classById.get(plan.classId)
     const acrissCode = vc?.acrissCode ?? null
@@ -72,15 +89,20 @@ export class ClassOfferingService {
     if (requested && (acrissCode == null || !requested.has(acrissCode))) return null
 
     // availableCount = road-legal supply − overlapping demand (floating + specific),
-    // both keyed on the (operator, class, location) triple. asOf = the return date,
-    // so a combo never surfaces a class whose only cars lapse before `to` (§5.2).
+    // both keyed on the (operator, class, location) triple. The occupancy window is
+    // turnaround-extended to [from, effectiveEndAt) so it matches EXACTLY the window
+    // booking creation (and the DB trigger) checks at submit — otherwise a booking
+    // starting inside the turnaround gap [to, to + turnaround) is invisible here yet
+    // blocks the submit (the deal shows available but sells out at checkout). asOf
+    // stays `to` (the actual return), so a combo never surfaces a class whose only
+    // cars lapse before the renter returns (§5.2).
     const [capacity, demand] = await Promise.all([
       this.availabilityRepo.countClassCapacity(
         plan.operatorId,
         plan.classId,
         plan.pickupLocationId,
         from,
-        to,
+        effectiveEndAt,
         to,
       ),
       this.availabilityRepo.countClassDemand(
@@ -88,7 +110,7 @@ export class ClassOfferingService {
         plan.classId,
         plan.pickupLocationId,
         from,
-        to,
+        effectiveEndAt,
       ),
     ])
     const availableCount = Math.max(0, capacity - demand)

@@ -175,7 +175,12 @@ function makeRatePlan(overrides: Partial<Omit<ClassRatePlan, 'id' | 'createdAt' 
 // (operator, class, location) triple. The combo producer sizes availableCount by
 // the triple, not the assigned car, so a triple-matching booking is what a
 // sold-out combo needs (bookOverlapping's hardcoded triple only blocks the car).
-function bookClassDemand(operatorId: string, classId: string, pickupLocationId: string) {
+function bookClassDemand(
+  operatorId: string,
+  classId: string,
+  pickupLocationId: string,
+  times?: { startAt: Date; endAt: Date; effectiveEndAt: Date },
+) {
   return bookingRepo.create(SYSTEM_CONTEXT, {
     operatorId,
     renterId: 'u1',
@@ -184,9 +189,9 @@ function bookClassDemand(operatorId: string, classId: string, pickupLocationId: 
     assignedVehicleId: null,
     pickupLocationId,
     dropoffLocationId: pickupLocationId,
-    startAt: new Date('2026-08-01T09:00:00Z'),
-    endAt: new Date('2026-08-01T12:00:00Z'),
-    effectiveEndAt: new Date('2026-08-01T13:00:00Z'),
+    startAt: times?.startAt ?? new Date('2026-08-01T09:00:00Z'),
+    endAt: times?.endAt ?? new Date('2026-08-01T12:00:00Z'),
+    effectiveEndAt: times?.effectiveEndAt ?? new Date('2026-08-01T13:00:00Z'),
     status: 'CONFIRMED',
     source: 'DIRECT',
     fulfillmentMode: 'CLASS_COMBO',
@@ -570,6 +575,28 @@ describe('StorefrontDetailService.getDetail classOfferings (#464)', () => {
     await makeRatePlan({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
     // Consume the class's only unit of supply for the window (capacity 1, demand 1).
     await bookClassDemand(op.id, compact.id, namba.id)
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: namba.id, from: FROM, to: TO }),
+    )
+
+    expect(data.classOfferings).toEqual([])
+  })
+
+  it('omits a combo blocked only within the turnaround gap after `to` (write-side parity)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, name: 'Compact', acrissCode: 'CCAR' })
+    // The seeded store's defaultTurnaroundMinutes is 60, so the gap after TO (14:00Z)
+    // is [14:00, 15:00). A booking starting there is invisible to the renter window
+    // [FROM, TO) but blocks the submit — the read-side must not advertise it (#464 P1).
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await bookClassDemand(op.id, compact.id, namba.id, {
+      startAt: new Date('2026-08-01T14:30:00Z'),
+      endAt: new Date('2026-08-01T16:30:00Z'),
+      effectiveEndAt: new Date('2026-08-01T17:30:00Z'),
+    })
 
     const data = await okData(
       await service.getDetail(PUBLIC_CONTEXT, { locationId: namba.id, from: FROM, to: TO }),
