@@ -1,6 +1,8 @@
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import { detectImageType } from '../lib/image-signature'
 import type { CallerContext } from '../middleware/auth'
 import type { PhotoStorage, VehicleRepository } from '../repositories/types'
+import { assertFleetWriteWithinOperator, fleetWriteDenialResult } from '../tenancy'
 
 export const MAX_PHOTOS_PER_VEHICLE = 10
 export const MAX_FILE_SIZE = 5 * 1024 * 1024
@@ -8,11 +10,11 @@ const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'im
 
 export type UploadResult =
   | { ok: true; uploaded: string[]; total: number }
-  | { ok: false; error: string; status: number }
+  | { ok: false; error: string; status: number; code?: ErrorCode }
 
 export type DeleteResult =
   | { ok: true; remaining: number }
-  | { ok: false; error: string; status: number }
+  | { ok: false; error: string; status: number; code?: ErrorCode }
 
 type ValidatedFile = { file: File; bytes: Uint8Array }
 
@@ -22,7 +24,12 @@ export class VehiclePhotoService {
     private readonly storage: PhotoStorage,
   ) {}
 
-  async uploadPhotos(ctx: CallerContext, vehicleId: string, files: File[]): Promise<UploadResult> {
+  async uploadPhotos(
+    ctx: CallerContext,
+    vehicleId: string,
+    files: File[],
+    actingOperatorId?: string,
+  ): Promise<UploadResult> {
     if (files.length === 0) return { ok: false, status: 400, error: 'No file provided' }
     if (files.length > MAX_PHOTOS_PER_VEHICLE) {
       return {
@@ -39,6 +46,16 @@ export class VehiclePhotoService {
       if ('err' in result) return { ok: false, status: result.status, error: result.err }
       validated.push(result.ok)
     }
+
+    // #1260: the STAFF_ROLES gate is platform-only, so a PLATFORM_ADMIN reads
+    // every operator's vehicles and findById hands it any of them by raw id.
+    // Bind this photo write to the operator it picked. Placed after byte
+    // validation but before any R2 put, so a denied cross-tenant request never
+    // persists an object (mirrors MaintenanceService.toggleStatus).
+    const existing = await this.repo.findById(ctx, vehicleId)
+    if (!existing) return { ok: false, status: 404, error: 'Vehicle not found' }
+    const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, 'Vehicle not found')
 
     // Upload in parallel. Track successes so we can roll back if any put
     // rejects mid-batch or the DB append fails.
@@ -90,7 +107,22 @@ export class VehiclePhotoService {
     }
   }
 
-  async deletePhoto(ctx: CallerContext, vehicleId: string, url: string): Promise<DeleteResult> {
+  async deletePhoto(
+    ctx: CallerContext,
+    vehicleId: string,
+    url: string,
+    actingOperatorId?: string,
+  ): Promise<DeleteResult> {
+    // #1260: same acting-operator binding as uploadPhotos. Without it a platform
+    // admin could delete ANY operator's photo by raw id + url — the scoped
+    // removePhotoByUrl below clamps operator callers, but an `all`-scope caller
+    // needs the target operator named first. Denial uses the caller's own
+    // "Photo not found" so there is no cross-tenant existence oracle.
+    const existing = await this.repo.findById(ctx, vehicleId)
+    if (!existing) return { ok: false, status: 404, error: 'Photo not found' }
+    const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, 'Photo not found')
+
     const updated = await this.repo.removePhotoByUrl(ctx, vehicleId, url)
     if (!updated) {
       // Either the vehicle does not exist or the URL is not one of its photos.

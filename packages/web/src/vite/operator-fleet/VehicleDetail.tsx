@@ -186,7 +186,14 @@ export function VehicleDetail({ detail, locale, canWrite, pickedOperatorId }: Ve
         )
       )}
 
-      {canWrite && <PhotoUpload key={detail.id} vehicleId={detail.id} photos={photos} />}
+      {canWrite && (
+        <PhotoUpload
+          key={detail.id}
+          vehicleId={detail.id}
+          photos={photos}
+          pickedOperatorId={pickedOperatorId}
+        />
+      )}
     </div>
   )
 }

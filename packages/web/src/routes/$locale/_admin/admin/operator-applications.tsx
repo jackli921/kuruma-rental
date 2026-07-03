@@ -7,6 +7,7 @@ import {
   approveApplication,
   pendingOperatorApplicationsQueryOptions,
   rejectOperatorApplication,
+  remintInvite,
 } from '@/vite/admin/operator-applications/api'
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
@@ -22,9 +23,10 @@ import { useTranslations } from 'use-intl'
 //
 // Approve design: on success we do NOT invalidate the pending query, because
 // invalidating would drop the just-approved row before the admin can copy the
-// invite link. Instead we store {id, inviteUrl} in local state and pass it down
-// to the matching card, which enters a terminal "approved + invite reveal" state.
-// The admin refreshes the page to clear resolved rows.
+// invite link. Instead we accumulate invite links keyed by application id and
+// pass them down; each matching card enters a terminal "approved + invite reveal"
+// state. Keyed (not a single row) so approving a second application never drops
+// the first one's still-uncopied invite. The admin refreshes to clear resolved rows.
 export const Route = createFileRoute('/$locale/_admin/admin/operator-applications')({
   loader: ({ context }) =>
     context.queryClient.ensureQueryData(pendingOperatorApplicationsQueryOptions()),
@@ -37,9 +39,7 @@ function ApplicationsRoute() {
   const { data } = useSuspenseQuery(pendingOperatorApplicationsQueryOptions())
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
-  const [approvedInvite, setApprovedInvite] = useState<{ id: string; inviteUrl: string } | null>(
-    null,
-  )
+  const [approvedInvites, setApprovedInvites] = useState<Record<string, string>>({})
 
   const rejectMutation = useMutation({
     mutationFn: rejectOperatorApplication,
@@ -53,7 +53,15 @@ function ApplicationsRoute() {
     // Do NOT invalidate here — the approved row must stay visible so the admin can
     // copy the one-time invite link. The card enters a terminal approved state
     // until the admin manually refreshes.
-    onSuccess: (result, vars) => setApprovedInvite({ id: vars.id, inviteUrl: result.inviteUrl }),
+    onSuccess: (result, vars) =>
+      setApprovedInvites((prev) => ({ ...prev, [vars.id]: result.inviteUrl })),
+  })
+
+  const remintMutation = useMutation({
+    mutationFn: remintInvite,
+    // Replace the revealed link with the freshly-minted one in place.
+    onSuccess: (result, vars) =>
+      setApprovedInvites((prev) => ({ ...prev, [vars.id]: result.inviteUrl })),
   })
 
   return (
@@ -75,7 +83,22 @@ function ApplicationsRoute() {
             }
           : null
       }
-      approvedInvite={approvedInvite}
+      approvedInvites={approvedInvites}
+      onRemint={(id) => remintMutation.mutate({ id, csrfToken })}
+      remintingId={remintMutation.isPending ? (remintMutation.variables?.id ?? null) : null}
+      remintError={
+        remintMutation.isError
+          ? {
+              id: remintMutation.variables?.id ?? null,
+              // 404 (unknown / not approved) and 409 (owner already onboarded) are
+              // terminal: a retry can't succeed, so show "no longer available"
+              // instead of "try again". Anything else is a retryable failure.
+              terminal:
+                remintMutation.error instanceof ApiError &&
+                (remintMutation.error.status === 404 || remintMutation.error.status === 409),
+            }
+          : null
+      }
     />
   )
 }

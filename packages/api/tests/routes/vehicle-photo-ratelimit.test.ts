@@ -11,11 +11,19 @@ import {
 } from '../../src/repositories/in-memory'
 import { InMemoryPhotoStorage } from '../../src/repositories/in-memory/photo-storage'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
+import { TEST_OPERATOR_ID } from '../helpers/operator'
 
 const JPEG_HEADER = [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]
 
+// #1260: the default caller is PLATFORM_ADMIN, so every photo write names the
+// acting operator via ?operatorId=. All seeded vehicles are owned by
+// TEST_OPERATOR_ID. The rate-limit buckets key on the path id + user id (not the
+// query), so ?operatorId= leaves limiter behaviour unchanged.
+const OP = `operatorId=${TEST_OPERATOR_ID}`
+
 function vehicleInput(overrides?: { photos?: string[] }) {
   return {
+    operatorId: TEST_OPERATOR_ID,
     name: 'Test Car',
     description: 'A test vehicle',
     photos: [] as string[],
@@ -87,17 +95,17 @@ describe('photo upload rate limiting', () => {
     const vehicle = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
     const headers = await authHeaders()
 
-    const first = await ctx.app.request(`/vehicles/${vehicle.id}/photos`, {
+    const first = await ctx.app.request(`/vehicles/${vehicle.id}/photos?${OP}`, {
       method: 'POST',
       headers,
       body: jpegForm(),
     })
-    const second = await ctx.app.request(`/vehicles/${vehicle.id}/photos`, {
+    const second = await ctx.app.request(`/vehicles/${vehicle.id}/photos?${OP}`, {
       method: 'POST',
       headers,
       body: jpegForm(),
     })
-    const third = await ctx.app.request(`/vehicles/${vehicle.id}/photos`, {
+    const third = await ctx.app.request(`/vehicles/${vehicle.id}/photos?${OP}`, {
       method: 'POST',
       headers,
       body: jpegForm(),
@@ -115,22 +123,22 @@ describe('photo upload rate limiting', () => {
     const headersUserA = await authHeaders({ sub: 'user-a', role: 'PLATFORM_ADMIN' })
     const headersUserB = await authHeaders({ sub: 'user-b', role: 'PLATFORM_ADMIN' })
 
-    const userAv1 = await ctx.app.request(`/vehicles/${v1.id}/photos`, {
+    const userAv1 = await ctx.app.request(`/vehicles/${v1.id}/photos?${OP}`, {
       method: 'POST',
       headers: headersUserA,
       body: jpegForm(),
     })
-    const userAv1Again = await ctx.app.request(`/vehicles/${v1.id}/photos`, {
+    const userAv1Again = await ctx.app.request(`/vehicles/${v1.id}/photos?${OP}`, {
       method: 'POST',
       headers: headersUserA,
       body: jpegForm(),
     })
-    const userAv2 = await ctx.app.request(`/vehicles/${v2.id}/photos`, {
+    const userAv2 = await ctx.app.request(`/vehicles/${v2.id}/photos?${OP}`, {
       method: 'POST',
       headers: headersUserA,
       body: jpegForm(),
     })
-    const userBv1 = await ctx.app.request(`/vehicles/${v1.id}/photos`, {
+    const userBv1 = await ctx.app.request(`/vehicles/${v1.id}/photos?${OP}`, {
       method: 'POST',
       headers: headersUserB,
       body: jpegForm(),
@@ -148,7 +156,7 @@ describe('photo upload rate limiting', () => {
     const headers = await authHeaders()
 
     for (let i = 0; i < 5; i++) {
-      const res = await ctx.app.request(`/vehicles/${vehicle.id}/photos`, {
+      const res = await ctx.app.request(`/vehicles/${vehicle.id}/photos?${OP}`, {
         method: 'POST',
         headers,
         body: jpegForm(),
@@ -166,11 +174,11 @@ describe('photo upload rate limiting', () => {
     const headers = await authHeaders()
 
     const first = await ctx.app.request(
-      `/vehicles/${vehicle.id}/photos?url=${encodeURIComponent('https://test/a.jpg')}`,
+      `/vehicles/${vehicle.id}/photos?url=${encodeURIComponent('https://test/a.jpg')}&${OP}`,
       { method: 'DELETE', headers },
     )
     const second = await ctx.app.request(
-      `/vehicles/${vehicle.id}/photos?url=${encodeURIComponent('https://test/b.jpg')}`,
+      `/vehicles/${vehicle.id}/photos?url=${encodeURIComponent('https://test/b.jpg')}&${OP}`,
       { method: 'DELETE', headers },
     )
 
@@ -190,17 +198,17 @@ describe('photo upload rate limiting', () => {
     const v3 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
     const headers = await authHeaders()
 
-    const a = await ctx.app.request(`/vehicles/${v1.id}/photos`, {
+    const a = await ctx.app.request(`/vehicles/${v1.id}/photos?${OP}`, {
       method: 'POST',
       headers,
       body: jpegForm(),
     })
-    const b = await ctx.app.request(`/vehicles/${v2.id}/photos`, {
+    const b = await ctx.app.request(`/vehicles/${v2.id}/photos?${OP}`, {
       method: 'POST',
       headers,
       body: jpegForm(),
     })
-    const c = await ctx.app.request(`/vehicles/${v3.id}/photos`, {
+    const c = await ctx.app.request(`/vehicles/${v3.id}/photos?${OP}`, {
       method: 'POST',
       headers,
       body: jpegForm(),

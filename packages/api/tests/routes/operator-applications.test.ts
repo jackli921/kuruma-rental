@@ -44,10 +44,18 @@ describe('POST /operator-applications', () => {
     expect(res.status).toBe(400)
     expect(await res.json()).toMatchObject({ success: false })
   })
-  test('honeypot filled → 400 (silent bot reject)', async () => {
-    const res = await post({ ...valid, honeypot: 'i-am-a-bot' })
-    expect(res.status).toBe(400)
-    expect(await res.json()).toMatchObject({ success: false })
+  test('honeypot filled → silent 201, but nothing is persisted', async () => {
+    const { app, operatorApplicationRepo } = makeApp()
+    const res = await app.request('/operator-applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...valid, honeypot: 'i-am-a-bot' }),
+    })
+    // Indistinguishable from a real success so the bot learns nothing.
+    expect(res.status).toBe(201)
+    expect(await res.json()).toMatchObject({ success: true, data: { status: 'PENDING' } })
+    // The trap persists nothing: a real human can still apply with that email.
+    expect(await operatorApplicationRepo.list({ limit: 100, offset: 0 })).toHaveLength(0)
   })
   test('duplicate live email → 409', async () => {
     await post(valid)

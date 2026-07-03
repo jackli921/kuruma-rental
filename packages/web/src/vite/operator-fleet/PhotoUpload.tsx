@@ -22,6 +22,9 @@ interface PhotoUploadProps {
   readonly vehicleId: string | null
   /** Current photo URLs, passed down from the fleet read model. Defaults to []. */
   readonly photos?: readonly string[]
+  // #1260: a picker-admin binds photo writes to the operator it picked; undefined
+  // for an operator session (the API scopes those by the session cookie).
+  readonly pickedOperatorId?: string | undefined
 }
 
 /**
@@ -31,7 +34,7 @@ interface PhotoUploadProps {
  * re-derives. A client-side size guard mirrors the server's per-file limit
  * (FC/IS — the pure `exceedsLimit` decision; mutations are the I/O shell).
  */
-export function PhotoUpload({ vehicleId, photos = [] }: PhotoUploadProps) {
+export function PhotoUpload({ vehicleId, photos = [], pickedOperatorId }: PhotoUploadProps) {
   const t = useTranslations('business.vehicles.photos')
   const queryClient = useQueryClient()
   // Cookie writes need the double-submit CSRF token echoed in the header (#1304).
@@ -44,7 +47,7 @@ export function PhotoUpload({ vehicleId, photos = [] }: PhotoUploadProps) {
   const uploadMutation = useMutation({
     mutationFn: (files: File[]) => {
       if (!vehicleId) throw new Error('vehicleId required to upload')
-      return uploadVehiclePhotos(vehicleId, files, csrfToken)
+      return uploadVehiclePhotos(vehicleId, files, csrfToken, pickedOperatorId)
     },
     onSuccess: invalidateFleet,
     onError: (e) => setError(e instanceof Error ? e.message : t('uploading')),
@@ -53,7 +56,7 @@ export function PhotoUpload({ vehicleId, photos = [] }: PhotoUploadProps) {
   const deleteMutation = useMutation({
     mutationFn: (url: string) => {
       if (!vehicleId) throw new Error('vehicleId required to delete')
-      return deleteVehiclePhoto(vehicleId, url, csrfToken)
+      return deleteVehiclePhoto(vehicleId, url, csrfToken, pickedOperatorId)
     },
     onSuccess: invalidateFleet,
     onError: (e) => setError(e instanceof Error ? e.message : t('deletePhoto')),

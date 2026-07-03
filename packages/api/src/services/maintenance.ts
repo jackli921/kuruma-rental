@@ -1,3 +1,4 @@
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import type { CallerContext } from '../middleware/auth'
 import type {
   MaintenanceLog,
@@ -6,10 +7,11 @@ import type {
   VehicleRepository,
 } from '../repositories/types'
 import type { Vehicle } from '../stores'
+import { assertFleetWriteWithinOperator, fleetWriteDenialResult } from '../tenancy'
 
 export type ToggleStatusResult =
   | { ok: true; vehicle: Vehicle; log?: MaintenanceLog }
-  | { ok: false; status: 400 | 404 | 409; error: string }
+  | { ok: false; status: 400 | 404 | 409 | 422; error: string; code?: ErrorCode }
 
 export class MaintenanceService {
   constructor(
@@ -23,6 +25,7 @@ export class MaintenanceService {
     vehicleId: string,
     status: Vehicle['status'],
     reason?: string,
+    actingOperatorId?: string,
     now: Date = new Date(),
   ): Promise<ToggleStatusResult> {
     // Reads + validation outside the transaction
@@ -30,6 +33,12 @@ export class MaintenanceService {
     if (!existing) {
       return { ok: false, status: 404, error: 'Vehicle not found' }
     }
+
+    // #1260: an all-scope caller (PLATFORM_ADMIN / legacy STAFF) reads every
+    // operator's vehicles, so bind this status write to the operator it picked —
+    // no pick -> 422, wrong pick -> 404 (mirrors VehicleService.update).
+    const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, 'Vehicle not found')
 
     if (status === 'MAINTENANCE' && !reason?.trim()) {
       return {

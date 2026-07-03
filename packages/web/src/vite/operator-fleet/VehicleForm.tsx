@@ -191,7 +191,7 @@ export function VehicleForm({
     // it in conditionally — an operator session's body never gets an operatorId key.
     mutationFn: (data: CreateVehicleInput) =>
       isEditMode
-        ? updateVehicle(vehicle.id, data, csrfToken)
+        ? updateVehicle(vehicle.id, data, csrfToken, pickedOperatorId)
         : createVehicle(
             pickedOperatorId ? { ...data, operatorId: pickedOperatorId } : data,
             csrfToken,
