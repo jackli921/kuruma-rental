@@ -468,6 +468,23 @@ export interface AddOnTemplate {
   updatedAt: Date
 }
 
+/**
+ * Platform-owned, pre-translated insurance TEMPLATE (catalog i18n, slice 3).
+ * Structurally identical to {@link AddOnTemplate} — the two catalogs share one
+ * `catalogTemplateStatusEnum` and the same {en, ja?, zh?} bundle shape — but a
+ * distinct type keeps the add-on and insurance repositories from being wired to
+ * each other's rows. `key` = slugify(canonical English name).
+ */
+export interface InsuranceTemplate {
+  id: string
+  key: string
+  name: LocalizedText
+  description: LocalizedText | null
+  status: CatalogTemplateStatus
+  createdAt: Date
+  updatedAt: Date
+}
+
 export interface FeeSchedule {
   id: string
   /** Owning operator (marketplace tenant, #405). NOT NULL in the DB. */

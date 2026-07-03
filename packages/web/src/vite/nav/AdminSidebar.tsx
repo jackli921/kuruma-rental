@@ -9,6 +9,7 @@ import {
   FileCheck,
   Flag,
   LayoutDashboard,
+  Library,
   ShieldCheck,
   Users,
 } from 'lucide-react'
@@ -26,6 +27,7 @@ export const SIDEBAR_ITEMS = [
   { to: '/$locale/admin/documents', icon: FileCheck, labelKey: 'nav.documents' },
   { to: '/$locale/admin/customers', icon: Users, labelKey: 'nav.customers' },
   { to: '/$locale/admin/governance', icon: ShieldCheck, labelKey: 'nav.governance' },
+  { to: '/$locale/admin/templates', icon: Library, labelKey: 'nav.templates' },
   { to: '/$locale/admin/feature-flags', icon: Flag, labelKey: 'nav.featureFlags' },
 ] as const
 

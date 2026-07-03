@@ -23,6 +23,10 @@ export class DrizzleAddOnTemplateRepository implements AddOnTemplateRepository {
       .orderBy(asc(addOnTemplates.key))
   }
 
+  async findAll(): Promise<AddOnTemplate[]> {
+    return this.db.select(TEMPLATE_COLUMNS).from(addOnTemplates).orderBy(asc(addOnTemplates.key))
+  }
+
   async findById(id: string): Promise<AddOnTemplate | undefined> {
     const [row] = await this.db
       .select(TEMPLATE_COLUMNS)

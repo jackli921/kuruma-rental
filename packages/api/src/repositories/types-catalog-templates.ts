@@ -1,0 +1,44 @@
+import type { AddOnTemplate, InsuranceTemplate } from '../stores'
+
+// Platform-owned catalog TEMPLATE repositories (catalog i18n, epic #385 / #1319).
+// Split into their own module to keep the repositories/types barrel under the
+// file-size cap; re-exported there so callers' imports don't change.
+
+/**
+ * The platform-owned add-on TEMPLATE catalog (catalog i18n, epic #385). Global,
+ * not tenant-scoped — every operator picks from the same list — so NO ctx: a
+ * template carries no operator, and the read exposes only ACTIVE rows (a picker
+ * never offers a retired template). The service resolves each row's LocalizedText
+ * name to the caller locale before it reaches the wire.
+ */
+export interface AddOnTemplateRepository {
+  findActive(): Promise<AddOnTemplate[]>
+  /**
+   * EVERY template regardless of status, key-ordered — the platform-admin library
+   * read (#1319). Distinct from `findActive` (the operator picker): the admin must
+   * see the ARCHIVED, en-only rows the slice-2 backfill mints so it can translate
+   * and promote them. Never reaches an operator/renter.
+   */
+  findAll(): Promise<AddOnTemplate[]>
+  /**
+   * Look up ONE template by id — the write-path primitive (catalog i18n slice 2):
+   * a create resolves the picked template's en name for the still-NOT-NULL `name`
+   * column. NOT status-filtered (returns ARCHIVED too); the create service applies
+   * the ACTIVE-only policy. Undefined when no row matches.
+   */
+  findById(id: string): Promise<AddOnTemplate | undefined>
+}
+
+/**
+ * The platform-owned insurance TEMPLATE catalog (catalog i18n, slice 3). Mirrors
+ * {@link AddOnTemplateRepository} but over `insurance_templates`. Global, not
+ * tenant-scoped, so no ctx. `findAll` powers the platform-admin library (#1319) —
+ * the insurance catalog had no repository until now (only schema + backfill + seed),
+ * so this is its first read path.
+ */
+export interface InsuranceTemplateRepository {
+  /** EVERY template regardless of status, key-ordered — the admin library read. */
+  findAll(): Promise<InsuranceTemplate[]>
+  /** One template by id, any status; undefined when no row matches. */
+  findById(id: string): Promise<InsuranceTemplate | undefined>
+}
