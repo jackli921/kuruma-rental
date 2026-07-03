@@ -1,5 +1,5 @@
 import { BookingConfirmationView } from '@/vite/bookings/BookingConfirmationView'
-import { bookingByIdQueryOptions } from '@/vite/bookings/api'
+import { bookingDetailQueryOptions } from '@/vite/bookings/api'
 import { indexThreadIdsByBooking, threadsQueryOptions } from '@/vite/messaging'
 import { useSession } from '@/vite/session'
 import { classByIdQueryOptions } from '@/vite/vehicles/classes'
@@ -25,7 +25,7 @@ export const Route = createFileRoute('/$locale/_renter/bookings/confirmation')({
   loader: async ({ context, deps }) => {
     if (!deps.bookingId) throw notFound()
     const booking = await context.queryClient.ensureQueryData(
-      bookingByIdQueryOptions(deps.bookingId),
+      bookingDetailQueryOptions(deps.bookingId),
     )
     if (!booking) throw notFound()
     const vehicleClass = booking.classId
@@ -42,7 +42,7 @@ function BookingConfirmationRoute() {
   // self-cancel — which invalidates ['bookings'] — re-renders this page in its
   // CANCELLED state and drops the cancel control (mirrors the operator trip-detail
   // page, #616). Loader data is a one-shot snapshot that would stay stale.
-  const { data: booking } = useSuspenseQuery(bookingByIdQueryOptions(initialBooking.id))
+  const { data: booking } = useSuspenseQuery(bookingDetailQueryOptions(initialBooking.id))
   // CSRF for the self-cancel write; cached by the `_renter` layout, so this reads
   // instantly. `null` (signed-out edge) simply hides the cancel control.
   const { data: session } = useSession()
