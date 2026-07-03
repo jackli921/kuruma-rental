@@ -12,6 +12,7 @@ import { InMemoryVehicleBlockRepository } from '../repositories/in-memory/vehicl
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
 import type { AvailabilityFilters, AvailabilityRepository } from '../repositories/types'
 import type { ClassRatePlan, Location, Operator, Region, Vehicle, VehicleClass } from '../stores'
+import { ClassOfferingService } from './class-offering'
 import { FlatSearchService } from './flat-search'
 
 const FROM = new Date('2026-08-01T10:00:00Z')
@@ -70,7 +71,7 @@ beforeEach(() => {
     availabilityRepo,
     classRepo,
     regionRepo,
-    classRatePlanRepo,
+    new ClassOfferingService(classRatePlanRepo, availabilityRepo),
   )
 })
 
@@ -408,7 +409,7 @@ describe('FlatSearchService.search region filter (#394)', () => {
       recording,
       classRepo,
       new InMemoryRegionRepository(REGIONS),
-      classRatePlanRepo,
+      new ClassOfferingService(classRatePlanRepo, recording),
     )
 
     await scoped.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_osaka' })
@@ -502,7 +503,7 @@ describe('FlatSearchService.search CLASS_COMBO producer (#464)', () => {
       repo,
       classRepo,
       new InMemoryRegionRepository(REGIONS),
-      classRatePlanRepo,
+      new ClassOfferingService(classRatePlanRepo, repo),
     )
     return { repo, service }
   }
