@@ -44,9 +44,10 @@ export const addOnOptions = pgTable(
     name: text('name').notNull(),
     description: text('description'),
     // Catalog i18n (slice 2): the platform template this add-on instances — the
-    // template supplies the localized name. Nullable through PR1 (the backfill
-    // sets every active row); NOT NULL in PR2 (slice 5). onDelete 'restrict'
-    // matches the operators FK convention — a referenced template can't vanish.
+    // template supplies the localized name. STAYS nullable (#1437 cancelled the
+    // slice-5 NOT-NULL flip): a SELF-AUTHORED row is legitimately null here and
+    // carries nameI18n instead. onDelete 'restrict' matches the operators FK
+    // convention — a referenced template can't vanish.
     templateId: text('templateId').references(() => addOnTemplates.id, { onDelete: 'restrict' }),
     // Operator's reworded description as a PARTIAL locale bag (P1-a override type,
     // NOT LocalizedText — an operator may author one locale only; deferred MT
@@ -68,21 +69,22 @@ export const addOnOptions = pgTable(
     // Composite-unique so a future composite FK can seal a referrer to the
     // add-on's own tenant (mirrors insurance_options_operatorId_id_unique).
     unique('add_on_options_operatorId_id_unique').on(table.operatorId, table.id),
-    // Name uniqueness scoped to ACTIVE rows so archiving frees the name for
-    // reuse (mirrors insurance_options_active_name_unique). PARTIAL index.
+    // Name uniqueness scoped to ACTIVE rows so archiving frees the name for reuse
+    // (mirrors insurance_options_active_name_unique). PARTIAL index. Now PERMANENT
+    // (#1437): a SELF-AUTHORED row's `name` mirror (= nameI18n.en) is its identity and
+    // this index is its dup seal — the slice-5 drop of name/this index is cancelled.
     uniqueIndex('add_on_options_active_name_unique')
       .on(table.operatorId, table.name)
       .where(sql`status = 'ACTIVE'`),
     // Leading FK-cover index (lint-fk-indexes counts only the LEADING column of an
-    // index; PR2's composite would leave templateId trailing and uncounted).
+    // index; a composite would leave templateId trailing and uncounted).
     index('idx_add_on_options_templateId').on(table.templateId),
     // Catalog i18n (P1-b): an operator can't hold the same template twice while
     // ACTIVE. The WHERE predicate is the OPERATOR ROW status (add_on_status), NOT
-    // the template status (which gates picker visibility, a separate axis). Kept
-    // ALONGSIDE active_name_unique through PR1 (expand-contract): a partial unique
-    // on templateId does not catch duplicate NULLs, so null-templateId rows in the
-    // migration-before-code window stay guarded by the name index; active_name_unique
-    // drops with the name column in PR2 (slice 5).
+    // the template status (which gates picker visibility, a separate axis). Coexists
+    // with active_name_unique: a partial unique on templateId does not catch NULLs,
+    // and both indexes are now permanent (#1437 keeps the name column + its seal for
+    // self-authored rows; the slice-5 drop is cancelled).
     uniqueIndex('add_on_options_active_template_unique')
       .on(table.operatorId, table.templateId)
       .where(sql`status = 'ACTIVE'`),

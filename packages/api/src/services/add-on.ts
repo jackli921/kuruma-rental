@@ -133,6 +133,13 @@ export class AddOnService {
     const duplicate = await this.repo.findActiveByOperatorAndTemplate(data.operatorId, templateId)
     if (duplicate) return { ok: false, error: DUPLICATE_TEMPLATE_MESSAGE, status: 409 }
 
+    // A picked create writes name = template.name.en, which shares the active-name
+    // index with self-authored rows (§4.5). If the operator already offers a
+    // self-authored item of that exact name, this is a NAME clash — report it as one
+    // (the operator can archive that item) rather than a misleading "template" 409.
+    const nameClash = await this.repo.findActiveByOperatorAndName(data.operatorId, template.name.en)
+    if (nameClash) return { ok: false, error: DUPLICATE_NAME_MESSAGE, status: 409 }
+
     try {
       const option = await this.repo.create({
         operatorId: data.operatorId,

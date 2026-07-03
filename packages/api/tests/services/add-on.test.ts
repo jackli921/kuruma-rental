@@ -179,6 +179,19 @@ describe('AddOnService', () => {
         expect(result.error).toBe('You already offer an add-on with this name')
       }
     })
+
+    it('rejects picking a template whose en name collides with an existing self-authored item (name 409)', async () => {
+      // The child_seat template's en name is 'Child seat'; a self-authored item of the
+      // same name shares the active-name index, so this is a NAME clash, not a template
+      // clash — the message must point at the name the operator can actually fix.
+      await service.create(ctxFor(opA), selfAuthoredInput(opA, { en: 'Child seat' }), LOCALE)
+      const result = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.status).toBe(409)
+        expect(result.error).toBe('You already offer an add-on with this name')
+      }
+    })
   })
 
   describe('update', () => {
