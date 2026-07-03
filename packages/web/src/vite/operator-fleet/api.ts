@@ -85,9 +85,11 @@ export function operatorFleetQueryOptions(pickedOperatorId?: string) {
 }
 
 // --- Mutations (cookie-based; consumed by the #526 follow-up slices) ----------
-// All write paths are operator-scoped server-side; the client never names a
-// tenant. Each unwraps the ok() envelope and throws ApiError on failure so the
-// caller's useMutation onError can surface it.
+// Write paths are operator-scoped server-side by the session cookie. An operator
+// session names no tenant; a picker-admin (bypass caller) MUST name the operator
+// it picked (#1260 `withOperatorScope`), or the API returns 422 OPERATOR_REQUIRED.
+// Each unwraps the ok() envelope and throws ApiError on failure so the caller's
+// useMutation onError can surface it.
 //
 // #817: these write endpoints return the *bare* vehicle row (shared `Vehicle` =
 // `VehicleBase`, with none of the fleet-overview enrichment — `utilization`,
@@ -116,6 +118,18 @@ async function writeJson<T>(
   return unwrap(res, schema)
 }
 
+// #1260: a picker-admin (bypass caller) must name the operator it acts as on every
+// fleet write, so the API can bind the write to the picked tenant instead of
+// inferring it from the target row (the closed cross-tenant hole). Append
+// `?operatorId=` ONLY when an operator is picked; an operator session passes
+// undefined and the server scopes by the session cookie. NOT buildScopeParam,
+// whose unpicked `includeAll=true` default is a read-only concept.
+function withOperatorScope(path: string, pickedOperatorId: string | undefined): string {
+  if (!pickedOperatorId) return path
+  const sep = path.includes('?') ? '&' : '?'
+  return `${path}${sep}operatorId=${encodeURIComponent(pickedOperatorId)}`
+}
+
 export function createVehicle(data: CreateVehicleInput, csrfToken: string): Promise<VehicleRow> {
   return writeJson('/vehicles', 'POST', data, csrfToken, vehicleRowSchema)
 }
@@ -124,9 +138,10 @@ export function updateVehicle(
   id: string,
   data: UpdateVehicleInput,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<VehicleRow> {
   return writeJson(
-    `/vehicles/${encodeURIComponent(id)}`,
+    withOperatorScope(`/vehicles/${encodeURIComponent(id)}`, pickedOperatorId),
     'PATCH',
     data,
     csrfToken,
@@ -139,10 +154,11 @@ export function updateVehicleStatus(
   status: VehicleStatus,
   csrfToken: string,
   reason?: string,
+  pickedOperatorId?: string,
 ): Promise<VehicleRow> {
   const body = reason != null ? { status, reason } : { status }
   return writeJson(
-    `/vehicles/${encodeURIComponent(id)}/status`,
+    withOperatorScope(`/vehicles/${encodeURIComponent(id)}/status`, pickedOperatorId),
     'PATCH',
     body,
     csrfToken,
@@ -154,9 +170,10 @@ export function bulkUpdateVehicleStatus(
   vehicleIds: string[],
   status: BulkVehicleStatus,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<VehicleRow[]> {
   return writeJson(
-    '/vehicles/bulk-status',
+    withOperatorScope('/vehicles/bulk-status', pickedOperatorId),
     'PATCH',
     { vehicleIds, status },
     csrfToken,
@@ -164,12 +181,19 @@ export function bulkUpdateVehicleStatus(
   )
 }
 
-export async function retireVehicle(id: string, csrfToken: string): Promise<VehicleRow> {
-  const res = await fetch(`${getApiBaseUrl()}/vehicles/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrfToken },
-  })
+export async function retireVehicle(
+  id: string,
+  csrfToken: string,
+  pickedOperatorId?: string,
+): Promise<VehicleRow> {
+  const res = await fetch(
+    `${getApiBaseUrl()}${withOperatorScope(`/vehicles/${encodeURIComponent(id)}`, pickedOperatorId)}`,
+    {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'X-CSRF-Token': csrfToken },
+    },
+  )
   return unwrap(res, vehicleRowSchema)
 }
 
@@ -177,15 +201,19 @@ export async function uploadVehiclePhotos(
   vehicleId: string,
   files: readonly File[],
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<PhotoUploadResult> {
   const formData = new FormData()
   for (const file of files) formData.append('file', file)
-  const res = await fetch(`${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/photos`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrfToken },
-    body: formData,
-  })
+  const res = await fetch(
+    `${getApiBaseUrl()}${withOperatorScope(`/vehicles/${encodeURIComponent(vehicleId)}/photos`, pickedOperatorId)}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: formData,
+    },
+  )
   return unwrap(res, photoUploadResultSchema)
 }
 
@@ -193,8 +221,12 @@ export async function deleteVehiclePhoto(
   vehicleId: string,
   photoUrl: string,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<PhotoDeleteResult> {
-  const url = `${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/photos?url=${encodeURIComponent(photoUrl)}`
+  const url = `${getApiBaseUrl()}${withOperatorScope(
+    `/vehicles/${encodeURIComponent(vehicleId)}/photos?url=${encodeURIComponent(photoUrl)}`,
+    pickedOperatorId,
+  )}`
   const res = await fetch(url, {
     method: 'DELETE',
     credentials: 'include',

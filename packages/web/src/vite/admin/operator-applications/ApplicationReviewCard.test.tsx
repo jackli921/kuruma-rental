@@ -1,3 +1,7 @@
+import {
+  OPERATOR_APPLICATION_BUSINESS_TYPES,
+  OPERATOR_APPLICATION_FLEET_SIZES,
+} from '@kuruma/shared/enums'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
@@ -46,6 +50,24 @@ describe('ApplicationReviewCard', () => {
     expect(screen.queryByText('taro@example.com')).not.toBeNull()
   })
 
+  it.each(OPERATOR_APPLICATION_FLEET_SIZES)(
+    'renders fleet size %s as its localized label, never the raw code',
+    (size) => {
+      renderCard({ application: { ...application, estimatedFleetSize: size } })
+      expect(screen.queryByText(en.admin.applications.fleetSize[size])).not.toBeNull()
+      expect(screen.queryByText(size)).toBeNull()
+    },
+  )
+
+  it.each(OPERATOR_APPLICATION_BUSINESS_TYPES)(
+    'renders business type %s as its localized label, never the raw code',
+    (type) => {
+      renderCard({ application: { ...application, businessType: type } })
+      expect(screen.queryByText(en.admin.applications.businessType[type])).not.toBeNull()
+      expect(screen.queryByText(type)).toBeNull()
+    },
+  )
+
   it('disables the Reject button when the textarea is empty', () => {
     renderCard()
     const button = screen.getByRole('button', { name: en.admin.applications.reject })
@@ -74,7 +96,9 @@ describe('ApplicationReviewCard', () => {
         website: 'https://osaka-cars.example.com',
       },
     })
-    expect(screen.queryByText('COMPANY')).not.toBeNull()
+    // Business type renders as a localized label, not the raw enum value.
+    expect(screen.queryByText('Company')).not.toBeNull()
+    expect(screen.queryByText('COMPANY')).toBeNull()
     expect(screen.queryByText('We run a fleet in Kansai.')).not.toBeNull()
     const link = screen.getByRole('link', { name: 'https://osaka-cars.example.com' })
     expect(link).toHaveAttribute('href', 'https://osaka-cars.example.com')
@@ -122,5 +146,61 @@ describe('ApplicationReviewCard', () => {
     const alerts = screen.getAllByRole('alert')
     const texts = alerts.map((el) => el.textContent)
     expect(texts.some((t) => t?.includes(en.admin.applications.alreadyReviewed))).toBe(true)
+  })
+
+  it('in the reveal state, renders a Regenerate button that calls onRemint when clicked', async () => {
+    const onRemint = vi.fn()
+    renderCard({ inviteUrl: '/provider/invite/tok_abc', onRemint })
+    const button = screen.getByRole('button', { name: en.admin.applications.regenerate })
+    await userEvent.click(button)
+    expect(onRemint).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables the Regenerate button and shows a pending label while reminting', () => {
+    renderCard({ inviteUrl: '/provider/invite/tok_abc', onRemint: vi.fn(), isReminting: true })
+    const button = screen.getByRole('button', { name: en.admin.applications.regenerating })
+    expect(button).toBeDisabled()
+  })
+
+  it('announces a remint error via role=alert in the reveal state', () => {
+    renderCard({
+      inviteUrl: '/provider/invite/tok_abc',
+      onRemint: vi.fn(),
+      remintError: en.admin.applications.regenerateFailed,
+    })
+    const alerts = screen.getAllByRole('alert')
+    expect(
+      alerts.some((el) => el.textContent?.includes(en.admin.applications.regenerateFailed)),
+    ).toBe(true)
+  })
+
+  it('omits the Regenerate button when no onRemint handler is provided', () => {
+    renderCard({ inviteUrl: '/provider/invite/tok_abc' })
+    expect(screen.queryByRole('button', { name: en.admin.applications.regenerate })).toBeNull()
+  })
+
+  it('resets Copied and focuses the fresh link when the invite is regenerated in place', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const props = { application, onReject: vi.fn(), onApprove: vi.fn(), onRemint: vi.fn() }
+    const { rerender } = render(
+      <IntlProvider locale="en" messages={en}>
+        <ApplicationReviewCard {...props} inviteUrl="/provider/invite/tok_old" />
+      </IntlProvider>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: en.admin.applications.copy }))
+    expect(screen.getByRole('button', { name: en.admin.applications.copied })).not.toBeNull()
+
+    // Regenerate swaps the link A -> B. Copied must revert (it must not keep vouching
+    // for the stale, possibly-revoked link), and focus moves to the fresh link so the
+    // in-place <input value> change is announced to assistive tech.
+    rerender(
+      <IntlProvider locale="en" messages={en}>
+        <ApplicationReviewCard {...props} inviteUrl="/provider/invite/tok_new" />
+      </IntlProvider>,
+    )
+    expect(screen.getByRole('button', { name: en.admin.applications.copy })).not.toBeNull()
+    expect(screen.queryByRole('button', { name: en.admin.applications.copied })).toBeNull()
+    expect(document.activeElement).toBe(screen.getByDisplayValue('/provider/invite/tok_new'))
   })
 })

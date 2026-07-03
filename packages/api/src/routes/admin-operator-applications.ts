@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { requirePlatformAdmin, requireUser, toCallerContext } from '../middleware/auth'
 import type { OperatorApplicationService } from '../services/operator-application'
-import { fail, ok, parseBody, parseId } from './helpers'
+import { fail, ok, parseBody, parseId, parsePagination } from './helpers'
 
 // Type guard over the closed status set: a query param is an untrusted string, so
 // narrow it to the enum before it reaches the service (guard over an `as` cast).
@@ -43,7 +43,17 @@ export function createAdminOperatorApplicationRoutes(service: OperatorApplicatio
         // silent empty result set indistinguishable from "no matching rows".
         return fail(c, 'invalid status', 400)
       }
-      const rows = await service.list(statusParam)
+      // Always-capped page (#1371a): the queue never returns the whole table as
+      // REJECTED history accumulates. Newest-first; `offset` walks older pages.
+      const page = parsePagination(c, { defaultLimit: 50, maxLimit: 100 })
+      if (!page.ok) return page.response
+      // Conditional spread (not `status: statusParam`) so we never pass an explicit
+      // `undefined` — exactOptionalPropertyTypes forbids it on the optional field.
+      const rows = await service.list({
+        ...(statusParam !== undefined ? { status: statusParam } : {}),
+        limit: page.limit,
+        offset: page.offset,
+      })
       return ok(c, rows)
     })
     .post('/admin/operator-applications/:id/reject', async (c) => {
@@ -79,5 +89,17 @@ export function createAdminOperatorApplicationRoutes(service: OperatorApplicatio
         inviteUrl: result.inviteUrl,
         expiresAt: result.expiresAt,
       })
+    })
+    .post('/admin/operator-applications/:id/remint-invite', async (c) => {
+      const user = requireUser(c)
+      requirePlatformAdmin(toCallerContext(user))
+
+      const idr = parseId(c)
+      if (!idr.ok) return idr.response
+      // Re-issue the OWNER invite for an already-approved application (#1370).
+      // NotFoundError (unknown id) → 404. ConflictError (not approved / owner
+      // already onboarded) → 409. No body: the applicant/operator are immutable.
+      const result = await service.remintInvite(idr.id, user.id)
+      return ok(c, { inviteUrl: result.inviteUrl, expiresAt: result.expiresAt })
     })
 }

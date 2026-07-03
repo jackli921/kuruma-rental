@@ -924,7 +924,21 @@
         "submit": "申請を送信する",
         "submitting": "送信中...",
         "individual": "個人",
-        "company": "法人"
+        "company": "法人",
+        "fleetSizePlaceholder": "台数を選択してください",
+        "businessTypePlaceholder": "選択してください",
+        "errors": {
+          "businessName": "事業者名を入力してください。",
+          "contactName": "担当者名を入力してください。",
+          "contactEmail": "有効なメールアドレスを入力してください。",
+          "contactPhone": "有効な電話番号を入力してください。",
+          "serviceArea": "対応エリアを入力してください。",
+          "estimatedFleetSize": "台数を選択してください。",
+          "website": "http:// または https:// で始まる有効なURLを入力してください。",
+          "businessLicenseNumber": "免許番号を短くしてください。",
+          "message": "メッセージを短くしてください。",
+          "consent": "申請の前に同意していただく必要があります。"
+        }
       },
       "errors": {
         "generic": "申請を送信できませんでした。もう一度お試しください。",
@@ -1380,6 +1394,16 @@
       "serviceAreaLabel": "サービスエリア",
       "fleetSizeLabel": "想定車両台数",
       "businessTypeLabel": "事業形態",
+      "fleetSize": {
+        "1-5": "1〜5台",
+        "6-20": "6〜20台",
+        "21-50": "21〜50台",
+        "50+": "50台以上"
+      },
+      "businessType": {
+        "INDIVIDUAL": "個人",
+        "COMPANY": "法人"
+      },
       "websiteLabel": "ウェブサイト",
       "messageLabel": "メッセージ",
       "submittedLabel": "申請日",
@@ -1393,6 +1417,10 @@
       "copy": "コピー",
       "copied": "コピーしました",
       "approved": "承認済み",
+      "regenerate": "リンクを再発行",
+      "regenerating": "再発行中…",
+      "regenerateFailed": "招待リンクを再発行できませんでした。もう一度お試しください。",
+      "regenerateUnavailable": "この招待はもう再発行できません。オーナーはすでにオンボーディング済みの可能性があります。",
       "alreadyReviewed": "この申請はすでに審査済みか、メールアドレスがすでに事業者に登録されています。",
       "approveFailed": "申請を承認できませんでした。もう一度お試しください。",
       "loadError": "申請キューを読み込めませんでした。",

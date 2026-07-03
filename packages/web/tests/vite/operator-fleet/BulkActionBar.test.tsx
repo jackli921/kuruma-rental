@@ -31,6 +31,7 @@ function renderBar(props: {
   selectedIds: string[]
   onDone?: () => void
   onClear?: () => void
+  pickedOperatorId?: string
 }): { onDone: ReturnType<typeof vi.fn>; onClear: ReturnType<typeof vi.fn> } & ReturnType<
   typeof render
 > {
@@ -44,6 +45,7 @@ function renderBar(props: {
           selectedIds={props.selectedIds}
           onDone={props.onDone ?? onDone}
           onClear={props.onClear ?? onClear}
+          pickedOperatorId={props.pickedOperatorId}
         />
       </IntlProvider>
     </QueryClientProvider>,
@@ -83,6 +85,7 @@ describe('BulkActionBar', () => {
         ['v1', 'v2'],
         'MAINTENANCE',
         'test-csrf',
+        undefined,
       ),
     )
     expect(bulkUpdateVehicleStatus).toHaveBeenCalledTimes(1)
@@ -98,9 +101,32 @@ describe('BulkActionBar', () => {
     await user.click(screen.getByRole('button', { name: en.business.vehicles.form.confirm }))
 
     await waitFor(() =>
-      expect(bulkUpdateVehicleStatus).toHaveBeenCalledWith(['x'], 'AVAILABLE', 'test-csrf'),
+      expect(bulkUpdateVehicleStatus).toHaveBeenCalledWith(
+        ['x'],
+        'AVAILABLE',
+        'test-csrf',
+        undefined,
+      ),
     )
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1))
+  })
+
+  it('binds the bulk write to the picked operator (#1260)', async () => {
+    bulkUpdateVehicleStatus.mockResolvedValue([])
+    const user = userEvent.setup()
+    renderBar({ selectedIds: ['v1', 'v2'], pickedOperatorId: 'op_42' })
+
+    await user.click(screen.getByRole('button', { name: bulk.setMaintenance }))
+    await user.click(screen.getByRole('button', { name: en.business.vehicles.form.confirm }))
+
+    await waitFor(() =>
+      expect(bulkUpdateVehicleStatus).toHaveBeenCalledWith(
+        ['v1', 'v2'],
+        'MAINTENANCE',
+        'test-csrf',
+        'op_42',
+      ),
+    )
   })
 
   it('clear selection calls onClear without mutating', async () => {

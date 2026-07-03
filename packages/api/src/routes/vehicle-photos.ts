@@ -56,7 +56,7 @@ export function createVehiclePhotoRoutes(
         (f): f is File => f instanceof File,
       )
 
-      const result = await service.uploadPhotos(ctx, idResult.id, files)
+      const result = await service.uploadPhotos(ctx, idResult.id, files, c.req.query('operatorId'))
       if (!result.ok) return failResult(c, result)
       return ok(c, { uploaded: result.uploaded, total: result.total }, 201)
     })
@@ -71,7 +71,7 @@ export function createVehiclePhotoRoutes(
       const url = c.req.query('url')
       if (!url) return fail(c, 'url query parameter required', 400)
 
-      const result = await service.deletePhoto(ctx, idResult.id, url)
+      const result = await service.deletePhoto(ctx, idResult.id, url, c.req.query('operatorId'))
       if (!result.ok) return failResult(c, result)
       return ok(c, { deleted: url, remaining: result.remaining })
     })

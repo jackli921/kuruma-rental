@@ -62,6 +62,7 @@ export function createVehicleRoutes(
         toCallerContext(user),
         parsed.data.vehicleIds,
         parsed.data.status,
+        c.req.query('operatorId'),
       )
       if (!result.ok) return failResult(c, result)
       return ok(c, result.vehicles)
@@ -76,7 +77,12 @@ export function createVehicleRoutes(
       const parsed = await parseBody(c, updateVehicleSchema)
       if (!parsed.ok) return parsed.response
 
-      const result = await service.update(toCallerContext(user), idResult.id, parsed.data)
+      const result = await service.update(
+        toCallerContext(user),
+        idResult.id,
+        parsed.data,
+        c.req.query('operatorId'),
+      )
       if (!result.ok) return failResult(c, result)
       return ok(c, result.vehicle)
     })
@@ -96,6 +102,7 @@ export function createVehicleRoutes(
         idResult.id,
         parsed.data.status,
         parsed.data.reason,
+        c.req.query('operatorId'),
       )
       if (!result.ok) return failResult(c, result)
       return ok(c, result.vehicle)
@@ -107,7 +114,11 @@ export function createVehicleRoutes(
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
 
-      const result = await service.softDelete(toCallerContext(user), idResult.id)
+      const result = await service.softDelete(
+        toCallerContext(user),
+        idResult.id,
+        c.req.query('operatorId'),
+      )
       if (!result.ok) return failResult(c, result)
       return ok(c, result.vehicle)
     })

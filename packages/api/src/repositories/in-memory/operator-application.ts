@@ -1,7 +1,7 @@
 import type { OperatorApplicationStatus } from '@kuruma/shared/enums'
 import { OPERATOR_APPLICATION_EMAIL_CONSTRAINT, PG_ERROR } from '../../pg-errors'
 import type { OperatorApplication } from '../../stores'
-import type { OperatorApplicationRepository } from '../types'
+import type { OperatorApplicationListParams, OperatorApplicationRepository } from '../types'
 
 const LIVE = new Set<OperatorApplicationStatus>(['PENDING', 'APPROVED'])
 type CreateData = Parameters<OperatorApplicationRepository['create']>[0]
@@ -48,10 +48,15 @@ export class InMemoryOperatorApplicationRepository implements OperatorApplicatio
     return this.store.get(id)
   }
 
-  async list(status?: OperatorApplicationStatus): Promise<OperatorApplication[]> {
+  async list({
+    status,
+    limit,
+    offset,
+  }: OperatorApplicationListParams): Promise<OperatorApplication[]> {
     return [...this.store.values()]
       .filter((a) => !status || a.status === status)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id))
+      .slice(offset, offset + limit)
   }
 
   async markApprovedIfPending(
