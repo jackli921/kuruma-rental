@@ -1,5 +1,5 @@
 import { SignJWT } from 'jose'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createApp } from '../../src/index'
 import {
   InMemoryOperatorApplicationRepository,
@@ -52,6 +52,24 @@ async function seedApplication(
   return body.data
 }
 
+// Seeds two applications with distinct createdAt (fake timers) so newest-first
+// ordering is deterministic — same-ms stamps otherwise fall back to the random
+// UUID tie-break (mirrors the in-memory repo's own list unit test).
+async function seedFirstThenSecond(
+  app: ReturnType<typeof makeApp>['app'],
+): Promise<{ first: { id: string }; second: { id: string } }> {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date(2024, 0, 1, 0, 0, 0))
+  const first = await seedApplication(app)
+  vi.setSystemTime(new Date(2024, 0, 1, 0, 0, 1))
+  const second = await seedApplication(app, {
+    contactEmail: 'second@example.com',
+    businessName: 'Second Rentals',
+  })
+  vi.useRealTimers()
+  return { first, second }
+}
+
 describe('GET /admin/operator-applications', () => {
   let harness: ReturnType<typeof makeApp>
 
@@ -60,11 +78,7 @@ describe('GET /admin/operator-applications', () => {
   })
 
   test('PLATFORM_ADMIN with ?status=PENDING sees all PENDING apps (newest-first)', async () => {
-    const first = await seedApplication(harness.app)
-    const second = await seedApplication(harness.app, {
-      contactEmail: 'second@example.com',
-      businessName: 'Second Rentals',
-    })
+    const { first, second } = await seedFirstThenSecond(harness.app)
 
     const res = await harness.app.request('/admin/operator-applications?status=PENDING', {
       headers: await bearer(ADMIN),
@@ -166,11 +180,7 @@ describe('GET /admin/operator-applications', () => {
   })
 
   test('?limit caps the returned page and ?offset walks to the next one', async () => {
-    const first = await seedApplication(harness.app)
-    const second = await seedApplication(harness.app, {
-      contactEmail: 'second@example.com',
-      businessName: 'Second Rentals',
-    })
+    const { first, second } = await seedFirstThenSecond(harness.app)
 
     const capped = await harness.app.request('/admin/operator-applications?limit=1', {
       headers: await bearer(ADMIN),
