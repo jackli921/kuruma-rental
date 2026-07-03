@@ -70,11 +70,20 @@ export interface WebhookLogContext {
   currency: string | null
 }
 
+/** What happened to the auto-refund of an amount-mismatched charge (#1378). The
+ *  route alerts LOUD on 'failed'/'unrefundable' (captured funds may still be
+ *  stranded — a human must act) and softly on 'refunded'/'pending' (money is on
+ *  its way back to the renter, nothing owed). */
+export type MismatchRefundDisposition = 'refunded' | 'pending' | 'failed' | 'unrefundable'
+
 export interface WebhookResult {
   status: 200 | 400
   outcome: WebhookOutcome
   /** Present for anomaly/duplicate outcomes so the route can log identifiers. */
   context?: WebhookLogContext
+  /** Present only on `amount_mismatch`: the disposition of the #1378 auto-refund,
+   *  so the route can alert loudly when captured funds still need a human. */
+  refund?: MismatchRefundDisposition
 }
 
 export interface BookingPaymentStatus {
@@ -115,6 +124,50 @@ export class PaymentService {
       expectedAmountJpy: booking.totalPrice,
       currency: event.currency,
     })
+  }
+
+  /**
+   * Auto-refund a charge Stripe captured for the WRONG amount (#1378). The mismatch
+   * guard refuses to RECORD a wrong-amount payment, but the card was already charged —
+   * so return the money instead of stranding it in the anomaly queue. Refunds the FULL
+   * captured amount against its PaymentIntent; the booking legitimately stays UNPAID
+   * (we refused the amount, we never fulfilled it).
+   *
+   * Deliberately does NOT use the cancellation `payment_refunds` receipt ledger: that
+   * table is one-row-per-booking for the REFUND_DUE settlement flow, so reusing it here
+   * would let a later real cancellation adopt this stale receipt and skip its own
+   * refund. Idempotency instead rides Stripe's key (`refund:mismatch:${eventId}`): a
+   * redelivery dedupes at Stripe, and a terminal "already refunded" surfaces as
+   * 'failed' (a conservative human-check alert, never a double refund). Transient
+   * gateway errors PROPAGATE so the 500 → Stripe retry re-drives — captured funds can
+   * never silently strand.
+   */
+  private async refundMismatchedCharge(
+    booking: Booking,
+    event: VerifiedPaymentEvent,
+  ): Promise<MismatchRefundDisposition> {
+    const { paymentIntentId, amountTotal } = event
+    // No PaymentIntent or non-positive amount → nothing we can refund from here; the
+    // recorded anomaly stays the human surface (the route alerts on 'unrefundable').
+    if (paymentIntentId === null || amountTotal === null || amountTotal <= 0) {
+      return 'unrefundable'
+    }
+    try {
+      const refund = await this.gateway.refundPayment({
+        paymentIntentId,
+        amountJpy: amountTotal,
+        idempotencyKey: `refund:mismatch:${event.eventId}`,
+        metadata: { bookingId: booking.id },
+      })
+      if (refund.status === 'succeeded') return 'refunded'
+      if (refund.status === 'failed' || refund.status === 'canceled') return 'failed'
+      return 'pending' // pending / requires_action — money is moving, no booking state to advance
+    } catch (err) {
+      // Terminal rejection (already-refunded / insufficient balance) → the charge may
+      // still be stranded, so flag for a human. Transient errors propagate (→ retry).
+      if (err instanceof RefundRejectedError) return 'failed'
+      throw err
+    }
   }
 
   async createCheckoutSession(
@@ -212,7 +265,8 @@ export class PaymentService {
       event.currency !== CURRENCY
     ) {
       await this.recordAnomaly('AMOUNT_MISMATCH', booking, event)
-      return { status: 200, outcome: 'amount_mismatch', context }
+      const refund = await this.refundMismatchedCharge(booking, event)
+      return { status: 200, outcome: 'amount_mismatch', context, refund }
     }
 
     const grossJpy = event.amountTotal
