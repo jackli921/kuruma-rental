@@ -7,9 +7,9 @@ import { ok, parseBody } from './helpers'
 /**
  * #904 / #1230: operator self-service team management. An operator always acts on
  * its OWN tenant — a foreign `?operatorId=` is ignored. A PLATFORM_ADMIN using the
- * operator-context picker names the target tenant via `?operatorId=` on the reads
- * (`resolveTeamOperatorId` honors it only for that privileged tier). Owner-vs-member
- * gating, the picker allowlist, and the absent-tenant seal live in
+ * operator-context picker names the target tenant via `?operatorId=` on every read
+ * AND write (`resolveTeamOperatorId` honors it only for that privileged tier).
+ * Owner-vs-member gating, the picker allowlist, and the absent-tenant seal live in
  * `OperatorTeamService`; denials surface as 403/422 via the global handlers, so the
  * routes stay HTTP-only.
  */
@@ -24,7 +24,11 @@ export function createOperatorTeamRoutes(service: OperatorTeamService) {
       const parsed = await parseBody(c, inviteStaffSchema)
       if (!parsed.ok) return parsed.response
 
-      const created = await service.inviteStaff(toCallerContext(user), parsed.data)
+      const created = await service.inviteStaff(
+        toCallerContext(user),
+        parsed.data,
+        c.req.query('operatorId'),
+      )
       // The URL embeds the one-time token (never persisted in cleartext); the
       // owner copies it to share. We omit the bare `token` field — the URL is the
       // only form the page needs.
@@ -41,7 +45,7 @@ export function createOperatorTeamRoutes(service: OperatorTeamService) {
       const id = c.req.param('id')
       // Owner-only + tenant scope live in the service; an unknown/foreign id
       // throws NotFoundError (-> 404) via the global handler, so no id is leaked.
-      await service.revokeInvite(toCallerContext(requireUser(c)), id)
+      await service.revokeInvite(toCallerContext(requireUser(c)), id, c.req.query('operatorId'))
       return ok(c, { id })
     })
     .get('/operators/me/members', async (c) => {
@@ -56,7 +60,7 @@ export function createOperatorTeamRoutes(service: OperatorTeamService) {
       // Owner-only + tenant scope + last-owner lockout live in the service: an
       // unknown/foreign id throws NotFoundError (-> 404) and the last owner throws
       // ConflictError (-> 409), both via the global handler, so no id is leaked.
-      await service.deactivateMember(toCallerContext(requireUser(c)), id)
+      await service.deactivateMember(toCallerContext(requireUser(c)), id, c.req.query('operatorId'))
       return ok(c, { id })
     })
 }

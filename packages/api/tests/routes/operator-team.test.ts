@@ -324,3 +324,62 @@ describe('read routes thread ?operatorId= for a picker-admin', () => {
     expect(data.map((m: { userId: string }) => m.userId)).toEqual(['u_owner'])
   })
 })
+
+describe('write routes as a picked operator (#1230)', () => {
+  it('POST /operators/me/invites?operatorId=op_2 mints under op_2 for a PLATFORM_ADMIN (201)', async () => {
+    const res = await mountFor('PLATFORM_ADMIN').request('/operators/me/invites?operatorId=op_2', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'new@op2.com' }),
+    })
+    expect(res.status).toBe(201)
+    expect(await inviteRepo.listByOperator('op_2')).toHaveLength(1)
+  })
+
+  it('POST invite with NO pick is 422 for a PLATFORM_ADMIN', async () => {
+    const res = await mountFor('PLATFORM_ADMIN').request('/operators/me/invites', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'x@x.com' }),
+    })
+    expect(res.status).toBe(422)
+  })
+
+  it('a bogus ?operatorId= on invite is 404 (c1), not 500', async () => {
+    const res = await mountFor('PLATFORM_ADMIN').request(
+      '/operators/me/invites?operatorId=op_ghost',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'x@x.com' }),
+      },
+    )
+    expect(res.status).toBe(404)
+  })
+
+  // G6a: a legacy STAFF/ADMIN passes requireOperatorOwnerWrite but the RESOLVER
+  // denies it (403). This pins that the resolver, not the gate, is the deny point —
+  // collapsing team onto resolveOperatorIdForWrite (which honors legacy admins)
+  // would flip this to a cross-tenant 201 and fail here.
+  it('denies a legacy STAFF write-with-?operatorId= at the resolver (403)', async () => {
+    const res = await mountFor('STAFF').request('/operators/me/invites?operatorId=op_2', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'x@op2.com' }),
+    })
+    expect(res.status).toBe(403)
+    expect(await inviteRepo.listByOperator('op_2')).toHaveLength(0)
+  })
+
+  it('still forbids an OPERATOR_STAFF write even with a valid ?operatorId= (owner-tier gate)', async () => {
+    const res = await mountFor('OPERATOR_STAFF', 'op_1').request(
+      '/operators/me/invites?operatorId=op_1',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'x@op1.com' }),
+      },
+    )
+    expect(res.status).toBe(403)
+  })
+})
