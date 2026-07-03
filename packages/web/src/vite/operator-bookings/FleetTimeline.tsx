@@ -1,8 +1,9 @@
 import { instantToJstFauxLocal, todayInJst } from '@/lib/datetime'
-import { STATUS_CLASS } from '@/lib/event-colors'
+import { BLOCK_KIND_CLASS, STATUS_CLASS } from '@/lib/event-colors'
 import { useFeatureFlag } from '@/vite/config'
 import { CalendarToolbar } from '@/vite/operator-bookings/CalendarToolbar'
 import type { CalendarBookingRow } from '@/vite/operator-bookings/api'
+import type { BlockCalendarEvent } from '@/vite/operator-bookings/calendar-events'
 import {
   type CalendarView,
   TIMELINE_SPAN_DAYS,
@@ -41,21 +42,27 @@ interface FleetTimelineProps {
   readonly rows: readonly CalendarBookingRow[]
   // The operator's fleet — each becomes a row; bookings bind to a row by vehicle id.
   readonly vehicles: readonly { id: string; name: string }[]
+  // Scheduled maintenance/hold bands (#1244) — kind-colored, bound to a fleet row.
+  readonly blocks: readonly BlockCalendarEvent[]
   readonly date: Date
   readonly locale: string
   readonly onViewChange: (view: CalendarView) => void
   readonly onDateChange: (date: Date) => void
   readonly onSelectEvent: (bookingId: string) => void
+  // A block band opens its detail dialog (day/week parity) rather than a trip.
+  readonly onSelectBlock: (block: BlockCalendarEvent) => void
 }
 
 export function FleetTimeline({
   rows,
   vehicles,
+  blocks,
   date,
   locale,
   onViewChange,
   onDateChange,
   onSelectEvent,
+  onSelectBlock,
 }: FleetTimelineProps) {
   const t = useTranslations('business.bookings.calendar')
   const culture = locale === 'zh' ? 'zh-CN' : locale
@@ -100,11 +107,12 @@ export function FleetTimeline({
       buildTimelineLayout({
         rows,
         vehicles,
+        blocks,
         from: fromTrue,
         to: toTrue,
         unassignedLabel: t('unassigned'),
       }),
-    [rows, vehicles, fromTrue, toTrue, t],
+    [rows, vehicles, blocks, fromTrue, toTrue, t],
   )
 
   const groups = useMemo<TimelineGroupBase[]>(
@@ -123,9 +131,12 @@ export function FleetTimeline({
         end_time: instantToJstFauxLocal(new Date(it.end)).getTime(),
         canMove: false,
         canResize: false,
-        className: `${STATUS_CLASS[it.status]}${
-          it.band === 'turnaround' ? ' fleet-bar--turnaround' : ''
-        }`,
+        // #1244: a booking bar wears its status color (+ dashed turnaround tail); a
+        // block bar wears its kind band so it never reads as a booking.
+        className:
+          it.type === 'block'
+            ? BLOCK_KIND_CLASS[it.kind]
+            : `${STATUS_CLASS[it.status]}${it.band === 'turnaround' ? ' fleet-bar--turnaround' : ''}`,
       })),
     [layout.items],
   )
@@ -143,11 +154,25 @@ export function FleetTimeline({
     [date, onDateChange],
   )
 
+  // The lib hands back only the clicked bar's id, not the item, so we recover the
+  // bar's type by membership: block-bar ids are block-table UUIDs, disjoint from
+  // booking ids and their `::turnaround` suffix, so "id is a known block" is an exact
+  // discriminant. The map also carries the full block (reason/notes) for the dialog.
+  const blockById = useMemo(() => new Map(blocks.map((b) => [b.id, b])), [blocks])
+
   // Both events fire on a bar click (select first, click on a re-click); wire both
-  // so a single click always opens the trip, regardless of selection state.
+  // so a single click always opens the trip (or block), regardless of selection state.
   const handleItemSelect = useCallback(
-    (itemId: Id) => onSelectEvent(bookingIdFromTimelineItem(String(itemId))),
-    [onSelectEvent],
+    (itemId: Id) => {
+      const id = String(itemId)
+      const block = blockById.get(id)
+      if (block) {
+        onSelectBlock(block)
+        return
+      }
+      onSelectEvent(bookingIdFromTimelineItem(id))
+    },
+    [blockById, onSelectBlock, onSelectEvent],
   )
 
   // Pin the canvas to the toolbar-driven window: the board is navigated by our
