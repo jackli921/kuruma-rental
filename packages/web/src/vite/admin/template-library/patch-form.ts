@@ -1,7 +1,11 @@
 import { CATALOG_TEMPLATE_STATUSES, type CatalogTemplateStatus } from '@kuruma/shared/enums'
 import type { Locale } from '@kuruma/shared/i18n/locales'
 import type { LocalizedText } from '@kuruma/shared/i18n/localized-text'
-import type { TemplateAdminRow, TemplatePatch } from '@kuruma/shared/types/template-admin'
+import type {
+  TemplateAdminRow,
+  TemplateCreate,
+  TemplatePatch,
+} from '@kuruma/shared/types/template-admin'
 
 /** One text field per supported locale (always a string, never undefined — a
  *  controlled input's value). Absent bundle locales render as empty strings. */
@@ -34,6 +38,17 @@ export function formFromRow(row: TemplateAdminRow): TemplateForm {
   }
 }
 
+/** Seed a blank create form (#1319 slice 3): every locale empty, status ACTIVE
+ *  (an admin-created template is intentionally live; the ARCHIVED rows come from
+ *  the backfill). Pure; the create dialog owns the mutable copy. */
+export function emptyTemplateForm(): TemplateForm {
+  return {
+    name: { en: '', ja: '', zh: '' },
+    description: { en: '', ja: '', zh: '' },
+    status: 'ACTIVE',
+  }
+}
+
 /**
  * Collapse a bundle form into a `LocalizedText`, or null when en is blank.
  * `en` is the required fallback (`localizedTextSchema`): with no en there is no
@@ -63,4 +78,17 @@ export function buildTemplatePatch(form: TemplateForm): TemplatePatch {
     description: toBundle(form.description),
     status: form.status,
   }
+}
+
+/**
+ * Build the `POST` body from the create form (#1319 slice 3). Unlike the patch,
+ * `name` is REQUIRED — so this returns null when the en name is blank (the Create
+ * button stays disabled in that state; null is the defensive belt). `description`
+ * rides as its bundle or explicit null (a blank en clears it), and `status` is
+ * whatever the form selected (defaults ACTIVE via {@link emptyTemplateForm}).
+ */
+export function buildTemplateCreate(form: TemplateForm): TemplateCreate | null {
+  const name = toBundle(form.name)
+  if (!name) return null
+  return { name, description: toBundle(form.description), status: form.status }
 }
