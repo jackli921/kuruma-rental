@@ -36,6 +36,16 @@ function createInput(operatorId: string, templateId: string) {
   }
 }
 
+// A self-authored create carries a nameI18n bundle and NO templateId (#1437).
+function selfAuthoredInput(operatorId: string, nameI18n: { en: string; ja?: string; zh?: string }) {
+  return {
+    operatorId,
+    nameI18n,
+    descriptionOverride: null,
+    priceJpy: 1500,
+  }
+}
+
 describe('AddOnService', () => {
   let repo: InMemoryAddOnRepository
   let service: AddOnService
@@ -116,6 +126,59 @@ describe('AddOnService', () => {
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.status).toBe(409)
     })
+
+    it('creates a SELF-AUTHORED add-on from a nameI18n bundle and resolves its name', async () => {
+      const result = await service.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'GPS unit', ja: 'GPS ユニット' }),
+        'ja',
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.option.templateId).toBeNull()
+        expect(result.option.nameI18n).toEqual({ en: 'GPS unit', ja: 'GPS ユニット' })
+        expect(result.option.resolvedName).toBe('GPS ユニット')
+      }
+    })
+
+    it('does not treat a self-authored create as an unknown template (no 400)', async () => {
+      // A self-authored create must never hit the template lookup — no templateId.
+      const result = await service.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'Dashcam' }),
+        LOCALE,
+      )
+      expect(result.ok).toBe(true)
+    })
+
+    it('rejects a second self-authored add-on with the same en name (distinct 409)', async () => {
+      await service.create(ctxFor(opA), selfAuthoredInput(opA, { en: 'GPS unit' }), LOCALE)
+      const result = await service.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'GPS unit', ja: '別' }),
+        LOCALE,
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.status).toBe(409)
+        expect(result.error).toBe('You already offer an add-on with this name')
+      }
+    })
+
+    it('maps a self-authored lost-race unique-violation to a 409 name clash', async () => {
+      vi.spyOn(repo, 'findActiveByOperatorAndName').mockResolvedValue(undefined)
+      vi.spyOn(repo, 'create').mockRejectedValue(uniqueViolation())
+      const result = await service.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'GPS unit' }),
+        LOCALE,
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.status).toBe(409)
+        expect(result.error).toBe('You already offer an add-on with this name')
+      }
+    })
   })
 
   describe('update', () => {
@@ -162,6 +225,57 @@ describe('AddOnService', () => {
       const updateSpy = vi.spyOn(repo, 'update')
       await service.update(ctxFor(opB), created.option.id, { priceJpy: 1 }, LOCALE)
       expect(updateSpy).not.toHaveBeenCalled()
+    })
+
+    it('edits a self-authored item name — adds a locale and re-resolves (D5)', async () => {
+      const created = await service.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'GPS unit' }),
+        LOCALE,
+      )
+      if (!created.ok) throw new Error('seed failed')
+      const result = await service.update(
+        ctxFor(opA),
+        created.option.id,
+        { nameI18n: { en: 'GPS unit', ja: 'GPS ユニット' } },
+        'ja',
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.option.nameI18n).toEqual({ en: 'GPS unit', ja: 'GPS ユニット' })
+        expect(result.option.resolvedName).toBe('GPS ユニット')
+      }
+    })
+
+    it('rejects a nameI18n edit on a PICKED row (its name comes from the template)', async () => {
+      const created = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
+      if (!created.ok) throw new Error('seed failed')
+      const result = await service.update(
+        ctxFor(opA),
+        created.option.id,
+        { nameI18n: { en: 'My own name' } },
+        LOCALE,
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.status).toBe(400)
+    })
+
+    it('rejects a self-authored rename that collides with another active name (409)', async () => {
+      await service.create(ctxFor(opA), selfAuthoredInput(opA, { en: 'Dashcam' }), LOCALE)
+      const second = await service.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'GPS unit' }),
+        LOCALE,
+      )
+      if (!second.ok) throw new Error('seed failed')
+      const result = await service.update(
+        ctxFor(opA),
+        second.option.id,
+        { nameI18n: { en: 'Dashcam' } },
+        LOCALE,
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.status).toBe(409)
     })
   })
 

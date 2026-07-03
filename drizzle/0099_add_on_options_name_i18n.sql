@@ -1,0 +1,2 @@
+ALTER TABLE "add_on_options" ADD COLUMN "nameI18n" jsonb;--> statement-breakpoint
+ALTER TABLE "add_on_options" ADD CONSTRAINT "add_on_options_not_both_identities" CHECK (NOT ("add_on_options"."templateId" IS NOT NULL AND "add_on_options"."nameI18n" IS NOT NULL));

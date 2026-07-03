@@ -11,6 +11,7 @@ const templated: AddOnWithTemplate = {
   description: 'legacy column desc',
   templateId: 'tmpl_child_seat',
   descriptionOverride: null,
+  nameI18n: null,
   priceJpy: 1500,
   status: 'ACTIVE',
   createdAt: new Date(),
@@ -26,6 +27,21 @@ const legacy: AddOnWithTemplate = {
   templateId: null,
   templateName: null,
   templateDescription: null,
+  nameI18n: null,
+}
+
+// A SELF-AUTHORED row (#1437): no template (templateId/templateName null), so the
+// operator's own nameI18n bundle drives the name, and the description resolves off
+// descriptionOverride flooring to ANY present locale (there is no template floor).
+const selfAuthored: AddOnWithTemplate = {
+  ...templated,
+  name: 'GPS unit', // legacy mirror = nameI18n.en
+  description: null,
+  templateId: null,
+  templateName: null,
+  templateDescription: null,
+  nameI18n: { en: 'GPS unit', ja: 'GPS ユニット', zh: 'GPS 装置' },
+  descriptionOverride: { ja: '自分で書いた説明' },
 }
 
 describe('resolveAddOnName', () => {
@@ -43,6 +59,18 @@ describe('resolveAddOnName', () => {
 
   it('falls back to the legacy name column when the row carries no template', () => {
     expect(resolveAddOnName(legacy, 'ja')).toBe('Baby Seat')
+  })
+
+  it('resolves a self-authored row from its own nameI18n bundle', () => {
+    expect(resolveAddOnName(selfAuthored, 'ja')).toBe('GPS ユニット')
+  })
+
+  it('falls back to the self-authored en name when the requested locale is absent', () => {
+    const noZh: AddOnWithTemplate = {
+      ...selfAuthored,
+      nameI18n: { en: 'GPS unit', ja: 'GPS ユニット' },
+    }
+    expect(resolveAddOnName(noZh, 'zh')).toBe('GPS unit')
   })
 })
 
@@ -73,5 +101,20 @@ describe('resolveAddOnDescription', () => {
 
   it('returns null for a legacy row whose description column is null', () => {
     expect(resolveAddOnDescription({ ...legacy, description: null }, 'ja')).toBeNull()
+  })
+
+  it('resolves a self-authored description from descriptionOverride for its authored locale', () => {
+    expect(resolveAddOnDescription(selfAuthored, 'ja')).toBe('自分で書いた説明')
+  })
+
+  it('floors a self-authored ja-only description to ja for a zh reader (no template floor)', () => {
+    // Unlike a picked row (which floors to the template's zh/en), a self-authored
+    // row has no template — so it must floor to ANY present locale rather than
+    // render blank while the operator authored text.
+    expect(resolveAddOnDescription(selfAuthored, 'zh')).toBe('自分で書いた説明')
+  })
+
+  it('returns null for a self-authored row with no description authored', () => {
+    expect(resolveAddOnDescription({ ...selfAuthored, descriptionOverride: null }, 'ja')).toBeNull()
   })
 })

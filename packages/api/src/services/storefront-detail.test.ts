@@ -73,6 +73,7 @@ function makeAddOn(
     description: null,
     templateId: null,
     descriptionOverride: null,
+    nameI18n: null,
     priceJpy: 1500,
     status: 'ACTIVE',
     ...overrides,

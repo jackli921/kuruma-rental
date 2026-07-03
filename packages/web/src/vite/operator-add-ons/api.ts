@@ -3,7 +3,10 @@ import { getApiBaseUrl } from '@/vite/api-base'
 import { type WithOperatorId, buildScopeParam } from '@/vite/operator-context'
 import { ADD_ON_STATUSES } from '@kuruma/shared/enums'
 import { DEFAULT_LOCALE, type Locale } from '@kuruma/shared/i18n/locales'
-import { localizedTextOverrideSchema } from '@kuruma/shared/i18n/localized-text'
+import {
+  localizedTextOverrideSchema,
+  localizedTextSchema,
+} from '@kuruma/shared/i18n/localized-text'
 import type { OperatorAddOnData } from '@kuruma/shared/types/add-on'
 import type { CreateAddOnInput, UpdateAddOnInput } from '@kuruma/shared/validators/add-on'
 import { queryOptions } from '@tanstack/react-query'
@@ -35,6 +38,9 @@ const addOnSchema = z.object({
   resolvedName: z.string(),
   resolvedDescription: z.string().nullable(),
   descriptionOverride: localizedTextOverrideSchema.nullable(),
+  // Self-authored name bundle (#1437), raw so the edit form can add ja/zh later (D5);
+  // null for a picked or legacy row.
+  nameI18n: localizedTextSchema.nullable(),
   priceJpy: z.number(),
   status: z.enum(ADD_ON_STATUSES),
 }) satisfies z.ZodType<OperatorAddOnData>

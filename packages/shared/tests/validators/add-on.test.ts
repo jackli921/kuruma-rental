@@ -7,10 +7,19 @@ import {
 
 // A valid v4-shaped UUID (seedId output shape) — templateId is validated as uuid.
 const TEMPLATE_ID = '366823c3-d8c0-4e82-a262-e6309728bd02'
+// A self-authored name bundle: LocalizedText (en required, ja/zh optional).
+const NAME_I18N = { en: 'GPS unit', ja: 'GPS ユニット', zh: 'GPS 装置' }
 
 function validInput() {
   return {
     templateId: TEMPLATE_ID,
+    priceJpy: 1100,
+  }
+}
+
+function selfAuthoredInput() {
+  return {
+    nameI18n: NAME_I18N,
     priceJpy: 1100,
   }
 }
@@ -25,8 +34,34 @@ describe('createAddOnSchema', () => {
     }
   })
 
-  it('rejects a missing templateId', () => {
+  it('rejects when neither a template nor a custom name is provided', () => {
     const result = createAddOnSchema.safeParse({ priceJpy: 1100 })
+    expect(result.success).toBe(false)
+  })
+
+  it('accepts a self-authored item (nameI18n bundle, no templateId)', () => {
+    const result = createAddOnSchema.safeParse(selfAuthoredInput())
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.nameI18n).toEqual(NAME_I18N)
+      expect(result.data.templateId).toBeUndefined()
+    }
+  })
+
+  it('rejects an item carrying BOTH a templateId and a nameI18n (ambiguous identity)', () => {
+    const result = createAddOnSchema.safeParse({
+      templateId: TEMPLATE_ID,
+      nameI18n: NAME_I18N,
+      priceJpy: 1100,
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a self-authored nameI18n missing the required en floor', () => {
+    const result = createAddOnSchema.safeParse({
+      nameI18n: { ja: 'GPS ユニット' },
+      priceJpy: 1100,
+    })
     expect(result.success).toBe(false)
   })
 
@@ -115,6 +150,28 @@ describe('platformAdminCreateAddOnSchema', () => {
     if (result.success) expect(result.data.operatorId).toBe('op_best_car_rental')
   })
 
+  it('accepts a self-authored item with operatorId (exactly-one refine survives .extend)', () => {
+    const result = platformAdminCreateAddOnSchema.safeParse({
+      ...selfAuthoredInput(),
+      operatorId: 'op_best_car_rental',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.nameI18n).toEqual(NAME_I18N)
+      expect(result.data.operatorId).toBe('op_best_car_rental')
+    }
+  })
+
+  it('rejects both-identity input even with a valid operatorId', () => {
+    const result = platformAdminCreateAddOnSchema.safeParse({
+      templateId: TEMPLATE_ID,
+      nameI18n: NAME_I18N,
+      priceJpy: 1100,
+      operatorId: 'op_best_car_rental',
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('rejects an empty operatorId', () => {
     const result = platformAdminCreateAddOnSchema.safeParse({ ...validInput(), operatorId: '' })
     expect(result.success).toBe(false)
@@ -155,5 +212,16 @@ describe('updateAddOnSchema', () => {
     if (result.success) {
       expect((result.data as Record<string, unknown>).templateId).toBeUndefined()
     }
+  })
+
+  it('accepts a nameI18n update (self-authored edit adds a locale — D5)', () => {
+    const result = updateAddOnSchema.safeParse({ nameI18n: NAME_I18N })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.nameI18n).toEqual(NAME_I18N)
+  })
+
+  it('rejects a nameI18n update missing the en floor', () => {
+    const result = updateAddOnSchema.safeParse({ nameI18n: { ja: 'GPS ユニット' } })
+    expect(result.success).toBe(false)
   })
 })
