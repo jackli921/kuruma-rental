@@ -443,6 +443,10 @@ describe('#1260 photo writes are bound to the acting operator (HTTP)', () => {
     })
 
     expect(res.status).toBe(404)
+    // Same not-found string + no code as a truly-absent vehicle: no existence oracle.
+    const body = await res.json()
+    expect(body.error).toBe('Vehicle not found')
+    expect(body.code).toBeUndefined()
   })
 
   it('DELETE -> 422 OPERATOR_REQUIRED (code in body) when no operator is named', async () => {
@@ -464,5 +468,8 @@ describe('#1260 photo writes are bound to the acting operator (HTTP)', () => {
     )
 
     expect(res.status).toBe(404)
+    const body = await res.json()
+    expect(body.error).toBe('Photo not found')
+    expect(body.code).toBeUndefined()
   })
 })

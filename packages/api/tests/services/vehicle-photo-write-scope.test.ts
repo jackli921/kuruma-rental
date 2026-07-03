@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 import { InMemoryPhotoStorage } from '../../src/repositories/in-memory/photo-storage'
-import { VehiclePhotoService } from '../../src/services/vehicle-photo'
+import { MAX_PHOTOS_PER_VEHICLE, VehiclePhotoService } from '../../src/services/vehicle-photo'
 
 const admin: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
 const opA: CallerContext = { userId: 'ua', role: 'OPERATOR_OWNER', operatorId: 'op-A' }
@@ -75,6 +75,23 @@ describe('VehiclePhotoService.uploadPhotos — acting-operator binding (#1260)',
     if (!res.ok) return
     expect(res.total).toBe(1)
     expect(storage.size()).toBe(1)
+    expect((await repo.findById(SYSTEM_CONTEXT, vehA))?.photos).toHaveLength(1)
+  })
+
+  // Guard precedence: it must fire BEFORE the photo-cap check. A guard that ran
+  // after the cap would surface 400 cap_exceeded for a cross-tenant admin; it
+  // must 404 instead and never touch R2.
+  it('denies a cross-tenant admin before the photo-cap check', async () => {
+    const photos = Array.from(
+      { length: MAX_PHOTOS_PER_VEHICLE },
+      (_, i) => `https://r2.example/${i}.jpg`,
+    )
+    await repo.update(SYSTEM_CONTEXT, vehA, { photos })
+
+    const res = await service.uploadPhotos(admin, vehA, [jpeg()], 'op-B')
+    expect(res).toMatchObject({ ok: false, status: 404, error: 'Vehicle not found' })
+    expect(storage.size()).toBe(0)
+    expect((await repo.findById(SYSTEM_CONTEXT, vehA))?.photos).toHaveLength(MAX_PHOTOS_PER_VEHICLE)
   })
 
   it('ignores a stray acting id for a tenant operator (already clamped by read scope)', async () => {

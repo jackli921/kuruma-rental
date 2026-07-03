@@ -20,6 +20,8 @@ interface FleetVehicleCardProps {
   readonly locale: string
   /** All-mode only: resolves the per-vehicle operator label; undefined ⇒ no badge (#1264). */
   readonly operatorNameFor?: ((vehicle: OperatorFleetVehicle) => string | undefined) | undefined
+  /** #1260: the operator a picker-admin picked, bound onto each write; undefined for operator sessions. */
+  readonly pickedOperatorId?: string | undefined
 }
 
 // Grid-mode card for one fleet vehicle (#561). Carries the same per-row
@@ -36,6 +38,7 @@ export function FleetVehicleCard({
   todayIso,
   locale,
   operatorNameFor,
+  pickedOperatorId,
 }: FleetVehicleCardProps) {
   const t = useTranslations('business.vehicles.fleet')
   const tBulk = useTranslations('business.vehicles.bulk')
@@ -91,7 +94,11 @@ export function FleetVehicleCard({
         {canWrite && (
           <div className="inline-flex shrink-0 items-start gap-1">
             <FleetEditButton onEdit={onEdit} />
-            <FleetRowActions vehicle={vehicle} onEdit={onEdit} />
+            <FleetRowActions
+              vehicle={vehicle}
+              onEdit={onEdit}
+              pickedOperatorId={pickedOperatorId}
+            />
           </div>
         )}
       </div>
