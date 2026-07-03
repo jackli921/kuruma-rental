@@ -990,6 +990,8 @@
       "subtitle": "您的预订已确认。取车时请出示预订码。",
       "bookingCode": "预订码",
       "vehicleClass": "车型",
+      "vehicle": "车辆",
+      "assignmentNote": "取车前将为您指定具体车辆。",
       "pickupDate": "取车",
       "returnDate": "还车",
       "status": "状态",

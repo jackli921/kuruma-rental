@@ -990,6 +990,8 @@
       "subtitle": "Your reservation is confirmed. Show your reservation code at pickup.",
       "bookingCode": "Reservation code",
       "vehicleClass": "Class",
+      "vehicle": "Vehicle",
+      "assignmentNote": "A specific car will be assigned before pickup.",
       "pickupDate": "Pickup",
       "returnDate": "Return",
       "status": "Status",

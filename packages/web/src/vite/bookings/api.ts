@@ -185,6 +185,38 @@ export function bookingByIdQueryOptions(id: string) {
   })
 }
 
+// #464: the renter confirmation read model. A CLASS_COMBO booking floats (no car
+// at book time) until the operator assigns one; this variant asks the IDOR-sealed
+// `GET /bookings/:id?expand=vehicle,renter` for the enriched projection so the
+// page can show the concrete car once assigned. `vehicle` is OPTIONAL — the wire
+// omits it for a float (or a deleted car) — so the schema never runs stricter
+// than the server. Base `bookingDtoSchema`/`fetchBookingById` stay untouched: the
+// messages route + self-cancel re-read depend on their exact shape.
+export const renterBookingDetailSchema = bookingDtoSchema.extend({
+  vehicle: z.object({ name: z.string(), photos: z.array(z.string()) }).optional(),
+})
+
+export type RenterBookingDetail = z.infer<typeof renterBookingDetailSchema>
+
+export async function fetchBookingDetail(id: string): Promise<RenterBookingDetail | null> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}?expand=vehicle,renter`,
+    { credentials: 'include' },
+  )
+  if (res.status === 404) return null
+  return unwrap(res, renterBookingDetailSchema)
+}
+
+// A PREFIX-EXTENSION of `['bookings', id]`: a distinct cache entry from the base
+// read, yet the self-cancel `invalidateQueries(['bookings'])` still refetches it,
+// so the confirmation page re-renders in its CANCELLED state (#856).
+export function bookingDetailQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: ['bookings', id, 'detail'],
+    queryFn: () => fetchBookingDetail(id),
+  })
+}
+
 // "My Bookings" (#543). The full BookingDto has no vehicle name, so the list view
 // reads a leaner row shape from `GET /bookings?expand=vehicle`: the assigned car's
 // display name flattened in, dates as ISO strings. Mirrors operator-bookings/api
