@@ -82,6 +82,22 @@ export const createBookingSchema = z
     message: 'Provide either renterId or walkInCustomer, not both',
     path: ['walkInCustomer'],
   })
+  // #1430: a CLASS_COMBO must be returned to its pickup location. The renter
+  // books off an availability card that can only size the occupancy window by
+  // the PICKUP turnaround (no dropoff is chosen at browse time), while booking
+  // creation sizes it by the DROPOFF turnaround (booking-creation.ts
+  // resolveDropoffEffectiveEnd). Allowing a one-way combo lets the card and the
+  // write-side disagree ("advertised but sold out at checkout"). One-way combos
+  // are unsupported product-wide, so the contract forbids them here. SPECIFIC
+  // bookings are unaffected (they carry a concrete vehicle, not a class float).
+  .refine(
+    (data) =>
+      data.fulfillmentMode !== 'CLASS_COMBO' || data.dropoffLocationId === data.pickupLocationId,
+    {
+      message: 'Class-combo bookings must be returned to the pickup location',
+      path: ['dropoffLocationId'],
+    },
+  )
 
 export const updateBookingStatusSchema = z.object({
   status: z.enum(BOOKING_STATUSES, {
