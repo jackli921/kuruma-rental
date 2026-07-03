@@ -18,7 +18,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 import { TEMPLATE_LIBRARY_QUERY_KEY, type TemplateCatalog, updateTemplate } from './api'
-import { type TemplateForm, buildTemplatePatch, formFromRow } from './patch-form'
+import {
+  type TemplateForm,
+  buildTemplatePatch,
+  formFromRow,
+  isCatalogTemplateStatus,
+} from './patch-form'
 
 interface TemplateEditDialogProps {
   readonly catalog: TemplateCatalog
@@ -118,12 +123,12 @@ function EditForm({
         <NativeSelect
           id="template-status"
           value={form.status}
-          onChange={(e) =>
-            setForm((prev) => ({
-              ...prev,
-              status: e.target.value as TemplateForm['status'],
-            }))
-          }
+          onChange={(e) => {
+            const { value } = e.target
+            if (isCatalogTemplateStatus(value)) {
+              setForm((prev) => ({ ...prev, status: value }))
+            }
+          }}
         >
           {CATALOG_TEMPLATE_STATUSES.map((status) => (
             <option key={status} value={status}>

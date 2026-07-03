@@ -1,6 +1,15 @@
 import type { TemplateAdminRow } from '@kuruma/shared/types/template-admin'
 import { describe, expect, it } from 'vitest'
-import { buildTemplatePatch, formFromRow } from './patch-form'
+import { buildTemplatePatch, formFromRow, isCatalogTemplateStatus } from './patch-form'
+
+describe('isCatalogTemplateStatus', () => {
+  it('accepts the catalog statuses and rejects anything else', () => {
+    expect(isCatalogTemplateStatus('ACTIVE')).toBe(true)
+    expect(isCatalogTemplateStatus('ARCHIVED')).toBe(true)
+    expect(isCatalogTemplateStatus('DRAFT')).toBe(false)
+    expect(isCatalogTemplateStatus('')).toBe(false)
+  })
+})
 
 describe('formFromRow', () => {
   it('spreads each locale into its own field, blanking absent locales and a null description', () => {

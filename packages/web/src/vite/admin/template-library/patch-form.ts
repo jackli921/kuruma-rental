@@ -1,4 +1,4 @@
-import type { CatalogTemplateStatus } from '@kuruma/shared/enums'
+import { CATALOG_TEMPLATE_STATUSES, type CatalogTemplateStatus } from '@kuruma/shared/enums'
 import type { Locale } from '@kuruma/shared/i18n/locales'
 import type { LocalizedText } from '@kuruma/shared/i18n/localized-text'
 import type { TemplateAdminRow, TemplatePatch } from '@kuruma/shared/types/template-admin'
@@ -11,6 +11,13 @@ export interface TemplateForm {
   name: BundleForm
   description: BundleForm
   status: CatalogTemplateStatus
+}
+
+/** Narrow a raw `<select>` value to a catalog status. The options are exactly
+ *  CATALOG_TEMPLATE_STATUSES so an unknown value never arises in practice — this
+ *  keeps the onChange handler assertion-free (type guard over `as`). */
+export function isCatalogTemplateStatus(value: string): value is CatalogTemplateStatus {
+  return (CATALOG_TEMPLATE_STATUSES as readonly string[]).includes(value)
 }
 
 function bundleToForm(bundle: LocalizedText | null): BundleForm {
