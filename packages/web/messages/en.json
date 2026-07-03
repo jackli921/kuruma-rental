@@ -1379,6 +1379,7 @@
       "governance": "Consent governance",
       "customers": "Customers",
       "operators": "Operators",
+      "templates": "Template library",
       "featureFlags": "Feature flags",
       "backToSite": "Back to site",
       "applications": "Applications"
@@ -1423,6 +1424,23 @@
       "alreadyReviewed": "This application was already reviewed, or the email already belongs to an operator.",
       "approveFailed": "Couldn't approve the application. Try again.",
       "loadError": "Couldn't load the applications queue.",
+      "retry": "Retry"
+    },
+    "templateLibrary": {
+      "title": "Template library",
+      "subtitle": "Curate the platform-owned add-on and insurance templates every operator picks from.",
+      "tab": {
+        "addOns": "Add-ons ({count})",
+        "insurance": "Insurance ({count})"
+      },
+      "colName": "Name",
+      "colKey": "Key",
+      "colStatus": "Status",
+      "colTranslations": "Translations",
+      "active": "Active",
+      "archived": "Archived",
+      "empty": "No templates in this catalog yet.",
+      "loadError": "Couldn't load the template library.",
       "retry": "Retry"
     },
     "featureFlags": {

@@ -1379,6 +1379,7 @@
       "governance": "同意ガバナンス",
       "customers": "顧客",
       "operators": "事業者",
+      "templates": "テンプレートライブラリ",
       "featureFlags": "機能フラグ",
       "backToSite": "サイトに戻る",
       "applications": "申請"
@@ -1423,6 +1424,23 @@
       "alreadyReviewed": "この申請はすでに審査済みか、メールアドレスがすでに事業者に登録されています。",
       "approveFailed": "申請を承認できませんでした。もう一度お試しください。",
       "loadError": "申請キューを読み込めませんでした。",
+      "retry": "再試行"
+    },
+    "templateLibrary": {
+      "title": "テンプレートライブラリ",
+      "subtitle": "すべての事業者が選択する、プラットフォーム管理のオプションおよび保険テンプレートを管理します。",
+      "tab": {
+        "addOns": "オプション ({count})",
+        "insurance": "保険 ({count})"
+      },
+      "colName": "名称",
+      "colKey": "キー",
+      "colStatus": "ステータス",
+      "colTranslations": "翻訳",
+      "active": "有効",
+      "archived": "アーカイブ済み",
+      "empty": "このカタログにはまだテンプレートがありません。",
+      "loadError": "テンプレートライブラリを読み込めませんでした。",
       "retry": "再試行"
     },
     "featureFlags": {
