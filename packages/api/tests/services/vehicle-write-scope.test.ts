@@ -121,6 +121,9 @@ describe('VehicleService.bulkUpdateStatus — acting-operator binding (#1260)', 
   it('rejects the batch when it includes a vehicle outside the acting operator (404)', async () => {
     const res = await service.bulkUpdateStatus(admin, [vehA, vehB], 'MAINTENANCE', 'op-A')
     expect(res).toMatchObject({ ok: false, status: 404 })
+    // Neither vehicle moves — not the out-of-scope one, and not even the in-scope
+    // vehA the admin DID pick for. The whole batch is rejected, not partially applied.
+    expect((await repo.findById(SYSTEM_CONTEXT, vehA))?.status).toBe('AVAILABLE')
     expect((await repo.findById(SYSTEM_CONTEXT, vehB))?.status).toBe('AVAILABLE')
   })
 
