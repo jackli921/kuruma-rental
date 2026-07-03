@@ -7,6 +7,7 @@ import {
   OPERATOR_APPLICATION_BUSINESS_TYPES,
   OPERATOR_APPLICATION_FLEET_SIZES,
   OPERATOR_APPLICATION_STATUSES,
+  REVIEW_DIMENSIONS,
 } from './enums'
 
 describe('consent enums', () => {
@@ -44,5 +45,17 @@ describe('operator application enums', () => {
   })
   it('pins business types', () => {
     expect(OPERATOR_APPLICATION_BUSINESS_TYPES).toEqual(['INDIVIDUAL', 'COMPANY'])
+  })
+})
+
+describe('review enums', () => {
+  it('pins the named sub-dimension key set (folded from validators/review.ts)', () => {
+    expect(REVIEW_DIMENSIONS).toEqual([
+      'cleanliness',
+      'accuracy',
+      'communication',
+      'value',
+      'ruleAdherence',
+    ])
   })
 })
