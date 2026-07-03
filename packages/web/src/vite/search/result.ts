@@ -1,3 +1,4 @@
+import { type Translate, formatFromPriceLabel, preferredRateJpy } from '@/vite/pricing-label'
 import { regionChain } from '@/vite/regions/region-lookup'
 import {
   type GeoPoint,
@@ -26,8 +27,6 @@ export function searchResultKey(item: SearchResultItem): string {
   }
 }
 
-type Translate = (key: string, values?: Record<string, string | number>) => string
-
 /** Human title of a result row: the car name (SPECIFIC) or class label (CLASS_COMBO).
  *  Switched (vs ternary) so a future `kind` is a tsc error here — see searchResultKey. */
 export function resultTitle(item: SearchResultItem): string {
@@ -47,17 +46,13 @@ export function resultTitle(item: SearchResultItem): string {
  *  `resultPriceLabel`'s daily-over-hourly preference so the `≈` note matches the
  *  label it sits beneath. */
 export function resultPriceJpy(item: SearchResultItem): number | null {
-  return item.dailyRateJpy ?? item.hourlyRateJpy ?? null
+  return preferredRateJpy(item.dailyRateJpy, item.hourlyRateJpy)
 }
 
 /** "From ¥X / day" (or hourly, or price-on-request) — shared by the list row and
  *  the map popup so they never drift. `t` is the use-intl translator. */
 export function resultPriceLabel(item: SearchResultItem, t: Translate): string {
-  if (item.dailyRateJpy != null)
-    return t('fromDaily', { price: item.dailyRateJpy.toLocaleString('en-US') })
-  if (item.hourlyRateJpy != null)
-    return t('fromHourly', { price: item.hourlyRateJpy.toLocaleString('en-US') })
-  return t('noPrice')
+  return formatFromPriceLabel(item.dailyRateJpy, item.hourlyRateJpy, t)
 }
 
 /** All results at one pickup location, in input order. The map plots one pin per
