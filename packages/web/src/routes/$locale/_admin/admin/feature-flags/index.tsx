@@ -1,7 +1,7 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { FeatureFlagsView, setFeatureFlag } from '@/vite/admin/feature-flags'
 import { featureFlagsQueryOptions, resolveFeatureFlag } from '@/vite/config'
-import { RouteRetryError } from '@/vite/route-error'
 import { useSession } from '@/vite/session'
 import {
   FEATURE_FLAGS,

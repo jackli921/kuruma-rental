@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const invalidate = vi.fn()
 vi.mock('@tanstack/react-router', () => ({ useRouter: () => ({ invalidate }) }))
 
-import { RouteRetryError } from './route-error'
+import { RouteRetryError } from './RouteRetryError'
 
 describe('RouteRetryError', () => {
   beforeEach(() => {

@@ -1,5 +1,6 @@
 import { ApiError } from '@/lib/api-error'
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { ApplicationsReviewView } from '@/vite/admin/operator-applications/ApplicationsReviewView'
 import {
   ADMIN_OPERATOR_APPLICATIONS_QUERY_KEY,
@@ -7,7 +8,6 @@ import {
   pendingOperatorApplicationsQueryOptions,
   rejectOperatorApplication,
 } from '@/vite/admin/operator-applications/api'
-import { RouteRetryError } from '@/vite/route-error'
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'

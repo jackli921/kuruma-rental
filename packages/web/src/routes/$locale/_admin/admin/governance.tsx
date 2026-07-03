@@ -1,7 +1,7 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { ConsentGovernanceView } from '@/vite/admin/governance/ConsentGovernanceView'
 import { consentAcceptancesQueryOptions } from '@/vite/admin/governance/api'
-import { RouteRetryError } from '@/vite/route-error'
 import {
   type ConsentGovernanceFilters,
   consentGovernanceFiltersSchema,

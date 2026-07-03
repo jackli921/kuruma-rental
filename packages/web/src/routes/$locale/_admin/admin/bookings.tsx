@@ -1,7 +1,7 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { BookingOversightView } from '@/vite/admin/bookings/BookingOversightView'
 import { type AdminBookingFiltersInput, adminBookingsQueryOptions } from '@/vite/admin/bookings/api'
-import { RouteRetryError } from '@/vite/route-error'
 import { BOOKING_STATUSES } from '@kuruma/shared/enums'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'

@@ -1,6 +1,6 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { ThreadListView, threadsQueryOptions, usersByIdsQueryOptions } from '@/vite/messaging'
-import { RouteRetryError } from '@/vite/route-error'
 import { sessionQueryOptions } from '@/vite/session'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, redirect } from '@tanstack/react-router'

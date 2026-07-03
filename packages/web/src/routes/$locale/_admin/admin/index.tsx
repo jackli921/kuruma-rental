@@ -1,7 +1,7 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { AdminHomeView } from '@/vite/admin/AdminHomeView'
 import { adminOverviewQueryOptions } from '@/vite/admin/overview/api'
-import { RouteRetryError } from '@/vite/route-error'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'

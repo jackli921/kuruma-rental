@@ -1,11 +1,11 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { DocumentsReviewView } from '@/vite/admin/documents/DocumentsReviewView'
 import {
   ADMIN_DOCUMENTS_QUERY_KEY,
   pendingDocumentsQueryOptions,
   verifyDocument,
 } from '@/vite/admin/documents/api'
-import { RouteRetryError } from '@/vite/route-error'
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'

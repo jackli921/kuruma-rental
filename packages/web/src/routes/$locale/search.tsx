@@ -1,6 +1,6 @@
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { resolveRegionAnchor, resolveSlugToRegionId } from '@/vite/regions/region-lookup'
 import { regionsQueryOptions } from '@/vite/regions/regions-api'
-import { RouteRetryError } from '@/vite/route-error'
 import { SearchMap } from '@/vite/search/SearchMap'
 import { fetchSearchResults } from '@/vite/search/api'
 import { isSearchMapEnabled } from '@/vite/search/flags'

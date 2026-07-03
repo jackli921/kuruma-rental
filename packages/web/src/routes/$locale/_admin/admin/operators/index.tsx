@@ -1,4 +1,5 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import {
   OPERATORS_QUERY_KEY,
   type OperatorAdminRow,
@@ -13,7 +14,6 @@ import {
   operatorsQueryOptions,
   reactivateOperator,
 } from '@/vite/admin/operators'
-import { RouteRetryError } from '@/vite/route-error'
 import { useSession } from '@/vite/session'
 import type { OperatorRole } from '@kuruma/shared/enums'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'

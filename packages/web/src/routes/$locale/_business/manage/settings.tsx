@@ -1,4 +1,5 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { featureFlagsQueryOptions, resolveFeatureFlag } from '@/vite/config'
 import { canPickOperatorContext, canWriteAsOperatorOwner } from '@/vite/guards'
 import { useOperatorContext } from '@/vite/operator-context'
@@ -8,7 +9,6 @@ import {
   operatorProfileQueryOptions,
   updateOperatorProfile,
 } from '@/vite/operator-settings/api'
-import { RouteRetryError } from '@/vite/route-error'
 import { sessionQueryOptions } from '@/vite/session'
 import type { UpdateOperatorInput } from '@kuruma/shared/validators/operator'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'

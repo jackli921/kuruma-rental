@@ -1,6 +1,6 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { OperatorSummaryView, operatorSummaryQueryOptions } from '@/vite/admin/operators'
-import { RouteRetryError } from '@/vite/route-error'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, Link, createFileRoute } from '@tanstack/react-router'
 import { ChevronLeft } from 'lucide-react'

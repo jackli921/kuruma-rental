@@ -1,11 +1,11 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { AnomaliesPanel } from '@/vite/admin/AnomaliesPanel'
 import { AnomalyResolveDialog } from '@/vite/admin/anomalies/AnomalyResolveDialog'
 import {
   type PaymentAnomalyStatusFilter,
   paymentAnomaliesQueryOptions,
 } from '@/vite/admin/anomalies/api'
-import { RouteRetryError } from '@/vite/route-error'
 import type { PaymentAnomalyView } from '@kuruma/shared/types/payment-anomaly'
 import { useQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'

@@ -1,6 +1,6 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { TemplateLibraryView, templateLibraryQueryOptions } from '@/vite/admin/template-library'
-import { RouteRetryError } from '@/vite/route-error'
 import { useQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'

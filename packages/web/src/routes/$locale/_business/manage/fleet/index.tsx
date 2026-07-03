@@ -1,12 +1,12 @@
 import type { FleetFilterState } from '@/lib/fleet-filters'
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { useOperatorScope } from '@/vite/operator-context'
 import { OperatorFleetView } from '@/vite/operator-fleet/OperatorFleetView'
 import {
   operatorFleetQueryOptions,
   vehicleClassOptionsQueryOptions,
 } from '@/vite/operator-fleet/api'
-import { RouteRetryError } from '@/vite/route-error'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'

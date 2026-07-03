@@ -1,7 +1,7 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { ConversationView, threadByIdQueryOptions } from '@/vite/messaging'
 import { operatorBookingDetailQueryOptions } from '@/vite/operator-bookings/api'
-import { RouteRetryError } from '@/vite/route-error'
 import { sessionQueryOptions } from '@/vite/session'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import {

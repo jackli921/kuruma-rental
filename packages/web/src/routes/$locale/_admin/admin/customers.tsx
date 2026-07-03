@@ -1,7 +1,7 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { CustomersView } from '@/vite/admin/customers/CustomersView'
 import { customerByIdQueryOptions, customersQueryOptions } from '@/vite/admin/customers/api'
-import { RouteRetryError } from '@/vite/route-error'
 import type { CustomerSort } from '@kuruma/shared/types/customer'
 import { useQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'
