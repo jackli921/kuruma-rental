@@ -95,6 +95,15 @@ export class DrizzleReviewRepository implements ReviewRepository {
     return this.aggregate(classIds, reviews.subjectClassId)
   }
 
+  // Public review-list read (review-display slice). Real Drizzle query lands in Task 2.
+  async listPublishedForSubject(
+    subject: 'OPERATOR' | 'VEHICLE',
+    subjectId: string,
+    limit: number,
+  ): Promise<Review[]> {
+    throw new Error('listPublishedForSubject: not yet implemented (Task 2)')
+  }
+
   // Shared aggregate scan (#1085): SUM(overall) + COUNT(*) per key over published+visible
   // reviews whose key falls in `ids`. Ids with no matching rows stay absent from the Map
   // — the service distinguishes "no reviews yet" from "rated zero" at the call site.
