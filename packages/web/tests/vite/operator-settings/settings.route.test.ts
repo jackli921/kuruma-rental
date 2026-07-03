@@ -91,4 +91,16 @@ describe('/manage/settings loader effective-id prefetch', () => {
     const profileCall = ensureQueryData.mock.calls[1][0] as { queryKey: unknown }
     expect(profileCall.queryKey).toEqual(['operator-profile', 'op_self'])
   })
+
+  it('drops a retained ?operator param for a legacy STAFF/ADMIN (no own operatorId, not a picker) — no foreign prefetch (#1420)', async () => {
+    // Without the capability gate, operatorId ?? deps.operator resolves the retained
+    // foreign id and prefetches a profile the API denies (an avoidable 403 round-trip).
+    // A legacy STAFF carries no operatorId and is not a picker (canPickOperatorContext).
+    const ensureQueryData = vi
+      .fn()
+      .mockResolvedValueOnce({ user: { id: 'u', role: 'STAFF' }, csrfToken: 't' }) // session only
+    await loader({ context: { queryClient: { ensureQueryData } }, deps: { operator: 'op_9' } })
+    // Only the session was fetched; the gate drops the param, so no profile prefetch.
+    expect(ensureQueryData).toHaveBeenCalledTimes(1)
+  })
 })
