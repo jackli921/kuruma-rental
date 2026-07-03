@@ -43,6 +43,7 @@ import { Route as LocaleBusinessManageFeesRouteImport } from './routes/$locale/_
 import { Route as LocaleBusinessManageClassesRouteImport } from './routes/$locale/_business/manage/classes'
 import { Route as LocaleBusinessManageAddOnsRouteImport } from './routes/$locale/_business/manage/add-ons'
 import { Route as LocaleAdminAdminTemplatesRouteImport } from './routes/$locale/_admin/admin/templates'
+import { Route as LocaleAdminAdminReviewsRouteImport } from './routes/$locale/_admin/admin/reviews'
 import { Route as LocaleAdminAdminRevenueRouteImport } from './routes/$locale/_admin/admin/revenue'
 import { Route as LocaleAdminAdminOperatorApplicationsRouteImport } from './routes/$locale/_admin/admin/operator-applications'
 import { Route as LocaleAdminAdminGovernanceRouteImport } from './routes/$locale/_admin/admin/governance'
@@ -243,6 +244,11 @@ const LocaleAdminAdminTemplatesRoute =
     path: '/admin/templates',
     getParentRoute: () => LocaleAdminRoute,
   } as any)
+const LocaleAdminAdminReviewsRoute = LocaleAdminAdminReviewsRouteImport.update({
+  id: '/admin/reviews',
+  path: '/admin/reviews',
+  getParentRoute: () => LocaleAdminRoute,
+} as any)
 const LocaleAdminAdminRevenueRoute = LocaleAdminAdminRevenueRouteImport.update({
   id: '/admin/revenue',
   path: '/admin/revenue',
@@ -361,6 +367,7 @@ export interface FileRoutesByFullPath {
   '/$locale/admin/governance': typeof LocaleAdminAdminGovernanceRoute
   '/$locale/admin/operator-applications': typeof LocaleAdminAdminOperatorApplicationsRoute
   '/$locale/admin/revenue': typeof LocaleAdminAdminRevenueRoute
+  '/$locale/admin/reviews': typeof LocaleAdminAdminReviewsRoute
   '/$locale/admin/templates': typeof LocaleAdminAdminTemplatesRoute
   '/$locale/manage/add-ons': typeof LocaleBusinessManageAddOnsRoute
   '/$locale/manage/classes': typeof LocaleBusinessManageClassesRoute
@@ -407,6 +414,7 @@ export interface FileRoutesByTo {
   '/$locale/admin/governance': typeof LocaleAdminAdminGovernanceRoute
   '/$locale/admin/operator-applications': typeof LocaleAdminAdminOperatorApplicationsRoute
   '/$locale/admin/revenue': typeof LocaleAdminAdminRevenueRoute
+  '/$locale/admin/reviews': typeof LocaleAdminAdminReviewsRoute
   '/$locale/admin/templates': typeof LocaleAdminAdminTemplatesRoute
   '/$locale/manage/add-ons': typeof LocaleBusinessManageAddOnsRoute
   '/$locale/manage/classes': typeof LocaleBusinessManageClassesRoute
@@ -459,6 +467,7 @@ export interface FileRoutesById {
   '/$locale/_admin/admin/governance': typeof LocaleAdminAdminGovernanceRoute
   '/$locale/_admin/admin/operator-applications': typeof LocaleAdminAdminOperatorApplicationsRoute
   '/$locale/_admin/admin/revenue': typeof LocaleAdminAdminRevenueRoute
+  '/$locale/_admin/admin/reviews': typeof LocaleAdminAdminReviewsRoute
   '/$locale/_admin/admin/templates': typeof LocaleAdminAdminTemplatesRoute
   '/$locale/_business/manage/add-ons': typeof LocaleBusinessManageAddOnsRoute
   '/$locale/_business/manage/classes': typeof LocaleBusinessManageClassesRoute
@@ -510,6 +519,7 @@ export interface FileRouteTypes {
     | '/$locale/admin/governance'
     | '/$locale/admin/operator-applications'
     | '/$locale/admin/revenue'
+    | '/$locale/admin/reviews'
     | '/$locale/admin/templates'
     | '/$locale/manage/add-ons'
     | '/$locale/manage/classes'
@@ -556,6 +566,7 @@ export interface FileRouteTypes {
     | '/$locale/admin/governance'
     | '/$locale/admin/operator-applications'
     | '/$locale/admin/revenue'
+    | '/$locale/admin/reviews'
     | '/$locale/admin/templates'
     | '/$locale/manage/add-ons'
     | '/$locale/manage/classes'
@@ -607,6 +618,7 @@ export interface FileRouteTypes {
     | '/$locale/_admin/admin/governance'
     | '/$locale/_admin/admin/operator-applications'
     | '/$locale/_admin/admin/revenue'
+    | '/$locale/_admin/admin/reviews'
     | '/$locale/_admin/admin/templates'
     | '/$locale/_business/manage/add-ons'
     | '/$locale/_business/manage/classes'
@@ -881,6 +893,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleAdminAdminTemplatesRouteImport
       parentRoute: typeof LocaleAdminRoute
     }
+    '/$locale/_admin/admin/reviews': {
+      id: '/$locale/_admin/admin/reviews'
+      path: '/admin/reviews'
+      fullPath: '/$locale/admin/reviews'
+      preLoaderRoute: typeof LocaleAdminAdminReviewsRouteImport
+      parentRoute: typeof LocaleAdminRoute
+    }
     '/$locale/_admin/admin/revenue': {
       id: '/$locale/_admin/admin/revenue'
       path: '/admin/revenue'
@@ -1004,6 +1023,7 @@ interface LocaleAdminRouteChildren {
   LocaleAdminAdminGovernanceRoute: typeof LocaleAdminAdminGovernanceRoute
   LocaleAdminAdminOperatorApplicationsRoute: typeof LocaleAdminAdminOperatorApplicationsRoute
   LocaleAdminAdminRevenueRoute: typeof LocaleAdminAdminRevenueRoute
+  LocaleAdminAdminReviewsRoute: typeof LocaleAdminAdminReviewsRoute
   LocaleAdminAdminTemplatesRoute: typeof LocaleAdminAdminTemplatesRoute
   LocaleAdminAdminIndexRoute: typeof LocaleAdminAdminIndexRoute
   LocaleAdminAdminOperatorsOperatorIdRoute: typeof LocaleAdminAdminOperatorsOperatorIdRoute
@@ -1020,6 +1040,7 @@ const LocaleAdminRouteChildren: LocaleAdminRouteChildren = {
   LocaleAdminAdminOperatorApplicationsRoute:
     LocaleAdminAdminOperatorApplicationsRoute,
   LocaleAdminAdminRevenueRoute: LocaleAdminAdminRevenueRoute,
+  LocaleAdminAdminReviewsRoute: LocaleAdminAdminReviewsRoute,
   LocaleAdminAdminTemplatesRoute: LocaleAdminAdminTemplatesRoute,
   LocaleAdminAdminIndexRoute: LocaleAdminAdminIndexRoute,
   LocaleAdminAdminOperatorsOperatorIdRoute:
