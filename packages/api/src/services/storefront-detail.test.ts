@@ -577,6 +577,59 @@ describe('StorefrontDetailService.getDetail classOfferings (#464)', () => {
 
     expect(data.classOfferings).toEqual([])
   })
+
+  // Multi-tenant isolation pins (#464). This is a PUBLIC read; the repo has chased
+  // this exact leak class before (#1224/#1268). Two layers: (1) another operator's
+  // offering at ITS OWN location must not surface here; (2) the contrived case that
+  // proves the `operatorId` filter — not just `locationIds` — is load-bearing.
+  it("excludes another operator's offering at its own location (location-scoped isolation)", async () => {
+    const opA = await makeOperator('Op A', 'op-a')
+    const compactA = await makeClass({ operatorId: opA.id, name: 'Compact', acrissCode: 'CCAR' })
+    const locA = await makeLocation({ operatorId: opA.id, name: 'Namba' })
+    await makeVehicle({ operatorId: opA.id, classId: compactA.id, pickupLocationId: locA.id })
+    await makeRatePlan({ operatorId: opA.id, classId: compactA.id, pickupLocationId: locA.id })
+
+    // Operator B: a well-formed active plan at ITS OWN location, with a road-legal car.
+    const opB = await makeOperator('Op B', 'op-b')
+    const vanB = await makeClass({ operatorId: opB.id, name: 'Minivan', acrissCode: 'MVAR' })
+    const locB = await makeLocation({ operatorId: opB.id, name: 'Umeda' })
+    await makeVehicle({ operatorId: opB.id, classId: vanB.id, pickupLocationId: locB.id })
+    await makeRatePlan({ operatorId: opB.id, classId: vanB.id, pickupLocationId: locB.id })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: locA.id, from: FROM, to: TO }),
+    )
+
+    expect(data.classOfferings).toContainEqual(
+      expect.objectContaining({ kind: 'CLASS_COMBO', classId: compactA.id }),
+    )
+    expect(data.classOfferings.map((o) => o.classId)).not.toContain(vanB.id)
+  })
+
+  it("excludes another operator's plan even when its pickupLocation is THIS store (operatorId scope is load-bearing)", async () => {
+    const opA = await makeOperator('Op A', 'op-a')
+    const compactA = await makeClass({ operatorId: opA.id, name: 'Compact', acrissCode: 'CCAR' })
+    const locA = await makeLocation({ operatorId: opA.id, name: 'Namba' })
+    await makeVehicle({ operatorId: opA.id, classId: compactA.id, pickupLocationId: locA.id })
+    await makeRatePlan({ operatorId: opA.id, classId: compactA.id, pickupLocationId: locA.id })
+
+    // Contrived: operator B owns an active plan AND a road-legal car whose
+    // pickupLocation is operator A's location. `locationIds` alone would let this
+    // through — only the `operatorId` filter keeps B's card off A's storefront.
+    const opB = await makeOperator('Op B', 'op-b')
+    const vanB = await makeClass({ operatorId: opB.id, name: 'Minivan', acrissCode: 'MVAR' })
+    await makeVehicle({ operatorId: opB.id, classId: vanB.id, pickupLocationId: locA.id })
+    await makeRatePlan({ operatorId: opB.id, classId: vanB.id, pickupLocationId: locA.id })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: locA.id, from: FROM, to: TO }),
+    )
+
+    expect(data.classOfferings).toContainEqual(
+      expect.objectContaining({ kind: 'CLASS_COMBO', classId: compactA.id }),
+    )
+    expect(data.classOfferings.map((o) => o.classId)).not.toContain(vanB.id)
+  })
 })
 
 describe('getInsuranceOptions', () => {
