@@ -7,6 +7,8 @@ import {
   OPERATOR_APPLICATION_BUSINESS_TYPES,
   OPERATOR_APPLICATION_FLEET_SIZES,
   OPERATOR_APPLICATION_STATUSES,
+  PAYMENT_ANOMALY_KINDS,
+  PAYMENT_ANOMALY_RESOLUTIONS,
   REVIEW_DIMENSIONS,
 } from './enums'
 
@@ -45,6 +47,15 @@ describe('operator application enums', () => {
   })
   it('pins business types', () => {
     expect(OPERATOR_APPLICATION_BUSINESS_TYPES).toEqual(['INDIVIDUAL', 'COMPANY'])
+  })
+})
+
+describe('payment anomaly enums', () => {
+  it('pins the anomaly kinds (order matches the payment_anomaly_kind pgEnum)', () => {
+    expect(PAYMENT_ANOMALY_KINDS).toEqual(['DOUBLE_PAYMENT', 'AMOUNT_MISMATCH'])
+  })
+  it('pins the resolution codes (order matches the payment_anomaly_resolution pgEnum)', () => {
+    expect(PAYMENT_ANOMALY_RESOLUTIONS).toEqual(['BENIGN', 'INVESTIGATED', 'REFUNDED_EXTERNALLY'])
   })
 })
 

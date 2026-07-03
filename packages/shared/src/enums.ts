@@ -97,6 +97,25 @@ export type PaymentEventStatus = (typeof PAYMENT_EVENT_STATUSES)[number]
 export const PAYMENT_REFUND_STATUSES = ['PENDING', 'SUCCEEDED', 'FAILED'] as const
 export type PaymentRefundStatus = (typeof PAYMENT_REFUND_STATUSES)[number]
 
+// Payment anomalies needing operator/admin review (#508 P2). A verified webhook can
+// report a charge that does NOT become a clean payment_events row: a second distinct
+// Session paying an already-paid booking (DOUBLE_PAYMENT — refund the duplicate) or a
+// session whose amount/currency != the booking snapshot (AMOUNT_MISMATCH — investigate).
+// Kept out of payment_events so revenue math (sum of SUCCEEDED rows) is never polluted.
+export const PAYMENT_ANOMALY_KINDS = ['DOUBLE_PAYMENT', 'AMOUNT_MISMATCH'] as const
+export type PaymentAnomalyKind = (typeof PAYMENT_ANOMALY_KINDS)[number]
+
+// How a platform admin closed a flagged charge (#1075 slice 3). Carries NO money —
+// v1 only clears the review queue: BENIGN (not actually a problem), INVESTIGATED
+// (looked into, no action), REFUNDED_EXTERNALLY (refunded in the Stripe dashboard,
+// since in-app refund is deferred to a future slice).
+export const PAYMENT_ANOMALY_RESOLUTIONS = [
+  'BENIGN',
+  'INVESTIGATED',
+  'REFUNDED_EXTERNALLY',
+] as const
+export type PaymentAnomalyResolution = (typeof PAYMENT_ANOMALY_RESOLUTIONS)[number]
+
 export const ADD_ON_STATUSES = ['ACTIVE', 'ARCHIVED'] as const
 export type AddOnStatus = (typeof ADD_ON_STATUSES)[number]
 
