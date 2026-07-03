@@ -16,6 +16,7 @@ export type {
   AddOn,
   AddOnTemplate,
   AddOnWithTemplate,
+  InsuranceTemplate,
   FeeSchedule,
   PaymentEvent,
   RenterDocument,
@@ -38,7 +39,6 @@ import type { OperatorRole } from '@kuruma/shared/validators/provider-invite'
 import type { CallerContext } from '../middleware/auth'
 import type {
   AddOn,
-  AddOnTemplate,
   AddOnWithTemplate,
   Booking,
   InsuranceOption,
@@ -264,23 +264,13 @@ export interface AddOnRepository {
   archive(ctx: CallerContext, id: string): Promise<AddOnWithTemplate | undefined>
 }
 
-/**
- * The platform-owned add-on TEMPLATE catalog (catalog i18n, epic #385). Global,
- * not tenant-scoped — every operator picks from the same list — so NO ctx: a
- * template carries no operator, and the read exposes only ACTIVE rows (a picker
- * never offers a retired template). The service resolves each row's LocalizedText
- * name to the caller locale before it reaches the wire.
- */
-export interface AddOnTemplateRepository {
-  findActive(): Promise<AddOnTemplate[]>
-  /**
-   * Look up ONE template by id — the write-path primitive (catalog i18n slice 2):
-   * a create resolves the picked template's en name for the still-NOT-NULL `name`
-   * column. NOT status-filtered (returns ARCHIVED too); the create service applies
-   * the ACTIVE-only policy. Undefined when no row matches.
-   */
-  findById(id: string): Promise<AddOnTemplate | undefined>
-}
+// Platform-owned catalog TEMPLATE repositories (add-on + insurance) live in
+// ./types-catalog-templates to keep this barrel under the file-size cap;
+// re-exported here so callers' `from '../types'` imports don't change.
+export type {
+  AddOnTemplateRepository,
+  InsuranceTemplateRepository,
+} from './types-catalog-templates'
 
 // #521 provider authorization. Not ctx-scoped: the admin endpoint
 // (PLATFORM_ADMIN-gated) and the OAuth callback pass already-resolved values;
@@ -788,4 +778,7 @@ export type {
 
 // #1277: self-serve operator registration data access lives in its own module
 // to keep this barrel under the file-size cap; re-exported for callers.
-export type { OperatorApplicationRepository } from './types-operator-application'
+export type {
+  OperatorApplicationListParams,
+  OperatorApplicationRepository,
+} from './types-operator-application'

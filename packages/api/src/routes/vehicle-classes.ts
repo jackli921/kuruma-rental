@@ -14,12 +14,13 @@ import {
 } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { VehicleClassFilters } from '../services/filters'
-import type { VehicleClassService, VehicleClassUpdate } from '../services/vehicle-class'
+import type { VehicleClassService } from '../services/vehicle-class'
 import type { VehicleClassAvailabilityService } from '../services/vehicle-class-availability'
 import type { ResolveWriteOperatorId } from '../tenancy'
 import {
   cachePublic,
   fail,
+  failResult,
   ok,
   parseArchivableFilters,
   parseBody,
@@ -83,7 +84,7 @@ export function createVehicleClassRoutes(
           range.from,
           range.to,
         )
-        if (!result.ok) return fail(c, result.error, result.status)
+        if (!result.ok) return failResult(c, result)
         // Short TTL — availability is time-sensitive (bookings land, vehicles
         // go under maintenance). 10s absorbs a renter's click-to-confirm
         // round trip without keeping a stale view for long. The DB exclusion
@@ -150,7 +151,7 @@ export function createVehicleClassRoutes(
             status: 'ACTIVE',
           })
 
-          if (!result.ok) return fail(c, result.error, result.status)
+          if (!result.ok) return failResult(c, result)
           return ok(c, result.vehicleClass, 201)
         } catch (err) {
           // #400: vehicleClasses.operatorId -> operators is the only FK a create
@@ -175,9 +176,9 @@ export function createVehicleClassRoutes(
         const result = await service.update(
           toCallerContext(user),
           idResult.id,
-          stripUndefined(parsed.data) as VehicleClassUpdate,
+          stripUndefined(parsed.data),
         )
-        if (!result.ok) return fail(c, result.error, result.status)
+        if (!result.ok) return failResult(c, result)
         return ok(c, result.vehicleClass)
       })
       .delete('/vehicle-classes/:id', async (c) => {
@@ -188,14 +189,9 @@ export function createVehicleClassRoutes(
         if (!idResult.ok) return idResult.response
 
         const result = await service.archive(toCallerContext(user), idResult.id)
-        if (!result.ok) {
-          const extras: Record<string, unknown> = {}
-          if (result.code) extras.code = result.code
-          if (result.activeBookingsCount !== undefined) {
-            extras.activeBookingsCount = result.activeBookingsCount
-          }
-          return fail(c, result.error, result.status, extras)
-        }
+        // code + activeBookingsCount ride through failResult so the portal can
+        // prompt the owner to reassign/cancel before archiving (#412).
+        if (!result.ok) return failResult(c, result)
         return ok(c, result.vehicleClass)
       })
   )

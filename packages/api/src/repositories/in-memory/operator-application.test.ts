@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OperatorApplication } from '../../stores'
 import { InMemoryOperatorApplicationRepository } from './operator-application'
 
@@ -42,5 +42,25 @@ describe('InMemoryOperatorApplicationRepository', () => {
     const a = await repo.create(base)
     expect(await repo.markApprovedIfPending(a.id, 'op1', 'admin', new Date())).toBeTruthy()
     expect(await repo.markApprovedIfPending(a.id, 'op1', 'admin', new Date())).toBeUndefined()
+  })
+
+  it('list caps at limit and pages by offset (newest-first)', async () => {
+    // Fake timers give each row a distinct createdAt so ordering is deterministic
+    // (without this all three stamp the same ms and fall back to the id tie-break).
+    vi.useFakeTimers()
+    const ids: string[] = []
+    for (let i = 0; i < 3; i++) {
+      vi.setSystemTime(new Date(2024, 0, 1, 0, 0, i))
+      const a = await repo.create({ ...base, contactEmail: `x${i}@y.com` })
+      ids.push(a.id)
+    }
+    vi.useRealTimers()
+
+    // Newest-first: the last-created row sorts first.
+    const firstPage = await repo.list({ limit: 2, offset: 0 })
+    expect(firstPage.map((a) => a.id)).toEqual([ids[2], ids[1]])
+
+    const secondPage = await repo.list({ limit: 2, offset: 2 })
+    expect(secondPage.map((a) => a.id)).toEqual([ids[0]])
   })
 })

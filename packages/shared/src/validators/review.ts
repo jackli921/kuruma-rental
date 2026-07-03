@@ -1,18 +1,10 @@
 import { z } from 'zod'
 import { REVIEW_SUBJECTS } from '../enums'
 
-/** Named sub-dimensions a review may carry (epic #1067): renter->operator uses
- *  cleanliness/accuracy/communication/value; operator->renter uses communication/
- *  cleanliness/ruleAdherence. The union is the accepted key set; the precise
- *  per-direction subset is enforced in the submission service (slice 2). */
-export const REVIEW_DIMENSIONS = [
-  'cleanliness',
-  'accuracy',
-  'communication',
-  'value',
-  'ruleAdherence',
-] as const
-export type ReviewDimension = (typeof REVIEW_DIMENSIONS)[number]
+// REVIEW_DIMENSIONS lives in enums.ts beside its sibling review enums (the closed-set
+// SSoT); re-exported here so existing `@kuruma/shared/validators/review` importers are
+// unaffected.
+export { REVIEW_DIMENSIONS, type ReviewDimension } from '../enums'
 
 // 1-5 whole stars — mirrors the DB reviews_overall_range_chk.
 const starRating = z.number().int().min(1).max(5)

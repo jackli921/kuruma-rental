@@ -18,8 +18,23 @@ interface ApplicationsReviewViewProps {
    * show the right message instead of silently swallowing non-409 errors.
    */
   approveError?: { id: string | null; alreadyReviewed: boolean } | null
-  /** Set after a successful approval — hides controls and reveals the invite link. */
-  approvedInvite?: { id: string; inviteUrl: string } | null
+  /**
+   * Invite links revealed after successful approvals, keyed by application id.
+   * Keyed (not a single row) so approving a second application never drops the
+   * first one's still-uncopied invite link. A card enters its terminal reveal
+   * state when its id is present here.
+   */
+  approvedInvites?: Record<string, string>
+  /** Re-mint the OWNER invite for a revealed row (#1370). */
+  onRemint?: (id: string) => void | Promise<void>
+  /** Id of the row whose re-mint is in flight, if any. */
+  remintingId?: string | null
+  /**
+   * The row whose last re-mint failed, plus whether it was terminal (404/409 —
+   * not approved / owner already onboarded) vs a generic retryable failure, so the
+   * card shows "no longer available" instead of an infinite "try again".
+   */
+  remintError?: { id: string | null; terminal: boolean } | null
 }
 
 // Pure presentation of the platform-admin operator-application review queue
@@ -35,7 +50,10 @@ export function ApplicationsReviewView({
   onApprove,
   approvingId = null,
   approveError = null,
-  approvedInvite = null,
+  approvedInvites = {},
+  onRemint,
+  remintingId = null,
+  remintError = null,
 }: ApplicationsReviewViewProps) {
   const t = useTranslations('admin.applications')
 
@@ -57,6 +75,10 @@ export function ApplicationsReviewView({
               ? 'alreadyReviewed'
               : 'approveFailed'
             const approveErrorText = approveError?.id === app.id ? t(approveErrorKey) : null
+            const remintErrorKey = remintError?.terminal
+              ? 'regenerateUnavailable'
+              : 'regenerateFailed'
+            const remintErrorText = remintError?.id === app.id ? t(remintErrorKey) : null
             return (
               <li key={app.id}>
                 <ApplicationReviewCard
@@ -67,7 +89,12 @@ export function ApplicationsReviewView({
                   onApprove={() => onApprove(app.id)}
                   isApproving={approvingId === app.id}
                   approveError={approveErrorText}
-                  inviteUrl={approvedInvite?.id === app.id ? approvedInvite.inviteUrl : null}
+                  inviteUrl={approvedInvites[app.id] ?? null}
+                  // exactOptionalPropertyTypes: omit onRemint entirely rather than
+                  // passing undefined when no remint handler is wired.
+                  {...(onRemint ? { onRemint: () => onRemint(app.id) } : {})}
+                  isReminting={remintingId === app.id}
+                  remintError={remintErrorText}
                 />
               </li>
             )

@@ -235,7 +235,7 @@ describe('POST/PATCH /vehicles wires pickupLocationId end-to-end (#435)', () => 
 
   it('PATCH assigns a pickupLocationId to an unassigned vehicle', async () => {
     const created = await (await post(vehicleBody({}))).json()
-    const res = await app.request(`/vehicles/${created.data.id}`, {
+    const res = await app.request(`/vehicles/${created.data.id}?operatorId=${opId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ pickupLocationId: ownLocation.id }),

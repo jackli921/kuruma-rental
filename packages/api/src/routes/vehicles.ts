@@ -8,7 +8,7 @@ import { Hono } from 'hono'
 import { FLEET_WRITE_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import type { MaintenanceService } from '../services/maintenance'
 import type { VehicleService } from '../services/vehicle'
-import { fail, ok, parseBody, parseId, parsePagination } from './helpers'
+import { fail, failResult, ok, parseBody, parseId, parsePagination } from './helpers'
 
 export function createVehicleRoutes(
   service: VehicleService,
@@ -48,7 +48,7 @@ export function createVehicleRoutes(
       if (!parsed.ok) return parsed.response
 
       const result = await service.create(toCallerContext(user), parsed.data)
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.vehicle, 201)
     })
     .patch('/vehicles/bulk-status', async (c) => {
@@ -62,8 +62,9 @@ export function createVehicleRoutes(
         toCallerContext(user),
         parsed.data.vehicleIds,
         parsed.data.status,
+        c.req.query('operatorId'),
       )
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.vehicles)
     })
     .patch('/vehicles/:id', async (c) => {
@@ -76,8 +77,13 @@ export function createVehicleRoutes(
       const parsed = await parseBody(c, updateVehicleSchema)
       if (!parsed.ok) return parsed.response
 
-      const result = await service.update(toCallerContext(user), idResult.id, parsed.data)
-      if (!result.ok) return fail(c, result.error, result.status)
+      const result = await service.update(
+        toCallerContext(user),
+        idResult.id,
+        parsed.data,
+        c.req.query('operatorId'),
+      )
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.vehicle)
     })
     .patch('/vehicles/:id/status', async (c) => {
@@ -96,8 +102,9 @@ export function createVehicleRoutes(
         idResult.id,
         parsed.data.status,
         parsed.data.reason,
+        c.req.query('operatorId'),
       )
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.vehicle)
     })
     .delete('/vehicles/:id', async (c) => {
@@ -107,8 +114,12 @@ export function createVehicleRoutes(
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
 
-      const result = await service.softDelete(toCallerContext(user), idResult.id)
-      if (!result.ok) return fail(c, result.error, result.status)
+      const result = await service.softDelete(
+        toCallerContext(user),
+        idResult.id,
+        c.req.query('operatorId'),
+      )
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.vehicle)
     })
 }

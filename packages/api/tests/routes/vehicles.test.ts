@@ -51,7 +51,10 @@ describe('Vehicle CRUD Routes', () => {
     const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo, runInTransaction)
     const vehicleService = new VehicleService(repo, testResolveWriteOperatorId(), '')
     app = new Hono()
-    app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
+    // #1260: this CRUD suite runs as a tenant OPERATOR_OWNER (the primary fleet
+    // manager), so the acting-operator write guard no-ops. The admin-picker binding
+    // (?operatorId= / cross-tenant 404 / no-pick 422) is covered by route-binding tests.
+    app.use('*', testAuthMiddleware('operator-user', 'OPERATOR_OWNER', TEST_OPERATOR_ID))
     app.route('/', createVehicleRoutes(vehicleService, maintenanceService))
   })
 

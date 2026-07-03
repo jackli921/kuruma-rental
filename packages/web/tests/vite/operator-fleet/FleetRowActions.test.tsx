@@ -90,7 +90,11 @@ function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVe
   }
 }
 
-function renderActions(v: OperatorFleetVehicle, onEdit: () => void = vi.fn()) {
+function renderActions(
+  v: OperatorFleetVehicle,
+  onEdit: () => void = vi.fn(),
+  pickedOperatorId?: string,
+) {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: Number.POSITIVE_INFINITY },
@@ -101,7 +105,7 @@ function renderActions(v: OperatorFleetVehicle, onEdit: () => void = vi.fn()) {
   render(
     <QueryClientProvider client={client}>
       <IntlProvider locale="en" messages={enMessages}>
-        <FleetRowActions vehicle={v} onEdit={onEdit} />
+        <FleetRowActions vehicle={v} onEdit={onEdit} pickedOperatorId={pickedOperatorId} />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -144,6 +148,7 @@ describe('FleetRowActions', () => {
         'MAINTENANCE',
         'test-csrf',
         'Brake inspection',
+        undefined,
       )
     })
   })
@@ -154,7 +159,13 @@ describe('FleetRowActions', () => {
     fireEvent.click(screen.getByText(en.actions.setAvailable))
 
     await waitFor(() => {
-      expect(updateVehicleStatus).toHaveBeenCalledWith('v7', 'AVAILABLE', 'test-csrf')
+      expect(updateVehicleStatus).toHaveBeenCalledWith(
+        'v7',
+        'AVAILABLE',
+        'test-csrf',
+        undefined,
+        undefined,
+      )
     })
     expect(retireVehicle).not.toHaveBeenCalled()
   })
@@ -171,9 +182,30 @@ describe('FleetRowActions', () => {
     fireEvent.click(confirm)
 
     await waitFor(() => {
-      expect(retireVehicle).toHaveBeenCalledWith('v3', 'test-csrf')
+      expect(retireVehicle).toHaveBeenCalledWith('v3', 'test-csrf', undefined)
     })
     expect(retireVehicle).toHaveBeenCalledTimes(1)
+  })
+
+  it('binds writes to the picked operator (#1260): forwards pickedOperatorId to status + retire', async () => {
+    renderActions(vehicle({ id: 'v3', status: 'MAINTENANCE' }), vi.fn(), 'op_42')
+
+    fireEvent.click(screen.getByText(en.actions.setAvailable))
+    await waitFor(() => {
+      expect(updateVehicleStatus).toHaveBeenCalledWith(
+        'v3',
+        'AVAILABLE',
+        'test-csrf',
+        undefined,
+        'op_42',
+      )
+    })
+
+    fireEvent.click(screen.getByText(en.retireVehicle))
+    fireEvent.click(await screen.findByRole('button', { name: en.retireVehicle }))
+    await waitFor(() => {
+      expect(retireVehicle).toHaveBeenCalledWith('v3', 'test-csrf', 'op_42')
+    })
   })
 
   it('invalidates the fleet query after a successful status change', async () => {

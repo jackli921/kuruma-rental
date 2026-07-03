@@ -2,6 +2,8 @@
 // surface for the /manage/customers owner workflow. Computed per-request; not
 // denormalized. See issue #43.
 
+import type { BookingStatus } from '../enums'
+
 export interface Customer {
   id: string
   name: string | null
@@ -21,7 +23,7 @@ export interface CustomerBookingSummary {
   vehicleName: string | null
   startAt: string
   endAt: string
-  status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+  status: BookingStatus
   totalPrice: number | null
 }
 

@@ -8,8 +8,11 @@
 // — there is no types/index barrel). Import as
 // `@kuruma/shared/types/search-result`, NOT from the `@kuruma/shared` root.
 
-/** Discriminator — mirrors #463 `fulfillment_mode` (SPECIFIC | CLASS_COMBO). */
-export type SearchResultKind = 'SPECIFIC' | 'CLASS_COMBO'
+import type { BookingFulfillmentMode, Transmission } from '../enums'
+
+/** Discriminator — mirrors #463 `fulfillment_mode` (SPECIFIC | CLASS_COMBO). Aliased
+ *  to the enums SSoT (#1375) so the two never drift. */
+export type SearchResultKind = BookingFulfillmentMode
 
 /** Location identity + map coordinates, embedded on every result row. */
 export interface ResultLocation {
@@ -44,7 +47,7 @@ export interface SpecificSearchResult extends SearchResultBase {
   make: string | null
   model: string | null
   year: number | null
-  transmission: 'AUTO' | 'MANUAL'
+  transmission: Transmission
 }
 
 /** FAST-FOLLOW (#464): a class with an inventory count, exact car assigned on
