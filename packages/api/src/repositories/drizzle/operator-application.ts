@@ -1,8 +1,7 @@
 import { operatorApplications } from '@kuruma/shared/db/schema'
-import type { OperatorApplicationStatus } from '@kuruma/shared/enums'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, lt, or } from 'drizzle-orm'
 import type { OperatorApplication } from '../../stores'
-import type { OperatorApplicationRepository } from '../types'
+import type { OperatorApplicationListFilters, OperatorApplicationRepository } from '../types'
 import type { Db } from './shared'
 
 type Row = typeof operatorApplications.$inferSelect
@@ -26,12 +25,28 @@ export class DrizzleOperatorApplicationRepository implements OperatorApplication
     return row ? toOperatorApplication(row) : undefined
   }
 
-  async list(status?: OperatorApplicationStatus): Promise<OperatorApplication[]> {
-    const rows = await this.db
+  async list(filters?: OperatorApplicationListFilters): Promise<OperatorApplication[]> {
+    const conditions = []
+    if (filters?.status) conditions.push(eq(operatorApplications.status, filters.status))
+    // Keyset seek on the (createdAt DESC, id ASC) order: rows strictly "after" the
+    // pivot are those with an older createdAt, or the same createdAt and a larger id.
+    if (filters?.after) {
+      const { createdAt, id } = filters.after
+      conditions.push(
+        or(
+          lt(operatorApplications.createdAt, createdAt),
+          and(eq(operatorApplications.createdAt, createdAt), gt(operatorApplications.id, id)),
+        )!,
+      )
+    }
+    let query = this.db
       .select()
       .from(operatorApplications)
-      .where(status ? eq(operatorApplications.status, status) : undefined)
-      .orderBy(desc(operatorApplications.createdAt), operatorApplications.id)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(operatorApplications.createdAt), asc(operatorApplications.id))
+      .$dynamic()
+    if (filters?.limit !== undefined) query = query.limit(filters.limit)
+    const rows = await query
     return rows.map(toOperatorApplication)
   }
 

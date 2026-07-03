@@ -61,10 +61,33 @@ describe('fetchPendingOperatorApplications', () => {
 
     const result = await fetchPendingOperatorApplications()
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/admin/operator-applications?status=PENDING', {
-      credentials: 'include',
-    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/operator-applications?status=PENDING&limit=100',
+      { credentials: 'include' },
+    )
     expect(result).toEqual([pendingApp])
+  })
+
+  it('follows nextCursor across pages and returns the full concatenated queue', async () => {
+    const second: OperatorApplicationDto = {
+      ...pendingApp,
+      id: 'app_2',
+      contactEmail: 'two@example.com',
+    }
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({ success: true, data: [pendingApp], nextCursor: 'CUR_1' }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: [second], nextCursor: null }))
+
+    const result = await fetchPendingOperatorApplications()
+
+    expect(result).toEqual([pendingApp, second])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    // The second request threads the cursor the first page returned.
+    expect(fetchMock.mock.calls[1]![0]).toBe(
+      '/api/admin/operator-applications?status=PENDING&limit=100&cursor=CUR_1',
+    )
   })
 
   it('rejects with a ParseError when a row carries an out-of-domain status', async () => {

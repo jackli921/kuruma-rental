@@ -63,7 +63,7 @@ describe('OperatorApplicationService.list + reject', () => {
     const b = await service.submit({ ...input, contactEmail: 'other@example.com' })
     vi.useRealTimers()
 
-    const all = await service.list()
+    const all = (await service.list({ limit: 50 })).data
     // b has a later createdAt so it sorts first (newest-first)
     expect(all).toHaveLength(2)
     expect(all[0]?.id).toBe(b.id)
@@ -119,13 +119,34 @@ describe('OperatorApplicationService.list + reject', () => {
     const toReject = await service.submit({ ...input, contactEmail: 'reject@example.com' })
     await service.reject(toReject.id, 'admin-1', 'no')
 
-    const onlyPending = await service.list('PENDING')
+    const onlyPending = (await service.list({ status: 'PENDING', limit: 50 })).data
     expect(onlyPending).toHaveLength(1)
     expect(onlyPending[0]?.id).toBe(pending.id)
 
-    const onlyRejected = await service.list('REJECTED')
+    const onlyRejected = (await service.list({ status: 'REJECTED', limit: 50 })).data
     expect(onlyRejected).toHaveLength(1)
     expect(onlyRejected[0]?.id).toBe(toReject.id)
+  })
+
+  it('list() keyset-paginates: caps at limit, emits a cursor, and the cursor fetches the rest without overlap', async () => {
+    vi.useFakeTimers()
+    const created: string[] = []
+    for (let i = 0; i < 3; i++) {
+      vi.setSystemTime(new Date(`2024-03-0${i + 1}T00:00:00Z`))
+      const { id } = await service.submit({ ...input, contactEmail: `owner${i}@example.com` })
+      created.push(id)
+    }
+    vi.useRealTimers()
+    // Newest-first: the 03-03 app, then 03-02, then 03-01.
+    const newestFirst = [created[2], created[1], created[0]]
+
+    const page1 = await service.list({ status: 'PENDING', limit: 2 })
+    expect(page1.data.map((a) => a.id)).toEqual([newestFirst[0], newestFirst[1]])
+    expect(page1.nextCursor).toEqual(expect.any(String))
+
+    const page2 = await service.list({ status: 'PENDING', limit: 2, cursor: page1.nextCursor! })
+    expect(page2.data.map((a) => a.id)).toEqual([newestFirst[2]])
+    expect(page2.nextCursor).toBeNull()
   })
 })
 

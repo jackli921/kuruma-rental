@@ -1,4 +1,4 @@
-import { unwrap } from '@/lib/api-error'
+import { unwrap, unwrapPage } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import {
   OPERATOR_APPLICATION_BUSINESS_TYPES,
@@ -42,14 +42,32 @@ export const ADMIN_OPERATOR_APPLICATIONS_QUERY_KEY = [
   'pending',
 ] as const
 
-// The platform-staff pending-review queue. Cookie-authenticated; the server
-// gates on the session role (PLATFORM_ADMIN). The LIST endpoint returns
-// { success: true, data: [...rows] } — data is a bare array.
+// The platform-staff pending-review queue. Cookie-authenticated; the server gates
+// on the session role (PLATFORM_ADMIN). The LIST endpoint keyset-paginates (#1371):
+// `data` is a bare array and the envelope carries `nextCursor`, so follow it to the
+// end to assemble the whole queue. Each request is bounded — the server never runs
+// one unbounded scan — and the page cap refuses to truncate the queue silently if
+// it ever grows past it.
+const APPLICATIONS_PAGE_LIMIT = 100
+const MAX_APPLICATION_PAGES = 50
+
 export async function fetchPendingOperatorApplications(): Promise<OperatorApplicationDto[]> {
-  const res = await fetch(`${getApiBaseUrl()}/admin/operator-applications?status=PENDING`, {
-    credentials: 'include',
-  })
-  return unwrap(res, z.array(operatorApplicationDtoSchema))
+  const rows: OperatorApplicationDto[] = []
+  let cursor: string | null = null
+  for (let page = 0; page < MAX_APPLICATION_PAGES; page++) {
+    const sp = new URLSearchParams({ status: 'PENDING', limit: String(APPLICATIONS_PAGE_LIMIT) })
+    if (cursor) sp.set('cursor', cursor)
+    const res = await fetch(`${getApiBaseUrl()}/admin/operator-applications?${sp.toString()}`, {
+      credentials: 'include',
+    })
+    const { data, nextCursor } = await unwrapPage(res, z.array(operatorApplicationDtoSchema))
+    rows.push(...data)
+    cursor = nextCursor
+    if (!cursor) return rows
+  }
+  throw new Error(
+    `Operator-application pagination exceeded ${MAX_APPLICATION_PAGES} pages — refusing to truncate the queue silently`,
+  )
 }
 
 export function pendingOperatorApplicationsQueryOptions() {

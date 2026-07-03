@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { requirePlatformAdmin, requireUser, toCallerContext } from '../middleware/auth'
 import type { OperatorApplicationService } from '../services/operator-application'
-import { fail, ok, parseBody, parseId } from './helpers'
+import { fail, ok, parseBody, parseId, parseLimit } from './helpers'
 
 // Type guard over the closed status set: a query param is an untrusted string, so
 // narrow it to the enum before it reaches the service (guard over an `as` cast).
@@ -43,8 +43,17 @@ export function createAdminOperatorApplicationRoutes(service: OperatorApplicatio
         // silent empty result set indistinguishable from "no matching rows".
         return fail(c, 'invalid status', 400)
       }
-      const rows = await service.list(statusParam)
-      return ok(c, rows)
+      // Bound the read (#1371): default 50, max 100. `data` stays a bare array so
+      // the web client keeps parsing it; the keyset `nextCursor` rides in the envelope.
+      const limitResult = parseLimit(c, { defaultLimit: 50 })
+      if (!limitResult.ok) return limitResult.response
+
+      const { data, nextCursor } = await service.list({
+        status: statusParam,
+        limit: limitResult.limit,
+        cursor: c.req.query('cursor'),
+      })
+      return ok(c, data, 200, { nextCursor })
     })
     .post('/admin/operator-applications/:id/reject', async (c) => {
       const user = requireUser(c)

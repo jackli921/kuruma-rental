@@ -8,7 +8,11 @@ import {
   pgConstraintName,
   pgErrorCode,
 } from '../pg-errors'
-import type { OperatorApplicationRepository, RunOperatorApproval } from '../repositories/types'
+import type {
+  OperatorApplicationListFilters,
+  OperatorApplicationRepository,
+  RunOperatorApproval,
+} from '../repositories/types'
 import type { OperatorApplication } from '../stores'
 import { mintInvite } from './invite-mint'
 import type { ProviderInviteAuditEvent } from './provider-invite'
@@ -50,6 +54,28 @@ export interface OperatorApplicationServiceConfig {
   readonly webBaseUrl: string
 }
 
+/** Admin-queue read query (#1371). `limit` is required (the route clamps it via
+ *  parseLimit); `cursor` is the opaque token returned as `nextCursor` on the prior page. */
+export interface OperatorApplicationListQuery {
+  status?: OperatorApplicationStatus | undefined
+  limit: number
+  cursor?: string | undefined
+}
+
+/** Opaque keyset cursor: `<createdAt ISO>_<id>`. The id is a uuid and the ISO
+ *  timestamp carries no underscore, so splitting on the first `_` is unambiguous. */
+function encodeApplicationCursor(a: OperatorApplication): string {
+  return `${a.createdAt.toISOString()}_${a.id}`
+}
+
+function decodeApplicationCursor(cursor: string): { createdAt: Date; id: string } | undefined {
+  const sep = cursor.indexOf('_')
+  if (sep < 0) return undefined
+  const createdAt = new Date(cursor.slice(0, sep))
+  if (Number.isNaN(createdAt.getTime())) return undefined
+  return { createdAt, id: cursor.slice(sep + 1) }
+}
+
 // The honeypot/consent fields are validated + stripped at the route boundary; the
 // service persists only the domain fields (contactEmail already lowercased by zod).
 type SubmitInput = Omit<OperatorApplicationInput, 'honeypot' | 'consent'>
@@ -62,8 +88,21 @@ export class OperatorApplicationService {
     private readonly config: OperatorApplicationServiceConfig,
   ) {}
 
-  async list(status?: OperatorApplicationStatus): Promise<OperatorApplication[]> {
-    return this.repo.list(status)
+  async list(
+    query: OperatorApplicationListQuery,
+  ): Promise<{ data: OperatorApplication[]; nextCursor: string | null }> {
+    const after = query.cursor ? decodeApplicationCursor(query.cursor) : undefined
+    const filters: OperatorApplicationListFilters = {
+      limit: query.limit + 1, // overfetch by 1 to detect a next page
+      ...(query.status ? { status: query.status } : {}),
+      ...(after ? { after } : {}),
+    }
+    const rows = await this.repo.list(filters)
+    const hasMore = rows.length > query.limit
+    const data = hasMore ? rows.slice(0, query.limit) : rows
+    const last = data[data.length - 1]
+    const nextCursor = hasMore && last ? encodeApplicationCursor(last) : null
+    return { data, nextCursor }
   }
 
   async reject(

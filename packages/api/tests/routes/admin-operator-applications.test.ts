@@ -150,6 +150,41 @@ describe('GET /admin/operator-applications', () => {
     })
     expect(res.status).toBe(400)
   })
+
+  test('caps the page at ?limit and pages the rest via nextCursor (no overlap, full coverage)', async () => {
+    const ids = new Set<string>()
+    for (const email of ['a@example.com', 'b@example.com', 'c@example.com']) {
+      const row = await seedApplication(harness.app, { contactEmail: email, businessName: email })
+      ids.add(row.id)
+    }
+
+    const res1 = await harness.app.request('/admin/operator-applications?status=PENDING&limit=2', {
+      headers: await bearer(ADMIN),
+    })
+    expect(res1.status).toBe(200)
+    const page1 = (await res1.json()) as { data: Array<{ id: string }>; nextCursor: string | null }
+    expect(page1.data).toHaveLength(2)
+    expect(page1.nextCursor).toEqual(expect.any(String))
+
+    const res2 = await harness.app.request(
+      `/admin/operator-applications?status=PENDING&limit=2&cursor=${encodeURIComponent(page1.nextCursor!)}`,
+      { headers: await bearer(ADMIN) },
+    )
+    const page2 = (await res2.json()) as { data: Array<{ id: string }>; nextCursor: string | null }
+    expect(page2.data).toHaveLength(1)
+    expect(page2.nextCursor).toBeNull()
+
+    // The two pages together cover every seeded row exactly once — no overlap, no gap.
+    const seen = [...page1.data, ...page2.data].map((r) => r.id)
+    expect(new Set(seen)).toEqual(ids)
+  })
+
+  test('rejects ?limit above the max with a 400', async () => {
+    const res = await harness.app.request('/admin/operator-applications?limit=101', {
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(400)
+  })
 })
 
 describe('POST /admin/operator-applications/:id/reject', () => {

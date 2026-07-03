@@ -788,4 +788,7 @@ export type {
 
 // #1277: self-serve operator registration data access lives in its own module
 // to keep this barrel under the file-size cap; re-exported for callers.
-export type { OperatorApplicationRepository } from './types-operator-application'
+export type {
+  OperatorApplicationListFilters,
+  OperatorApplicationRepository,
+} from './types-operator-application'
