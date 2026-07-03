@@ -5,7 +5,6 @@ import {
   ForbiddenError,
   NotFoundError,
   requireOperatorOwnerWrite,
-  requireOperatorScope,
 } from '../auth/guards'
 import type {
   OperatorMembershipRepository,
@@ -13,6 +12,7 @@ import type {
   UserRepository,
 } from '../repositories/types'
 import type { OperatorMembership, ProviderInvite, User } from '../stores'
+import { resolveTeamOperatorId } from '../tenancy'
 import type { CreatedInvite, ProviderInviteService } from './provider-invite'
 
 /**
@@ -59,16 +59,14 @@ export class OperatorTeamService {
     )
   }
 
-  async listInvites(ctx: CallerContext): Promise<OperatorInviteData[]> {
-    requireOperatorScope(ctx)
-    const operatorId = this.requireOwnOperator(ctx)
+  async listInvites(ctx: CallerContext, inputOperatorId?: string): Promise<OperatorInviteData[]> {
+    const operatorId = resolveTeamOperatorId(ctx, inputOperatorId)
     const rows = await this.invites.listByOperator(operatorId)
     return rows.map(toOperatorInviteData)
   }
 
-  async listMembers(ctx: CallerContext): Promise<OperatorMemberData[]> {
-    requireOperatorScope(ctx)
-    const operatorId = this.requireOwnOperator(ctx)
+  async listMembers(ctx: CallerContext, inputOperatorId?: string): Promise<OperatorMemberData[]> {
+    const operatorId = resolveTeamOperatorId(ctx, inputOperatorId)
     const memberships = await this.memberships.findActiveByOperator(operatorId)
     // One batched read, not a per-member query — the team is small but an N+1
     // loop is still the wrong shape. `findActiveByOperator` already orders the rows.

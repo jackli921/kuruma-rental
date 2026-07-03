@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { CallerContext } from '../../src/auth/context'
-import { ConflictError, ForbiddenError, NotFoundError } from '../../src/auth/guards'
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  OperatorRequiredError,
+} from '../../src/auth/guards'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
 import { InMemoryOperatorMembershipRepository } from '../../src/repositories/in-memory/operator-membership'
 import { InMemoryProviderInviteRepository } from '../../src/repositories/in-memory/provider-invite'
@@ -136,8 +141,8 @@ describe('OperatorTeamService.listInvites', () => {
     expect(invites[0]).not.toHaveProperty('invitedByUserId')
   })
 
-  it('refuses a caller with no operatorId (403)', async () => {
-    await expect(service.listInvites(ADMIN_CTX)).rejects.toThrow(ForbiddenError)
+  it('refuses a no-pick PLATFORM_ADMIN (422) — no merged team view', async () => {
+    await expect(service.listInvites(ADMIN_CTX)).rejects.toThrow(OperatorRequiredError)
   })
 })
 
@@ -166,8 +171,8 @@ describe('OperatorTeamService.listMembers', () => {
     expect(members[0]?.joinedAt).toMatch(ISO_RE)
   })
 
-  it('refuses a caller with no operatorId (403)', async () => {
-    await expect(service.listMembers(ADMIN_CTX)).rejects.toThrow(ForbiddenError)
+  it('refuses a no-pick PLATFORM_ADMIN (422) — no merged team view', async () => {
+    await expect(service.listMembers(ADMIN_CTX)).rejects.toThrow(OperatorRequiredError)
   })
 })
 
@@ -310,5 +315,40 @@ describe('OperatorTeamService.deactivateMember', () => {
 
     expect((await service.listMembers(OWNER_CTX)).map((m) => m.userId)).toEqual(['u_owner'])
     expect(await projectionOf('u_owner2')).toEqual({ role: 'RENTER', operatorId: null })
+  })
+})
+
+describe('OperatorTeamService reads as a picked operator (#1230)', () => {
+  it('listInvites: a PLATFORM_ADMIN with a picked operatorId reads THAT tenant', async () => {
+    await inviteRepo.create({
+      email: 'theirs@x.com',
+      operatorId: 'op_2',
+      role: 'OPERATOR_STAFF',
+      tokenHash: 'h_2',
+      status: 'PENDING',
+      expiresAt: FUTURE,
+      invitedByUserId: 'u_other',
+      acceptedByUserId: null,
+    })
+    const invites = await service.listInvites(ADMIN_CTX, 'op_2')
+    expect(invites).toHaveLength(1)
+    expect(invites[0]?.email).toBe('theirs@x.com')
+  })
+
+  it('listMembers: an operator IGNORES a foreign picked id and reads its own tenant', async () => {
+    await membershipRepo.create({
+      userId: 'u_owner',
+      operatorId: 'op_1',
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+    })
+    await membershipRepo.create({
+      userId: 'u_other',
+      operatorId: 'op_2',
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+    })
+    const members = await service.listMembers(OWNER_CTX, 'op_2')
+    expect(members.map((m) => m.userId)).toEqual(['u_owner'])
   })
 })
