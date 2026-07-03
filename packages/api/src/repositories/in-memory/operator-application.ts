@@ -48,7 +48,11 @@ export class InMemoryOperatorApplicationRepository implements OperatorApplicatio
     return this.store.get(id)
   }
 
-  async list({ status, limit, offset }: OperatorApplicationListParams): Promise<OperatorApplication[]> {
+  async list({
+    status,
+    limit,
+    offset,
+  }: OperatorApplicationListParams): Promise<OperatorApplication[]> {
     return [...this.store.values()]
       .filter((a) => !status || a.status === status)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id))
