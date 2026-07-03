@@ -180,10 +180,9 @@ export function OperatorBookingsRoute() {
   const anchorDate = useMemo(() => parseCalendarDate(date), [date])
   const { from, to } = calendarRange(view, anchorDate)
 
-  // Block bands render only on the calendar (day/week/month) views — the fleet
-  // timeline shows bookings only (block bands on the timeline is a follow-up). So the
-  // Schedule affordance is offered only where a created block becomes visible:
-  // inviting a create on the timeline (the default view) would refetch into nothing.
+  // Block bands render on every view now (#1244 added them to the timeline). The
+  // Schedule (create) affordance, however, is driven by an rbc slot-drag the timeline
+  // lib doesn't offer, so it stays on the calendar (day/week/month) views only.
   const canScheduleBlock = canManageBlocks && view !== 'timeline'
   const { data: bookings } = useSuspenseQuery(
     operatorCalendarQueryOptions(from, to, pickedOperatorId),
@@ -195,11 +194,11 @@ export function OperatorBookingsRoute() {
   // Blocks are an additive layer (not in the suspense loader): a non-suspense query
   // that degrades to empty on error/disabled, so a blocks-read failure never blanks
   // the whole calendar (the coupling that broke the portal when it read fleet-overview).
-  // Skipped on the timeline view — FleetTimeline renders no block bands (#1244), so
-  // fetching them on the default landing view would be a wasted request.
+  // Fetched on every view a viewer can see blocks — the timeline renders block bands
+  // too now (#1244), so it needs the same data as the day/week calendar.
   const { data: blocks } = useQuery({
     ...operatorCalendarBlocksQueryOptions(from, to, pickedOperatorId),
-    enabled: canViewBlocks && view !== 'timeline',
+    enabled: canViewBlocks,
   })
 
   const events = useMemo(() => toCalendarEvents(bookings, vehicles), [bookings, vehicles])
@@ -351,11 +350,13 @@ export function OperatorBookingsRoute() {
                 <FleetTimeline
                   rows={timelineRows}
                   vehicles={timelineVehicles}
+                  blocks={blockEvents}
                   date={anchorDate}
                   locale={locale}
                   onViewChange={handleViewChange}
                   onDateChange={handleDateChange}
                   onSelectEvent={navigateToBooking}
+                  onSelectBlock={setSelectedBlock}
                 />
               </Suspense>
             ) : (

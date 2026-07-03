@@ -43,12 +43,14 @@ function renderTimeline(rows: CalendarBookingRow[]) {
       <FleetTimeline
         rows={rows}
         vehicles={VEHICLES}
+        blocks={[]}
         // Local noon of the calendar day Jul 1 (TZ-independent anchor day).
         date={new Date(2026, 6, 1, 12)}
         locale="en"
         onViewChange={vi.fn()}
         onDateChange={vi.fn()}
         onSelectEvent={vi.fn()}
+        onSelectBlock={vi.fn()}
       />
     </IntlProvider>,
   )
