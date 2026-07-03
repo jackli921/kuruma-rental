@@ -1,6 +1,10 @@
+import type { TemplatePatch } from '@kuruma/shared/types/template-admin'
 import type { AddOnTemplate } from '../../stores'
-import type { AddOnTemplateRepository } from '../types'
+import type { AddOnTemplateRepository, TemplateCreateInput } from '../types'
 import { seedDemoAddOnTemplates } from './add-on-template-seed'
+import { insertTemplate, mergeTemplatePatch } from './template-patch'
+
+const KEY_CONSTRAINT = 'add_on_templates_key_unique'
 
 /**
  * Local-dev / route-suite double for the global add-on template catalog. An
@@ -27,5 +31,17 @@ export class InMemoryAddOnTemplateRepository implements AddOnTemplateRepository 
 
   async findById(id: string): Promise<AddOnTemplate | undefined> {
     return this.store.get(id)
+  }
+
+  async update(id: string, patch: TemplatePatch): Promise<AddOnTemplate | undefined> {
+    const current = this.store.get(id)
+    if (!current) return undefined
+    const updated = mergeTemplatePatch(current, patch)
+    this.store.set(id, updated)
+    return updated
+  }
+
+  async create(input: TemplateCreateInput): Promise<AddOnTemplate> {
+    return insertTemplate(this.store, input, KEY_CONSTRAINT)
   }
 }

@@ -60,7 +60,11 @@ export function createCustomerRoutes(service: CustomerService) {
       if (!q || q.length < 2) {
         return fail(c, 'Search query must be at least 2 characters', 400)
       }
-      const customers = await service.search(q, ctx)
+      // #1260: a picker admin (PLATFORM_ADMIN) scopes the manual-booking search to
+      // the operator it is acting as; without a pick it keeps the full-directory
+      // search. A tenant operator's own scope is unaffected (the service ignores it).
+      const actingOperatorId = c.req.query('operatorId')
+      const customers = await service.search(q, ctx, actingOperatorId)
       return ok(c, customers)
     })
     .post('/customers/quick-create', async (c) => {

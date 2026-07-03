@@ -1,6 +1,10 @@
+import type { TemplatePatch } from '@kuruma/shared/types/template-admin'
 import type { InsuranceTemplate } from '../../stores'
-import type { InsuranceTemplateRepository } from '../types'
+import type { InsuranceTemplateRepository, TemplateCreateInput } from '../types'
 import { seedDemoInsuranceTemplates } from './insurance-template-seed'
+import { insertTemplate, mergeTemplatePatch } from './template-patch'
+
+const KEY_CONSTRAINT = 'insurance_templates_key_unique'
 
 /**
  * Local-dev / route-suite double for the global insurance template catalog.
@@ -22,5 +26,17 @@ export class InMemoryInsuranceTemplateRepository implements InsuranceTemplateRep
 
   async findById(id: string): Promise<InsuranceTemplate | undefined> {
     return this.store.get(id)
+  }
+
+  async update(id: string, patch: TemplatePatch): Promise<InsuranceTemplate | undefined> {
+    const current = this.store.get(id)
+    if (!current) return undefined
+    const updated = mergeTemplatePatch(current, patch)
+    this.store.set(id, updated)
+    return updated
+  }
+
+  async create(input: TemplateCreateInput): Promise<InsuranceTemplate> {
+    return insertTemplate(this.store, input, KEY_CONSTRAINT)
   }
 }

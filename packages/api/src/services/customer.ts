@@ -56,23 +56,33 @@ export class CustomerService {
     return this.customerRepo.findByIdWithBookings(id)
   }
 
-  async search(query: string, ctx: CallerContext): Promise<User[]> {
+  async search(query: string, ctx: CallerContext, actingOperatorId?: string): Promise<User[]> {
     const matches = await this.userRepo.search(query)
     // Only the privileged platform tier searches the full user table. Gated on
     // PRIVILEGED_ROLES (PLATFORM_ADMIN-only since #1168), NOT the coarse
     // `bypassScope` flag — that also carries PARTNER, which must never enumerate
     // the cross-tenant directory. The route already 403s PARTNER (#1116); this is
     // the service-layer seal (defense-in-depth, mirrors #1119).
-    if (PRIVILEGED_ROLES.has(ctx.role)) return matches
+    // #1260: when that admin is acting through the operator picker (?operatorId=),
+    // its manual-booking search scopes to the picked operator's customers so it can
+    // only offer renters it can actually book (the create-time customer scope would
+    // otherwise 403 a foreign pick). No pick -> full directory (admin screen).
+    if (PRIVILEGED_ROLES.has(ctx.role)) {
+      return actingOperatorId ? this.scopeToOperatorCustomers(matches, actingOperatorId) : matches
+    }
     // An operator only resolves renters within its own tenant boundary — those
     // with a prior booking with it — so manual-booking can't enumerate the global
     // user table (#396/#475). Fail closed if somehow operator-less.
     if (!ctx.operatorId) return []
-    const allowed = new Set(await this.bookingRepo.listRenterIdsForOperator(ctx.operatorId))
-    // NOTE (MVP): userRepo.search caps at 20 by text first, so for an operator
-    // with a very large customer base an in-scope name past that cap could be
-    // missed. Fine for the picker at MVP scale; push the operator filter into the
-    // query if it ever bites.
+    return this.scopeToOperatorCustomers(matches, ctx.operatorId)
+  }
+
+  // Narrow a user-search result to an operator's own customers — those with a prior
+  // booking with it (listRenterIdsForOperator). NOTE (MVP): userRepo.search caps at
+  // 20 by text first, so an in-scope name past that cap could be missed for a very
+  // large customer base; fine for the picker at MVP scale.
+  private async scopeToOperatorCustomers(matches: User[], operatorId: string): Promise<User[]> {
+    const allowed = new Set(await this.bookingRepo.listRenterIdsForOperator(operatorId))
     return matches.filter((u) => allowed.has(u.id))
   }
 

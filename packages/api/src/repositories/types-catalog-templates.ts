@@ -1,8 +1,24 @@
+import type { CatalogTemplateStatus } from '@kuruma/shared/enums'
+import type { LocalizedText } from '@kuruma/shared/i18n/localized-text'
+import type { TemplatePatch } from '@kuruma/shared/types/template-admin'
 import type { AddOnTemplate, InsuranceTemplate } from '../stores'
 
 // Platform-owned catalog TEMPLATE repositories (catalog i18n, epic #385 / #1319).
 // Split into their own module to keep the repositories/types barrel under the
 // file-size cap; re-exported there so callers' imports don't change.
+
+/**
+ * New-template columns the admin create supplies (#1319 slice 3). The service
+ * derives `key` (`slugify(name.en)`) and defaults `description`/`status`, then
+ * hands the repo this fully-resolved row minus the DB-generated id + timestamps.
+ * Shared by both catalogs (add-on and insurance templates are identical shapes).
+ */
+export interface TemplateCreateInput {
+  key: string
+  name: LocalizedText
+  description: LocalizedText | null
+  status: CatalogTemplateStatus
+}
 
 /**
  * The platform-owned add-on TEMPLATE catalog (catalog i18n, epic #385). Global,
@@ -27,6 +43,20 @@ export interface AddOnTemplateRepository {
    * the ACTIVE-only policy. Undefined when no row matches.
    */
   findById(id: string): Promise<AddOnTemplate | undefined>
+  /**
+   * Curate ONE template — the platform-admin write (#1319 slice 2). A single
+   * partial serves both intents: translate/edit the `name` / `description`
+   * bundles and promote/archive via `status` (promote = `{ status: 'ACTIVE' }`
+   * on a backfill-minted ARCHIVED row). Bumps `updatedAt`. Returns the updated
+   * row, or undefined when no row matches (a 404 for the service, never a throw).
+   */
+  update(id: string, patch: TemplatePatch): Promise<AddOnTemplate | undefined>
+  /**
+   * Add a new template to the catalog (#1319 slice 3). `key` is unique
+   * (`add_on_templates_key_unique`); a clash throws a 23505 the service maps to a
+   * 409 (a template with that name already exists). Returns the inserted row.
+   */
+  create(input: TemplateCreateInput): Promise<AddOnTemplate>
 }
 
 /**
@@ -41,4 +71,10 @@ export interface InsuranceTemplateRepository {
   findAll(): Promise<InsuranceTemplate[]>
   /** One template by id, any status; undefined when no row matches. */
   findById(id: string): Promise<InsuranceTemplate | undefined>
+  /** Curate ONE template — the admin write (#1319 slice 2). Same partial + bump
+   *  as the add-on catalog; undefined when no row matches. */
+  update(id: string, patch: TemplatePatch): Promise<InsuranceTemplate | undefined>
+  /** Add a new insurance template (#1319 slice 3). Same contract as the add-on
+   *  catalog's `create`; a duplicate `key` throws a 23505 (-> 409). */
+  create(input: TemplateCreateInput): Promise<InsuranceTemplate>
 }
