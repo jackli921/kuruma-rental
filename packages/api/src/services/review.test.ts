@@ -552,6 +552,167 @@ describe('ReviewService.edit — until published', () => {
   })
 })
 
+describe('ReviewService — moderation withholds a hidden review (#1086)', () => {
+  // Reveal both sides so each row is published; then admin-hide one and re-read.
+  async function seedRevealedPair(harness = makeHarness()) {
+    await harness.service.submit(renterCtx, submitInput(), NOW)
+    await harness.service.submit(operatorCtx, submitInput({ subject: 'RENTER' }), NOW)
+    const rows = await harness.reviewRepo.findByBookingId(BOOKING_ID)
+    const renterRow = rows.find((r) => r.authorRole === 'RENTER')
+    if (!renterRow) throw new Error('expected a renter review')
+    return { ...harness, renterRow }
+  }
+
+  it('withholds an admin-HIDDEN published review from the revealed counterparty', async () => {
+    const { service, reviewRepo, renterRow } = await seedRevealedPair()
+    await reviewRepo.setModerationStatus(renterRow.id, 'HIDDEN')
+
+    const operatorView = await service.getForBooking(operatorCtx, BOOKING_ID, NOW)
+    if (!operatorView.ok) throw new Error('expected ok')
+    // The counterparty must no longer see the hidden review, even though it published.
+    expect(operatorView.reviews.some((r) => r.authorRole === 'RENTER')).toBe(false)
+    // The operator's own still-visible review is unaffected.
+    expect(operatorView.reviews.some((r) => r.authorRole === 'OPERATOR')).toBe(true)
+  })
+
+  it('still shows a hidden review to its own author', async () => {
+    const { service, reviewRepo, renterRow } = await seedRevealedPair()
+    await reviewRepo.setModerationStatus(renterRow.id, 'HIDDEN')
+
+    const renterView = await service.getForBooking(renterCtx, BOOKING_ID, NOW)
+    if (!renterView.ok) throw new Error('expected ok')
+    expect(renterView.reviews.map((r) => r.id)).toContain(renterRow.id)
+  })
+})
+
+describe('ReviewService.reportReview — flag for moderation (#1086)', () => {
+  // A published+visible review is publicly displayed (slice 5), so any authenticated
+  // user viewing a storefront can report it — no participant check.
+  async function seedPublishedReview(harness = makeHarness()) {
+    await harness.service.submit(renterCtx, submitInput(), NOW)
+    await harness.service.submit(operatorCtx, submitInput({ subject: 'RENTER' }), NOW)
+    const rows = await harness.reviewRepo.findByBookingId(BOOKING_ID)
+    const target = rows.find((r) => r.authorRole === 'RENTER')
+    if (!target) throw new Error('expected a renter review')
+    return { ...harness, target }
+  }
+
+  it('records a report against a published, visible review without auto-hiding it', async () => {
+    const { service, reviewRepo, target } = await seedPublishedReview()
+    const result = await service.reportReview(strangerCtx, target.id, {
+      reason: 'Abusive language',
+    })
+    if (!result.ok) throw new Error('expected ok')
+    expect(result.report).toMatchObject({
+      reviewId: target.id,
+      reporterUserId: STRANGER_ID,
+      reason: 'Abusive language',
+    })
+    // Report-only by owner decision: the review stays VISIBLE until an admin acts.
+    expect((await reviewRepo.findById(target.id))?.moderationStatus).toBe('VISIBLE')
+  })
+
+  it('404s reporting a still-hidden double-blind review — no existence oracle', async () => {
+    const h = makeHarness()
+    await h.service.submit(renterCtx, submitInput(), NOW) // lone submit -> stays hidden
+    const hidden = (await h.reviewRepo.findByBookingId(BOOKING_ID))[0]
+    if (!hidden) throw new Error('expected a review')
+    expect(await h.service.reportReview(strangerCtx, hidden.id, { reason: 'x' })).toMatchObject({
+      ok: false,
+      status: 404,
+    })
+  })
+
+  it('404s reporting an admin-HIDDEN review — no oracle', async () => {
+    const { service, reviewRepo, target } = await seedPublishedReview()
+    await reviewRepo.setModerationStatus(target.id, 'HIDDEN')
+    expect(await service.reportReview(strangerCtx, target.id, { reason: 'x' })).toMatchObject({
+      ok: false,
+      status: 404,
+    })
+  })
+
+  it('404s reporting a nonexistent review id', async () => {
+    const { service } = makeHarness()
+    expect(await service.reportReview(strangerCtx, 'no-such-id', { reason: 'x' })).toMatchObject({
+      ok: false,
+      status: 404,
+    })
+  })
+
+  it('409 ALREADY_REPORTED on a second report by the same user', async () => {
+    const { service, target } = await seedPublishedReview()
+    expect((await service.reportReview(strangerCtx, target.id, { reason: 'a' })).ok).toBe(true)
+    expect(await service.reportReview(strangerCtx, target.id, { reason: 'b' })).toEqual({
+      ok: false,
+      status: 409,
+      error: 'ALREADY_REPORTED',
+    })
+  })
+
+  it('lets a DIFFERENT user report the same review', async () => {
+    const { service, target } = await seedPublishedReview()
+    await service.reportReview(strangerCtx, target.id, { reason: 'a' })
+    const other: CallerContext = { userId: 'stranger-2', role: 'RENTER', bypassScope: false }
+    expect((await service.reportReview(other, target.id, { reason: 'b' })).ok).toBe(true)
+  })
+})
+
+describe('ReviewService.hideReview — admin soft-hide (#1086)', () => {
+  async function seedPublished() {
+    const h = makeHarness()
+    await h.service.submit(renterCtx, submitInput(), NOW)
+    await h.service.submit(operatorCtx, submitInput({ subject: 'RENTER' }), NOW)
+    const rows = await h.reviewRepo.findByBookingId(BOOKING_ID)
+    const target = rows.find((r) => r.authorRole === 'RENTER')
+    if (!target) throw new Error('expected a renter review')
+    return { ...h, target }
+  }
+
+  it('flips a review to HIDDEN and returns the updated row', async () => {
+    const { service, reviewRepo, target } = await seedPublished()
+    expect((await service.hideReview(target.id))?.moderationStatus).toBe('HIDDEN')
+    expect((await reviewRepo.findById(target.id))?.moderationStatus).toBe('HIDDEN')
+  })
+
+  it('returns undefined for an unknown review id (→ 404 at the route)', async () => {
+    const { service } = makeHarness()
+    expect(await service.hideReview('no-such-id')).toBeUndefined()
+  })
+
+  it('is idempotent — re-hiding a hidden review stays HIDDEN', async () => {
+    const { service, target } = await seedPublished()
+    await service.hideReview(target.id)
+    expect((await service.hideReview(target.id))?.moderationStatus).toBe('HIDDEN')
+  })
+})
+
+describe('ReviewService.listReported — moderation queue (#1086)', () => {
+  it('is empty when nothing has been reported', async () => {
+    const { service } = makeHarness()
+    expect(await service.listReported()).toEqual([])
+  })
+
+  it('returns a reported review with its distinct-reporter count and reasons, excluding unreported rows', async () => {
+    const h = makeHarness()
+    await h.service.submit(renterCtx, submitInput(), NOW)
+    await h.service.submit(operatorCtx, submitInput({ subject: 'RENTER' }), NOW)
+    const rows = await h.reviewRepo.findByBookingId(BOOKING_ID)
+    const renterReview = rows.find((r) => r.authorRole === 'RENTER')
+    if (!renterReview) throw new Error('expected a renter review')
+    const stranger2: CallerContext = { userId: 'stranger-2', role: 'RENTER', bypassScope: false }
+    // Two distinct reporters flag the renter review; the operator review goes unreported.
+    await h.service.reportReview(strangerCtx, renterReview.id, { reason: 'abusive' })
+    await h.service.reportReview(stranger2, renterReview.id, { reason: 'spam' })
+
+    const queue = await h.service.listReported()
+    expect(queue).toHaveLength(1)
+    expect(queue[0]?.review.id).toBe(renterReview.id)
+    expect(queue[0]?.reportCount).toBe(2)
+    expect(queue[0]?.reasons).toEqual(expect.arrayContaining(['abusive', 'spam']))
+  })
+})
+
 describe('ReviewService.sweep — window backstop', () => {
   it('publishes window-elapsed unread rows and is idempotent', async () => {
     const future = makeBooking({ id: 'bk-future' })
