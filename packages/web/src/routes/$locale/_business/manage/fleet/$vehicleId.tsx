@@ -1,17 +1,12 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { canWriteAsOperator } from '@/vite/guards'
 import { useOperatorContext } from '@/vite/operator-context'
 import { VehicleDetail } from '@/vite/operator-fleet/VehicleDetail'
 import { vehicleDetailQueryOptions } from '@/vite/operator-fleet/api'
 import { sessionQueryOptions } from '@/vite/session'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import {
-  type ErrorComponentProps,
-  Link,
-  createFileRoute,
-  notFound,
-  useRouter,
-} from '@tanstack/react-router'
+import { type ErrorComponentProps, Link, createFileRoute, notFound } from '@tanstack/react-router'
 import { ChevronLeft } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
@@ -72,20 +67,14 @@ export function VehicleDetailRoute() {
 
 function VehicleDetailError(_props: ErrorComponentProps) {
   const t = useTranslations('business.vehicles.fleet')
-  const router = useRouter()
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl py-20 text-center">
-        <p className="text-lg text-muted-foreground">{t('loadError')}</p>
-        <button
-          type="button"
-          onClick={() => router.invalidate()}
-          className="mt-4 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-        >
-          {t('retry')}
-        </button>
-      </div>
+      <RouteRetryError
+        message={t('loadError')}
+        retryLabel={t('retry')}
+        className="mx-auto max-w-3xl py-20 text-center"
+      />
     </main>
   )
 }

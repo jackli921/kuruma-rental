@@ -1,9 +1,10 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { useOperatorScope } from '@/vite/operator-context'
 import { OperatorLocationsView } from '@/vite/operator-locations/OperatorLocationsView'
 import { operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
+import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
 // Operator locations/storefronts management (#529). URL `/<locale>/manage/locations`
@@ -47,20 +48,14 @@ function OperatorLocationsRoute() {
 
 function OperatorLocationsError(_props: ErrorComponentProps) {
   const t = useTranslations('business.locations')
-  const router = useRouter()
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl py-20 text-center">
-        <p className="text-lg text-muted-foreground">{t('loadError')}</p>
-        <button
-          type="button"
-          onClick={() => router.invalidate()}
-          className="mt-4 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-        >
-          {t('retry')}
-        </button>
-      </div>
+      <RouteRetryError
+        message={t('loadError')}
+        retryLabel={t('retry')}
+        className="mx-auto max-w-7xl py-20 text-center"
+      />
     </main>
   )
 }

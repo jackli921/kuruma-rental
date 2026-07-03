@@ -27,6 +27,25 @@ type FormValues = Omit<z.input<typeof operatorApplicationSchema>, 'consent'> & {
 }
 type FormOutput = OperatorApplicationInput
 
+// The field names that render a localized error message. The raw Zod message is
+// English-only, so we surface a per-field localized string keyed under
+// `business.register.form.errors.*` instead (finding #5). One message per field
+// (not per Zod code) keeps it robust: "valid email" covers both empty and
+// malformed, so the copy stays right regardless of which rule tripped.
+type ErrorableField =
+  | 'businessName'
+  | 'contactName'
+  | 'contactEmail'
+  | 'contactPhone'
+  | 'serviceArea'
+  | 'estimatedFleetSize'
+  | 'website'
+  | 'businessLicenseNumber'
+  | 'message'
+  | 'consent'
+
+const errorDomId = (field: ErrorableField) => `reg-${field}-error`
+
 interface OperatorRegistrationFormProps {
   onSubmit: (data: OperatorApplicationInput) => void | Promise<void>
   isSubmitting?: boolean
@@ -62,6 +81,23 @@ export function OperatorRegistrationForm({
     },
   })
 
+  // The a11y wiring a field with a validation error needs (#6): flag it invalid
+  // and point assistive tech at the message element that describes why. Takes the
+  // RHF error as `unknown` — only its presence matters, and RHF's per-field error
+  // shape varies (plain vs Merge) across field kinds.
+  const invalidProps = (field: ErrorableField, error: unknown) =>
+    error ? { 'aria-invalid': true as const, 'aria-describedby': errorDomId(field) } : {}
+
+  // The localized error message element (#5/#6). Rendered only when the field has
+  // an error; carries the id `aria-describedby` above references, and role=alert so
+  // the message is announced when it appears.
+  const fieldError = (field: ErrorableField, error: unknown) =>
+    error ? (
+      <p id={errorDomId(field)} role="alert" className="text-sm text-destructive mt-1">
+        {t(`errors.${field}`)}
+      </p>
+    ) : null
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       {/* Anti-spam honeypot — visible to bots, hidden from real users via off-screen
@@ -78,42 +114,59 @@ export function OperatorRegistrationForm({
 
       <div>
         <Label htmlFor="reg-businessName">{t('businessName')}</Label>
-        <Input id="reg-businessName" {...register('businessName')} />
-        {errors.businessName && (
-          <p className="text-sm text-destructive mt-1">{errors.businessName.message}</p>
-        )}
+        <Input
+          id="reg-businessName"
+          aria-required
+          {...invalidProps('businessName', errors.businessName)}
+          {...register('businessName')}
+        />
+        {fieldError('businessName', errors.businessName)}
       </div>
 
       <div>
         <Label htmlFor="reg-contactName">{t('contactName')}</Label>
-        <Input id="reg-contactName" {...register('contactName')} />
-        {errors.contactName && (
-          <p className="text-sm text-destructive mt-1">{errors.contactName.message}</p>
-        )}
+        <Input
+          id="reg-contactName"
+          aria-required
+          {...invalidProps('contactName', errors.contactName)}
+          {...register('contactName')}
+        />
+        {fieldError('contactName', errors.contactName)}
       </div>
 
       <div>
         <Label htmlFor="reg-contactEmail">{t('contactEmail')}</Label>
-        <Input id="reg-contactEmail" type="email" {...register('contactEmail')} />
-        {errors.contactEmail && (
-          <p className="text-sm text-destructive mt-1">{errors.contactEmail.message}</p>
-        )}
+        <Input
+          id="reg-contactEmail"
+          type="email"
+          aria-required
+          {...invalidProps('contactEmail', errors.contactEmail)}
+          {...register('contactEmail')}
+        />
+        {fieldError('contactEmail', errors.contactEmail)}
       </div>
 
       <div>
         <Label htmlFor="reg-contactPhone">{t('contactPhone')}</Label>
-        <Input id="reg-contactPhone" type="tel" {...register('contactPhone')} />
-        {errors.contactPhone && (
-          <p className="text-sm text-destructive mt-1">{errors.contactPhone.message}</p>
-        )}
+        <Input
+          id="reg-contactPhone"
+          type="tel"
+          aria-required
+          {...invalidProps('contactPhone', errors.contactPhone)}
+          {...register('contactPhone')}
+        />
+        {fieldError('contactPhone', errors.contactPhone)}
       </div>
 
       <div>
         <Label htmlFor="reg-serviceArea">{t('serviceArea')}</Label>
-        <Input id="reg-serviceArea" {...register('serviceArea')} />
-        {errors.serviceArea && (
-          <p className="text-sm text-destructive mt-1">{errors.serviceArea.message}</p>
-        )}
+        <Input
+          id="reg-serviceArea"
+          aria-required
+          {...invalidProps('serviceArea', errors.serviceArea)}
+          {...register('serviceArea')}
+        />
+        {fieldError('serviceArea', errors.serviceArea)}
       </div>
 
       <div>
@@ -121,34 +174,41 @@ export function OperatorRegistrationForm({
         <select
           id="reg-fleetSize"
           className={SELECT_CLASS_NAME}
+          aria-required
+          {...invalidProps('estimatedFleetSize', errors.estimatedFleetSize)}
           {...register('estimatedFleetSize')}
         >
-          <option value="" />
+          {/* Labelled placeholder (#11): an empty first option that reads as a
+              prompt for screen readers instead of a blank line. */}
+          <option value="">{t('fleetSizePlaceholder')}</option>
           {OPERATOR_APPLICATION_FLEET_SIZES.map((size) => (
             <option key={size} value={size}>
               {size}
             </option>
           ))}
         </select>
-        {errors.estimatedFleetSize && (
-          <p className="text-sm text-destructive mt-1">{errors.estimatedFleetSize.message}</p>
-        )}
+        {fieldError('estimatedFleetSize', errors.estimatedFleetSize)}
       </div>
 
       <div>
         <Label htmlFor="reg-website">{t('website')}</Label>
-        <Input id="reg-website" type="url" {...register('website')} />
-        {errors.website && (
-          <p className="text-sm text-destructive mt-1">{errors.website.message}</p>
-        )}
+        <Input
+          id="reg-website"
+          type="url"
+          {...invalidProps('website', errors.website)}
+          {...register('website')}
+        />
+        {fieldError('website', errors.website)}
       </div>
 
       <div>
         <Label htmlFor="reg-licenseNumber">{t('licenseNumber')}</Label>
-        <Input id="reg-licenseNumber" {...register('businessLicenseNumber')} />
-        {errors.businessLicenseNumber && (
-          <p className="text-sm text-destructive mt-1">{errors.businessLicenseNumber.message}</p>
-        )}
+        <Input
+          id="reg-licenseNumber"
+          {...invalidProps('businessLicenseNumber', errors.businessLicenseNumber)}
+          {...register('businessLicenseNumber')}
+        />
+        {fieldError('businessLicenseNumber', errors.businessLicenseNumber)}
       </div>
 
       <div>
@@ -158,25 +218,24 @@ export function OperatorRegistrationForm({
           className={SELECT_CLASS_NAME}
           {...register('businessType', { setValueAs: (v: string) => (v === '' ? undefined : v) })}
         >
-          {/* Empty first option — blank value coerces to undefined via schema optional. */}
-          <option value="" />
+          {/* Labelled placeholder — optional field, so blank coerces to undefined. */}
+          <option value="">{t('businessTypePlaceholder')}</option>
           {OPERATOR_APPLICATION_BUSINESS_TYPES.map((type) => (
             <option key={type} value={type}>
               {type === 'INDIVIDUAL' ? t('individual') : t('company')}
             </option>
           ))}
         </select>
-        {errors.businessType && (
-          <p className="text-sm text-destructive mt-1">{errors.businessType.message}</p>
-        )}
       </div>
 
       <div>
         <Label htmlFor="reg-message">{t('message')}</Label>
-        <Textarea id="reg-message" {...register('message')} />
-        {errors.message && (
-          <p className="text-sm text-destructive mt-1">{errors.message.message}</p>
-        )}
+        <Textarea
+          id="reg-message"
+          {...invalidProps('message', errors.message)}
+          {...register('message')}
+        />
+        {fieldError('message', errors.message)}
       </div>
 
       <div>
@@ -186,13 +245,12 @@ export function OperatorRegistrationForm({
             type="checkbox"
             className="size-4 rounded border-input"
             aria-invalid={errors.consent ? true : undefined}
+            aria-describedby={errors.consent ? errorDomId('consent') : undefined}
             {...register('consent')}
           />
           {t('consent')}
         </label>
-        {errors.consent && (
-          <p className="text-sm text-destructive mt-1">{errors.consent.message}</p>
-        )}
+        {fieldError('consent', errors.consent)}
       </div>
 
       <div className="flex justify-end pt-4">

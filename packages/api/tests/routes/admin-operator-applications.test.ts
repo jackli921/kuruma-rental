@@ -1,5 +1,5 @@
 import { SignJWT } from 'jose'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createApp } from '../../src/index'
 import {
   InMemoryOperatorApplicationRepository,
@@ -52,6 +52,24 @@ async function seedApplication(
   return body.data
 }
 
+// Seeds two applications with distinct createdAt (fake timers) so newest-first
+// ordering is deterministic — same-ms stamps otherwise fall back to the random
+// UUID tie-break (mirrors the in-memory repo's own list unit test).
+async function seedFirstThenSecond(
+  app: ReturnType<typeof makeApp>['app'],
+): Promise<{ first: { id: string }; second: { id: string } }> {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date(2024, 0, 1, 0, 0, 0))
+  const first = await seedApplication(app)
+  vi.setSystemTime(new Date(2024, 0, 1, 0, 0, 1))
+  const second = await seedApplication(app, {
+    contactEmail: 'second@example.com',
+    businessName: 'Second Rentals',
+  })
+  vi.useRealTimers()
+  return { first, second }
+}
+
 describe('GET /admin/operator-applications', () => {
   let harness: ReturnType<typeof makeApp>
 
@@ -60,11 +78,7 @@ describe('GET /admin/operator-applications', () => {
   })
 
   test('PLATFORM_ADMIN with ?status=PENDING sees all PENDING apps (newest-first)', async () => {
-    const first = await seedApplication(harness.app)
-    const second = await seedApplication(harness.app, {
-      contactEmail: 'second@example.com',
-      businessName: 'Second Rentals',
-    })
+    const { first, second } = await seedFirstThenSecond(harness.app)
 
     const res = await harness.app.request('/admin/operator-applications?status=PENDING', {
       headers: await bearer(ADMIN),
@@ -149,6 +163,39 @@ describe('GET /admin/operator-applications', () => {
       headers: await bearer(ADMIN),
     })
     expect(res.status).toBe(400)
+  })
+
+  test('?limit=0 is rejected (400) — the page is always capped, never unbounded', async () => {
+    const res = await harness.app.request('/admin/operator-applications?limit=0', {
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  test('?limit above the 100 max is rejected (400)', async () => {
+    const res = await harness.app.request('/admin/operator-applications?limit=101', {
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  test('?limit caps the returned page and ?offset walks to the next one', async () => {
+    const { first, second } = await seedFirstThenSecond(harness.app)
+
+    const capped = await harness.app.request('/admin/operator-applications?limit=1', {
+      headers: await bearer(ADMIN),
+    })
+    const cappedBody = (await capped.json()) as { data: Array<{ id: string }> }
+    expect(cappedBody.data).toHaveLength(1)
+    // Newest-first: the second seed is the head of the queue.
+    expect(cappedBody.data[0]?.id).toBe(second.id)
+
+    const nextPage = await harness.app.request('/admin/operator-applications?limit=1&offset=1', {
+      headers: await bearer(ADMIN),
+    })
+    const nextBody = (await nextPage.json()) as { data: Array<{ id: string }> }
+    expect(nextBody.data).toHaveLength(1)
+    expect(nextBody.data[0]?.id).toBe(first.id)
   })
 })
 
@@ -322,5 +369,72 @@ describe('POST /admin/operator-applications/:id/approve', () => {
       headers: await bearer(ADMIN),
     })
     expect(res.status).toBe(409)
+  })
+})
+
+describe('POST /admin/operator-applications/:id/remint-invite', () => {
+  async function approve(
+    app: ReturnType<typeof makeApp>['app'],
+    id: string,
+  ): Promise<{ inviteUrl: string }> {
+    const res = await app.request(`/admin/operator-applications/${id}/approve`, {
+      method: 'POST',
+      headers: await bearer(ADMIN),
+    })
+    const body = (await res.json()) as { data: { inviteUrl: string } }
+    return body.data
+  }
+
+  test('PLATFORM_ADMIN re-mints an approved application (200) with a fresh invite link', async () => {
+    const harness = makeApp()
+    const { id } = await seedApplication(harness.app)
+    const approved = await approve(harness.app, id)
+
+    const res = await harness.app.request(`/admin/operator-applications/${id}/remint-invite`, {
+      method: 'POST',
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      success: boolean
+      data: { inviteUrl: string; expiresAt: string }
+    }
+    expect(body.success).toBe(true)
+    expect(body.data.inviteUrl).toMatch(/\/provider\/invite\//)
+    // A brand-new link, not the one the approval issued.
+    expect(body.data.inviteUrl).not.toBe(approved.inviteUrl)
+    expect(typeof body.data.expiresAt).toBe('string')
+  })
+
+  test('re-minting an unapproved (PENDING) application → 409', async () => {
+    const harness = makeApp()
+    const { id } = await seedApplication(harness.app)
+
+    const res = await harness.app.request(`/admin/operator-applications/${id}/remint-invite`, {
+      method: 'POST',
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(409)
+  })
+
+  test('unknown application id → 404', async () => {
+    const harness = makeApp()
+    const randomId = '00000000-0000-0000-0000-000000000000'
+    const res = await harness.app.request(
+      `/admin/operator-applications/${randomId}/remint-invite`,
+      { method: 'POST', headers: await bearer(ADMIN) },
+    )
+    expect(res.status).toBe(404)
+  })
+
+  test('non-admin (RENTER) cannot re-mint (403)', async () => {
+    const harness = makeApp()
+    const { id } = await seedApplication(harness.app)
+
+    const res = await harness.app.request(`/admin/operator-applications/${id}/remint-invite`, {
+      method: 'POST',
+      headers: await bearer({ sub: 'u1', role: 'RENTER' }),
+    })
+    expect(res.status).toBe(403)
   })
 })

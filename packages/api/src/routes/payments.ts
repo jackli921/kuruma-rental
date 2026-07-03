@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { requireUser, toCallerContext } from '../middleware/auth'
 import type { PaymentService } from '../services/payment/payment'
-import { fail, ok, parseId } from './helpers'
+import { fail, failResult, ok, parseId } from './helpers'
 
 const STRIPE_SIGNATURE_HEADER = 'stripe-signature'
 
@@ -24,7 +24,7 @@ export function createPaymentRoutes(service: PaymentService) {
       const idResult = parseId(c, 'bookingId')
       if (!idResult.ok) return idResult.response
       const result = await service.createCheckoutSession(ctx, idResult.id)
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, { url: result.url })
     })
     .get('/bookings/:bookingId/payment', async (c) => {

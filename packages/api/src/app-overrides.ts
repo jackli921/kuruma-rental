@@ -14,6 +14,7 @@ import type {
   FeeScheduleRepository,
   FleetOverviewRepository,
   InsuranceOptionRepository,
+  InsuranceTemplateRepository,
   LocationRepository,
   MaintenanceLogRepository,
   MessageRepository,
@@ -73,6 +74,7 @@ export type AppOverrides = {
   insuranceOptionRepo?: InsuranceOptionRepository
   addOnRepo?: AddOnRepository
   addOnTemplateRepo?: AddOnTemplateRepository
+  insuranceTemplateRepo?: InsuranceTemplateRepository
   feeScheduleRepo?: FeeScheduleRepository
   classRatePlanRepo?: ClassRatePlanRepository
   notificationLogRepo?: NotificationLogRepository

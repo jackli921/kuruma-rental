@@ -1,4 +1,5 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { RouteRetryError } from '@/vite/RouteRetryError'
 import { ConversationView, threadByIdQueryOptions } from '@/vite/messaging'
 import { operatorBookingDetailQueryOptions } from '@/vite/operator-bookings/api'
 import { sessionQueryOptions } from '@/vite/session'
@@ -9,7 +10,6 @@ import {
   createFileRoute,
   notFound,
   redirect,
-  useRouter,
 } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
@@ -94,20 +94,14 @@ function OperatorThreadRoute() {
 
 function ThreadError(_props: ErrorComponentProps) {
   const t = useTranslations('messaging.threadList')
-  const router = useRouter()
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl py-20 text-center">
-        <p className="text-lg text-muted-foreground">{t('loadError')}</p>
-        <button
-          type="button"
-          onClick={() => router.invalidate()}
-          className="mt-4 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-        >
-          {t('retry')}
-        </button>
-      </div>
+      <RouteRetryError
+        message={t('loadError')}
+        retryLabel={t('retry')}
+        className="mx-auto max-w-3xl py-20 text-center"
+      />
     </main>
   )
 }

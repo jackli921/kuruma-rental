@@ -11,11 +11,12 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
-import type { AddOnService, AddOnUpdate } from '../services/add-on'
+import type { AddOnService } from '../services/add-on'
 import type { AddOnFilters } from '../services/filters'
 import type { ResolveWriteOperatorId } from '../tenancy'
 import {
   fail,
+  failResult,
   ok,
   parseArchivableFilters,
   parseBody,
@@ -94,7 +95,7 @@ export function createAddOnRoutes(
         },
         locale.locale,
       )
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.option, 201)
     })
     .patch('/add-ons/:id', async (c) => {
@@ -113,10 +114,10 @@ export function createAddOnRoutes(
       const result = await service.update(
         toCallerContext(user),
         idResult.id,
-        stripUndefined(parsed.data) as AddOnUpdate,
+        stripUndefined(parsed.data),
         locale.locale,
       )
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.option)
     })
     .delete('/add-ons/:id', async (c) => {
@@ -130,7 +131,7 @@ export function createAddOnRoutes(
       if (!locale.ok) return locale.response
 
       const result = await service.archive(toCallerContext(user), idResult.id, locale.locale)
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.option)
     })
 }

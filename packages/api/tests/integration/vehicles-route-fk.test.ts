@@ -116,7 +116,7 @@ describe('POST/PATCH /vehicles maps a cross-operator classId to 422 (#400)', () 
 
   it('PATCH returns 422 when reassigning to another operator’s class', async () => {
     const created = await (await post(vehicleBody(opAId, classA.id))).json()
-    const res = await app.request(`/vehicles/${created.data.id}`, {
+    const res = await app.request(`/vehicles/${created.data.id}?operatorId=${opAId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ classId: classB.id }),
@@ -162,7 +162,7 @@ describe('POST/PATCH /vehicles maps a cross-operator classId to 422 (#400)', () 
 
   it('PATCH returns 422 "Invalid pickup location" when reassigning to another operator’s location', async () => {
     const created = await (await post(vehicleBody(opAId, classA.id, locationA.id))).json()
-    const res = await app.request(`/vehicles/${created.data.id}`, {
+    const res = await app.request(`/vehicles/${created.data.id}?operatorId=${opAId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ pickupLocationId: locationB.id }),
