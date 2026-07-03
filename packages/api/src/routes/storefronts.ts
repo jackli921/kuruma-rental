@@ -3,7 +3,15 @@ import { Hono } from 'hono'
 import { PUBLIC_CONTEXT } from '../middleware/auth'
 import type { StorefrontDetailService } from '../services/storefront-detail'
 import type { StorefrontSearchService } from '../services/storefront-search'
-import { cachePublic, fail, ok, parseDateRange, parseId, parseLimit, parseLocale } from './helpers'
+import {
+  cachePublic,
+  failResult,
+  ok,
+  parseDateRange,
+  parseId,
+  parseLimit,
+  parseLocale,
+} from './helpers'
 import { rateLimitByIp } from './rate-limit'
 
 const DEFAULT_LIMIT = 25
@@ -55,7 +63,7 @@ export function createStorefrontRoutes(
         ...(classes && classes.length > 0 ? { classes } : {}),
         ...(cursor ? { cursor } : {}),
       })
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       cachePublic(c, CACHE_SECONDS)
       return ok(c, result.data)
     })
@@ -80,7 +88,7 @@ export function createStorefrontRoutes(
       })
       // Unknown/archived location -> 404, never edge-cached: a cached 404 would
       // pin the miss until TTL, hiding a store that just went ACTIVE.
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       cachePublic(c, CACHE_SECONDS)
       return ok(c, result.data)
     })
@@ -92,7 +100,7 @@ export function createStorefrontRoutes(
       // (#392). Public + active-only + single-operator — see the service for the
       // [P0] seal rationale. 404 mirrors the vehicles route (unknown/archived).
       const result = await detailService.getInsuranceOptions(PUBLIC_CONTEXT, idResult.id)
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       cachePublic(c, CACHE_SECONDS)
       return ok(c, result.data)
     })
@@ -110,7 +118,7 @@ export function createStorefrontRoutes(
       // (#460). Public + active-only + single-operator — see the service for the
       // [P0] seal rationale. 404 mirrors the vehicles route (unknown/archived).
       const result = await detailService.getAddOns(PUBLIC_CONTEXT, idResult.id, locale.locale)
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       cachePublic(c, CACHE_SECONDS)
       return ok(c, result.data)
     })

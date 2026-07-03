@@ -24,16 +24,53 @@ export function fail(
   return c.json({ success: false, error, ...extras }, status as 400)
 }
 
+/** The failure half every service `Result` shares once narrowed on `!result.ok`:
+ *  an HTTP `status` + a human `error`, plus the optional machine-readable
+ *  discriminants a route must forward so a client can branch — a `code`, and the
+ *  `activeBookingsCount` an archive conflict surfaces (#412). */
+export interface FailureResult {
+  status: number
+  error: string | Record<string, unknown>
+  code?: string
+  activeBookingsCount?: number
+}
+
+/**
+ * Translate a narrowed service failure into a `fail()` envelope, forwarding the
+ * known optional discriminants when present (never as truthiness — `activeBookingsCount: 0`
+ * is a real value). Prefer over hand-spreading extras, so a route can't silently
+ * swallow a `code` a service later adds (#1376):
+ *
+ *   if (!result.ok) return failResult(c, result)
+ *
+ * A discriminant beyond `code`/`activeBookingsCount` (e.g. bookings' `details`) keeps
+ * a bespoke `fail(c, ...)` until it is shared by 2+ routes.
+ */
+export function failResult(c: Context, result: FailureResult): Response {
+  const extras: Record<string, unknown> = {}
+  if (result.code !== undefined) extras.code = result.code
+  if (result.activeBookingsCount !== undefined) {
+    extras.activeBookingsCount = result.activeBookingsCount
+  }
+  return fail(c, result.error, result.status, extras)
+}
+
 // --- Object helpers ---
 
-/** Remove entries with `undefined` values. Isolates the single type assertion
- *  needed for exactOptionalPropertyTypes compliance so call sites stay clean. */
-export function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+/** Remove entries with `undefined` values. The return type strips `undefined` from
+ *  every property (`Exclude<T[K], undefined>`) — matching the runtime, which drops
+ *  those keys — so the result is directly assignable to the exactOptionalPropertyTypes
+ *  `*Update` types WITHOUT a call-site `as` cast (#1376). The one assertion this needs
+ *  lives here, isolated. Still a subtype of `Partial<T>`, so any `Partial<T>` caller is
+ *  unaffected. */
+export function stripUndefined<T extends Record<string, unknown>>(
+  obj: T,
+): { [K in keyof T]?: Exclude<T[K], undefined> } {
   const result: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(obj)) {
     if (v !== undefined) result[k] = v
   }
-  return result as Partial<T>
+  return result as { [K in keyof T]?: Exclude<T[K], undefined> }
 }
 
 // --- Pagination helpers ---
