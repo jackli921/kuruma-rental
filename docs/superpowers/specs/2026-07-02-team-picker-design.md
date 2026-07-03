@@ -7,6 +7,8 @@ Sibling slices: settings (slice 2, PR #903 pattern), fleet (slice 4, PR #1368), 
 
 Slice 6 is the last and heaviest epic slice: it is the only one that requires an **API change**, because the team surface is `/operators/me/*` — self-scoped by design, with no foreign-id surface for a picker-admin to reach.
 
+Revision 2 (2026-07-02): folds in architect-review findings — verdict sound-with-changes, no security hole. Anchors the `all` tier on `PRIVILEGED_ROLES`; documents the deliberate divergence from `resolveOperatorIdForWrite`; spells out the loader rework (G2) and the OperatorBadge label source (G1); cites slice 5b as the query-on-POST precedent; adds the resolver-asymmetry + CSRF test pins.
+
 ## Problem
 
 A `PLATFORM_ADMIN` can pick an operator context (slices 0-5) but cannot manage that operator's **team**.
@@ -55,17 +57,23 @@ resolveTeamOperatorId(ctx, inputOperatorId?): string
   isOperatorRole(ctx.role):
     ctx.operatorId ? return ctx.operatorId   // input IGNORED — cannot act cross-tenant
                    : throw ForbiddenError     // fail-closed (lost tenant claim)
-  PLATFORM_ROLES.has(ctx.role):               // the `all` tier — PLATFORM_ADMIN only
+  PRIVILEGED_ROLES.has(ctx.role):             // the `all` tier — PLATFORM_ADMIN only
     inputOperatorId ? return inputOperatorId   // honored ONLY here (epic hard invariant)
                     : throw OperatorRequiredError  // -> 422, "specify a target operator"
   else: throw ForbiddenError                  // -> 403 (renter / partner / legacy)
 ```
 
+It is an **allowlist**, not a bypass-first denylist: `isOperatorRole` OR `PRIVILEGED_ROLES` pass; everything else throws. That shape is why it needs no explicit PARTNER branch (unlike `bookingReadScope`/`threadReadScope`, which are bypass-first and must special-case PARTNER) — PARTNER simply falls into the `else`.
+
+Key the `all` tier on `PRIVILEGED_ROLES` (`= {PLATFORM_ADMIN}`, `shared/src/auth/roles.ts`), **not** `PLATFORM_ROLES`. They are identical today, but `PRIVILEGED_ROLES` is the codebase's semantic set for cross-tenant PRIVATE reads (it anchors `threadReadScope`, `tenancy.ts:194`); team data is private/owner-tier, so this is the correct anchor and future-proofs against `PLATFORM_ROLES` widening for a non-private reason.
+
 Three properties that satisfy the epic hard invariant and the hazards:
 
-- The input `operatorId` is honored in **exactly one branch** (the platform `all` tier). An operator's own id always wins and any input it passes is dropped, so it can never reach another tenant.
-- Renter / PARTNER / legacy `STAFF`/`ADMIN` are denied outright — team is operator-internal, owner-tier data, so unlike the public catalog they must never read or thread an id here.
+- The input `operatorId` is honored in **exactly one branch** (the privileged `all` tier). An operator's own id always wins and any input it passes is dropped, so it can never reach another tenant.
+- Renter / PARTNER / legacy `STAFF`/`ADMIN` are denied outright — team is operator-internal, owner-tier data, so unlike the public catalog they must never read or thread an id here. This is **not** a behavior change: today all three already get a 403 (via `requireOwnOperator` on reads; via `requireOwnOperator`/`requireOperatorOwnerWrite` on writes).
 - Strict, unlike the lenient `resolveReadOperatorTarget` helper (#1373, `routes/helpers.ts`): a platform admin with no pick is a `422`, **not** an unscoped read-all, because there is no merged team view. This is the API mirror of the "pick an operator" prompt.
+
+**Divergence to guard (do NOT "harmonize"):** `resolveTeamOperatorId` sits beside `resolveOperatorIdForWrite` (`tenancy.ts:311-321`) but is deliberately stricter — the write resolver honors a legacy `STAFF`/`ADMIN` `inputOperatorId` (it keys on `!isOperatorRole`), whereas team keys on `PRIVILEGED_ROLES` and denies legacy admins. On writes this surfaces as a gate/resolver asymmetry: a legacy `STAFF`/`ADMIN` *passes* `requireOperatorOwnerWrite` (it is in `OPERATOR_OWNER_WRITE_ROLES`) and is stopped only by the resolver's `else` → 403. A refactor that collapses team onto `resolveOperatorIdForWrite` would silently open a cross-tenant team write, so a route test pins this denial (see Testing).
 
 ### 2. Service — `OperatorTeamService` (`services/operator-team.ts`)
 
@@ -81,9 +89,13 @@ Everything downstream already keys off the resolved `operatorId`, so the hazards
 - Last-owner-lockout (`:116-121`) counts owners **within the picked tenant** — a picker-admin cannot deactivate operator X's last owner.
 - The `OPERATOR_MEMBER_DEACTIVATED` audit event stamps `operatorId` (picked tenant) + `actorUserId` (the admin) + `targetUserId` — a correct, attributable trail.
 
+The no-existence-oracle seal above governs *member/invite* ids (a foreign one is indistinguishable from a missing one). A bogus *operator* id is a different matter: reads return an empty 200, and `inviteStaff` surfaces `OperatorNotFoundError` -> 404 (`provider-invite.ts:73`). That operator-id oracle is acceptable — a picker-admin's legitimate pick source is the `/operators` list it can already enumerate, so no id is revealed that it could not already see.
+
 ### 3. Routes — `routes/operator-team.ts`
 
-Each handler reads the query param and passes it through. Reuse the centralized transport parse where it fits: `parseCrossOperatorRead(c).operatorId` (#1373) yields the optional `operatorId` (team ignores its `includeAll`), or a direct `c.req.query('operatorId')` — team has no `includeAll` semantics. Routes stay HTTP-only; the resolver's throws map via the global handler (403 / 422 / 404 / 409).
+Each handler reads the picked id with a direct `c.req.query('operatorId')` and passes it through. This is the picker's newest write transport precedent — booking writes (slice 5b) thread the same `?operatorId=` on state-changing POSTs (`routes/bookings.ts:255,302`), so team matches it rather than inventing a shape. Do **not** reuse `parseCrossOperatorRead(c)` here — that is a *read*-scope helper carrying an unused `includeAll` (team has no merged view). Routes stay HTTP-only; the resolver's throws map via the global handler (403 / 422 / 404 / 409).
+
+Note the transport is deliberately query, not body: the codebase already has three write-operatorId transports — path (`operators.ts:60` settings/profile), body (`parseScopedCreate`, `helpers.ts`), and query (booking writes 5b). Query is chosen to match 5b and to leave the invite body validator (`{email}`) untouched.
 
 ## Web design
 
@@ -95,11 +107,17 @@ Each handler reads the query param and passes it through. Reuse the centralized 
 
 ### `routes/$locale/_business/manage/team.tsx`
 
-- Register `/$locale/_business/manage/team` in `OPERATOR_CONTEXT_ROUTE_IDS` (`operator-context.ts`) so the picker chip shows on this page.
-- Keep the `OPERATOR_TEAM` feature-flag `beforeLoad` gate unchanged.
-- Resolve `operatorId = session.user.operatorId ?? pickedOperatorId` (mirrors settings `OperatorSettingsRoute`; loader + component in lockstep).
-- **All-mode** (a picker-admin with no pick, i.e. `isCrossOperatorReader(session) && !pickedOperatorId`): render the pick-prompt empty state; fire **no** team read.
-- **Own / picked mode**: render `TeamView` with reads threaded by the resolved id, a picked-operator `OperatorBadge` (shown when `canPick && Boolean(pickedOperatorId)`, mirroring settings' `showOperatorBadge`), and every write affordance gated on `canWriteAsOperatorOwner(session, pickedOperatorId)` (already exists, `guards.ts:70-78`) instead of the current owner-session-only gate.
+- Register `/$locale/_business/manage/team` in `OPERATOR_CONTEXT_ROUTE_IDS` (`operator-context.ts`) so the picker chip shows on this page. This also makes `BusinessLayout`'s picker fetch `operatorsQueryOptions()` on the team route for a picker-admin (`BusinessLayout.tsx:32`, `enabled: showPicker`), so the operators list is in cache here — see the badge below.
+- Keep the `OPERATOR_TEAM` feature-flag `beforeLoad` gate unchanged. Note for QA: the flag gates the page for a picker-admin too — in the beta demo (flag off) the admin also cannot reach `/manage/team`; that is expected, not a bug.
+- **Loader rework (G2).** The current loader (`team.tsx:40-46`) unconditionally prefetches members + invites with no `loaderDeps`. Rework it to mirror `settings.tsx:40-47`:
+  - add `loaderDeps: ({ search }) => ({ operator: search.operator })`;
+  - resolve `operatorId = session?.user.operatorId ?? deps.operator`;
+  - guard `if (operatorId) { prefetch }` — so all-mode (no pick) fires **no** read;
+  - parameterize `teamMembersQueryOptions(operatorId)` / `teamInvitesQueryOptions(operatorId)` (their keys already fold in the id).
+  The component resolves the same `operatorId = session.user.operatorId ?? pickedOperatorId` (loader + component in lockstep).
+- **All-mode** (a picker-admin with no pick, i.e. `isCrossOperatorReader(session) && !pickedOperatorId`): render the pick-prompt empty state; no team read fires (the loader guard above is what enforces it).
+- **Own / picked mode**: render `TeamView` with reads threaded by the resolved id, and every write affordance gated on `canWriteAsOperatorOwner(session, pickedOperatorId)` (already exists, `guards.ts:70-78`) instead of the current owner-session-only gate.
+- **Picked-operator badge (G1 — label source).** Show an `OperatorBadge` when `canPick && Boolean(pickedOperatorId)`. Unlike settings (which labels from its own `operator.name` profile read), team reads carry only the *user's* name, not the operator's. Source the label from the operators list — already in cache from `BusinessLayout`'s picker on this route — via a `useQuery(operatorsQueryOptions(), { enabled: canPick && Boolean(pickedOperatorId) })` reading `operatorNameById.get(pickedOperatorId)`. No new endpoint; the fetch is a cache hit. (`useOperatorScope`'s own operators fetch stays all-mode-only — do not widen it; read the cached query directly here.)
 - `TeamView` + the invite/revoke/deactivate dialogs thread `operatorId` into their mutation calls and take the owner-tier gate as a prop.
 
 ## Testing
@@ -108,6 +126,8 @@ TDD, vertical, per slice. Mutation-resistant assertions.
 
 - **Unit** (`tests/tenancy.test.ts`): `resolveTeamOperatorId` truth table — operator returns own id and ignores a foreign input; operator-without-id throws `ForbiddenError`; platform admin + id returns the id; platform admin without id throws `OperatorRequiredError`; renter / partner / legacy throw `ForbiddenError`.
 - **Routes** (`tests/routes/operator-team.test.ts`): each read/write threads `?operatorId=`; admin-no-pick -> 422; renter/partner -> 403; an operator's foreign `?operatorId=` is ignored (auto-scoped to own); owner-tier gate still 403s `OPERATOR_STAFF` writes.
+  - **Pin the resolver-over-gate asymmetry (G6a):** a legacy `STAFF`/`ADMIN` write with `?operatorId=` is **denied (403)** even though it passes `requireOperatorOwnerWrite` — this pins that the resolver, not the gate, is the deny point, so collapsing team onto `resolveOperatorIdForWrite` (which would honor legacy admins) fails the test.
+  - **Pin CSRF (G6b):** a threaded POST with the `?operatorId=` param but a missing/invalid `X-CSRF-Token` is still rejected — the query param can never mask an absent token.
 - **Integration, real-pg** (`tests/integration/`): admin picks operator X — invite/deactivate land on X (not the admin's absent tenant); a member id belonging to Y under the picked X scope -> 404; X's last-owner deactivate -> 409; the audit event carries `operatorId = X`.
 - **Conformance:** extend the cross-operator read-scope suite (`tests/routes/tenancy-context.test.ts` / `tests/integration/tenancy-isolation.test.ts`) with the two team read endpoints — a picker-admin honors `?operatorId=`, a non-privileged caller cannot.
 - **Web** (`tests/vite/.../team...test.tsx`): all-mode renders the prompt and fires no fetch; picked mode threads the id into fetch + mutations and refetches on tenant switch (query-key change); write affordances hidden for a non-owner / no-pick; mutation-verified (mirror #1264's `VehicleDetailRoute.test.tsx`).
