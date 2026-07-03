@@ -96,7 +96,11 @@ describe('useIsOperatorContextRoute', () => {
   })
 
   it('is false on an unscoped business route that does not honor ?operator', () => {
-    h.matches = [{ routeId: '/$locale/_business' }, { routeId: '/$locale/_business/manage/team' }]
+    // messages is not in OPERATOR_CONTEXT_ROUTE_IDS; team was added in slice 6.
+    h.matches = [
+      { routeId: '/$locale/_business' },
+      { routeId: '/$locale/_business/manage/messages' },
+    ]
     const { result } = renderHook(() => useIsOperatorContextRoute())
     expect(result.current).toBe(false)
   })

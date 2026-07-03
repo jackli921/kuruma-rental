@@ -121,7 +121,8 @@ describe('BusinessLayout', () => {
   })
 
   it('hides the operator picker for a PLATFORM_ADMIN on a route that does not honor ?operator', () => {
-    h.routeId = '/$locale/_business/manage/team'
+    // messages is not in OPERATOR_CONTEXT_ROUTE_IDS; team was added in slice 6.
+    h.routeId = '/$locale/_business/manage/messages'
     renderBusinessLayout({ role: 'PLATFORM_ADMIN' })
     expect(screen.queryByLabelText('Operator')).toBeNull()
   })
