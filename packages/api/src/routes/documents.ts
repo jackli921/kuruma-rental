@@ -9,6 +9,7 @@ import type { RenterDocumentService } from '../services/renter-document'
 import {
   MULTIPART_OVERHEAD_BYTES,
   fail,
+  failResult,
   ok,
   parseBody,
   parseId,
@@ -45,7 +46,7 @@ export function createDocumentRoutes(service: RenterDocumentService) {
         STAFF_ROLES.has(user.role) && typeof body.renterId === 'string' ? body.renterId : ctx.userId
 
       const result = await service.upload(ctx, { renterId, type: parsed.data.type }, file)
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, { document: result.document }, 201)
     })
     .get('/documents/me', async (c) => {
@@ -100,7 +101,7 @@ export function createDocumentRoutes(service: RenterDocumentService) {
         expiryDate: parsed.data.expiryDate ?? null,
         rejectionReason: parsed.data.rejectionReason ?? null,
       })
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, { document: result.document })
     })
 }

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { requireUser, toCallerContext } from '../middleware/auth'
 import type { ConsentService } from '../services/consent'
-import { fail, ok, parseBody } from './helpers'
+import { failResult, ok, parseBody } from './helpers'
 
 // Document ids are deterministic slugs (e.g. `doc_renter_tos_v1_en`), not UUIDs,
 // so this is a presence check — the service is the authority on whether the id
@@ -50,7 +50,7 @@ export function createConsentRoutes(service: ConsentService) {
           userAgent: c.req.header('user-agent') ?? null,
         },
       )
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.acceptance)
     })
 }

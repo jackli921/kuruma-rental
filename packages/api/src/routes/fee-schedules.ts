@@ -11,11 +11,12 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
-import type { FeeScheduleService, FeeScheduleUpdate } from '../services/fee-schedule'
+import type { FeeScheduleService } from '../services/fee-schedule'
 import type { FeeScheduleFilters } from '../services/filters'
 import type { ResolveWriteOperatorId } from '../tenancy'
 import {
   fail,
+  failResult,
   ok,
   parseArchivableFilters,
   parseBody,
@@ -90,8 +91,7 @@ export function createFeeScheduleRoutes(
         amountJpy: d.amountJpy,
         status: 'ACTIVE',
       })
-      if (!result.ok)
-        return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.feeSchedule, 201)
     })
     .patch('/fee-schedules/:id', async (c) => {
@@ -107,10 +107,9 @@ export function createFeeScheduleRoutes(
       const result = await service.update(
         toCallerContext(user),
         idResult.id,
-        stripUndefined(parsed.data) as FeeScheduleUpdate,
+        stripUndefined(parsed.data),
       )
-      if (!result.ok)
-        return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.feeSchedule)
     })
     .delete('/fee-schedules/:id', async (c) => {
@@ -121,8 +120,7 @@ export function createFeeScheduleRoutes(
       if (!idResult.ok) return idResult.response
 
       const result = await service.archive(toCallerContext(user), idResult.id)
-      if (!result.ok)
-        return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.feeSchedule)
     })
 }
