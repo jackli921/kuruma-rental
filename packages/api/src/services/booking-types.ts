@@ -63,7 +63,10 @@ export type CreateBookingResult =
   | { ok: true; booking: Booking; status?: 200 }
   | {
       ok: false
-      status: 400 | 403 | 409
+      // #1260 widened the union: 422 (a bypass admin named no operator to act as)
+      // and 404 (the picked operator does not own the booked vehicle — no oracle,
+      // via fleetWriteDenialResult) join the pre-existing create failures.
+      status: 400 | 403 | 404 | 409 | 422
       error: string | Record<string, string[]>
       code?: ErrorCode
       details?: { required: number; actual: number }

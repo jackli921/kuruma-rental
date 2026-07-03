@@ -1,6 +1,7 @@
 import { SignJWT } from 'jose'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryAvailabilityRepository } from '../../src/repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { InMemoryLocationRepository } from '../../src/repositories/in-memory/location'
@@ -65,6 +66,43 @@ function makeRenter(id: string): User {
     phone: null,
     language: 'en',
     role: 'RENTER',
+  }
+}
+
+// #1260: a prior COMPLETED booking that makes `renterId` a customer of `operatorId`
+// (what the manual-booking scope check keys on). Far in the past so it can never
+// conflict with the CONFIRMED booking a test then creates.
+function priorBookingData(
+  operatorId: string,
+  renterId: string,
+  classId: string,
+  vehicleId: string,
+  locationId: string,
+) {
+  return {
+    operatorId,
+    renterId,
+    classId,
+    requestedVehicleId: vehicleId,
+    assignedVehicleId: vehicleId,
+    pickupLocationId: locationId,
+    dropoffLocationId: locationId,
+    startAt: new Date('2020-01-01T00:00:00Z'),
+    endAt: new Date('2020-01-02T00:00:00Z'),
+    effectiveEndAt: new Date('2020-01-04T00:00:00Z'),
+    status: 'COMPLETED' as const,
+    source: 'MANUAL' as const,
+    bookingCode: 'SEEDMB01',
+    insuranceOptionId: null,
+    insuranceSnapshot: null,
+    feeSnapshot: [],
+    addOnSnapshot: [],
+    externalId: null,
+    notes: null,
+    totalPrice: 10000,
+    cancellationFee: null,
+    cancelledAt: null,
+    idempotencyKey: null,
   }
 }
 
@@ -154,17 +192,24 @@ describe('Manual booking (platform-admin renterId override + advance rule skip)'
     })
   })
 
-  it('a platform admin can create a booking with a custom renterId', async () => {
+  it('a platform admin acting as the operator can create a booking for one of its customers', async () => {
     const staffId = crypto.randomUUID()
     const customerId = crypto.randomUUID()
     userStore.set(customerId, makeRenter(customerId))
+    // #1260: the renter must be a customer of the picked operator. Seed a prior
+    // booking so listRenterIdsForOperator(OPERATOR) includes them.
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      priorBookingData(OPERATOR, customerId, testClassId, vehicle.id, locationId),
+    )
     const token = await createTestToken({ id: staffId, role: 'PLATFORM_ADMIN' })
 
     // Start 48 hours from now to satisfy advance booking rule
     const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
     const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
 
-    const res = await app.request('/bookings', {
+    // #1260: a picked admin binds the write to the operator via ?operatorId=.
+    const res = await app.request(`/bookings?operatorId=${OPERATOR}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -190,6 +235,35 @@ describe('Manual booking (platform-admin renterId override + advance rule skip)'
     // The booking should use the custom renterId, not the staff user's id
     expect(body.data.renterId).toBe(customerId)
     expect(body.data.renterId).not.toBe(staffId)
+  })
+
+  it('rejects a platform admin booking for a renter without ?operatorId= (422 OPERATOR_REQUIRED)', async () => {
+    const staffId = crypto.randomUUID()
+    const customerId = crypto.randomUUID()
+    userStore.set(customerId, makeRenter(customerId))
+    const token = await createTestToken({ id: staffId, role: 'PLATFORM_ADMIN' })
+    const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
+    const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
+
+    // No ?operatorId= — a bypass admin must name the operator it acts as.
+    const res = await app.request('/bookings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        renterId: customerId,
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        source: 'MANUAL',
+      }),
+    })
+
+    expect(res.status).toBe(422)
+    const body = (await res.json()) as { success: boolean; code: string }
+    expect(body.success).toBe(false)
+    expect(body.code).toBe('OPERATOR_REQUIRED')
   })
 
   it('renter cannot specify renterId — booking uses JWT user id', async () => {
@@ -234,7 +308,8 @@ describe('Manual booking (platform-admin renterId override + advance rule skip)'
     const startAt = new Date(Date.now() + 1 * 60 * 60 * 1000)
     const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
 
-    const res = await app.request('/bookings', {
+    // #1260: a self-booking admin still binds the write's inventory to its operator.
+    const res = await app.request(`/bookings?operatorId=${OPERATOR}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -265,7 +340,7 @@ describe('Manual booking (platform-admin renterId override + advance rule skip)'
     const startAt = new Date(Date.now() + 1 * 60 * 60 * 1000)
     const endAt = new Date(startAt.getTime() + 30 * 60 * 1000)
 
-    const res = await app.request('/bookings', {
+    const res = await app.request(`/bookings?operatorId=${OPERATOR}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -319,13 +394,17 @@ describe('Manual booking (platform-admin renterId override + advance rule skip)'
     expect(body.code).toBe('RENTAL_RULE_ADVANCE_BOOKING')
   })
 
-  it('rejects manual booking when target renterId does not exist', async () => {
+  it('rejects an unknown renterId as out-of-scope (403, no existence oracle)', async () => {
+    // #1260: scope-first — an id that is not the acting operator's customer returns
+    // a uniform 403 whether it is unknown or another operator's, so the manual
+    // booker can never probe the user table (#396/#475). This is the old
+    // 400 'Renter not found' path, now closed to the enumeration oracle.
     const staffId = crypto.randomUUID()
     const token = await createTestToken({ id: staffId, role: 'PLATFORM_ADMIN' })
     const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
     const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
 
-    const res = await app.request('/bookings', {
+    const res = await app.request(`/bookings?operatorId=${OPERATOR}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -342,13 +421,17 @@ describe('Manual booking (platform-admin renterId override + advance rule skip)'
       }),
     })
 
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(403)
     const body = (await res.json()) as { success: boolean; error: string }
     expect(body.success).toBe(false)
-    expect(body.error).toContain('Renter not found')
+    expect(body.error).toContain('outside your customers')
   })
 
-  it('rejects manual booking when target user is not a RENTER', async () => {
+  it('rejects a non-renter target as out-of-scope (403, no role oracle)', async () => {
+    // #1260: scope-first — a non-customer id (here a STAFF user) is refused with the
+    // same 403 as any other out-of-scope id. A STAFF user has no booking with the
+    // operator, so it is not in its customer set; the old 400 'not a renter' role
+    // probe is gone (it revealed the target's role to the manual booker).
     const staffId = crypto.randomUUID()
     const otherStaffId = crypto.randomUUID()
     userStore.set(otherStaffId, { ...makeRenter(otherStaffId), role: 'STAFF' })
@@ -356,7 +439,7 @@ describe('Manual booking (platform-admin renterId override + advance rule skip)'
     const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
     const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
 
-    const res = await app.request('/bookings', {
+    const res = await app.request(`/bookings?operatorId=${OPERATOR}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -373,9 +456,9 @@ describe('Manual booking (platform-admin renterId override + advance rule skip)'
       }),
     })
 
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(403)
     const body = (await res.json()) as { success: boolean; error: string }
     expect(body.success).toBe(false)
-    expect(body.error).toContain('not a renter')
+    expect(body.error).toContain('outside your customers')
   })
 })
