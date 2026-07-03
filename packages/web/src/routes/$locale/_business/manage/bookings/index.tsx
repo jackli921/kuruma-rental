@@ -237,6 +237,14 @@ export function OperatorBookingsRoute() {
     () => vehicles.filter((v) => filters.isVehicleChecked(v.id)),
     [vehicles, filters],
   )
+  // The timeline owns its own view-filtering for all three inputs symmetrically:
+  // rows, vehicles, and blocks each drop hidden vehicles here. Blocks have no status,
+  // so only the vehicle filter applies. (buildTimelineLayout still drops orphaned
+  // blocks, but that's data integrity — the hide-filter lives here, not there.)
+  const timelineBlocks = useMemo(
+    () => blockEvents.filter((b) => filters.isVehicleChecked(b.resourceId)),
+    [blockEvents, filters],
+  )
 
   const handleViewChange = useCallback(
     (next: CalendarView) => {
@@ -341,6 +349,9 @@ export function OperatorBookingsRoute() {
             pickedOperatorId={pickedOperatorId}
           />
           <div className="min-w-0 flex-1">
+            {/* Block bands render on every view now (#1244), so the kind-color legend
+                is hoisted above both — the timeline's hatched bands need it too. */}
+            {canViewBlocks && <BlockLegend />}
             {view === 'timeline' ? (
               <Suspense
                 fallback={
@@ -350,7 +361,7 @@ export function OperatorBookingsRoute() {
                 <FleetTimeline
                   rows={timelineRows}
                   vehicles={timelineVehicles}
-                  blocks={blockEvents}
+                  blocks={timelineBlocks}
                   date={anchorDate}
                   locale={locale}
                   onViewChange={handleViewChange}
@@ -360,20 +371,17 @@ export function OperatorBookingsRoute() {
                 />
               </Suspense>
             ) : (
-              <>
-                {canViewBlocks && <BlockLegend />}
-                <BookingsCalendar
-                  events={visibleEvents}
-                  resources={visibleResources}
-                  view={view}
-                  date={anchorDate}
-                  locale={locale}
-                  onViewChange={handleViewChange}
-                  onDateChange={handleDateChange}
-                  onSelectEvent={handleSelectEvent}
-                  onSelectSlot={canManualBook || canManageBlocks ? handleSelectSlot : undefined}
-                />
-              </>
+              <BookingsCalendar
+                events={visibleEvents}
+                resources={visibleResources}
+                view={view}
+                date={anchorDate}
+                locale={locale}
+                onViewChange={handleViewChange}
+                onDateChange={handleDateChange}
+                onSelectEvent={handleSelectEvent}
+                onSelectSlot={canManualBook || canManageBlocks ? handleSelectSlot : undefined}
+              />
             )}
           </div>
         </div>

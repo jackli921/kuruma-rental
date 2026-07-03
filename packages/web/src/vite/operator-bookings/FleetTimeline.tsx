@@ -154,8 +154,10 @@ export function FleetTimeline({
     [date, onDateChange],
   )
 
-  // A block bar's id is its block id (bookings share the booking-id / turnaround
-  // space); look it up here so a clicked band routes to the block dialog, not a trip.
+  // The lib hands back only the clicked bar's id, not the item, so we recover the
+  // bar's type by membership: block-bar ids are block-table UUIDs, disjoint from
+  // booking ids and their `::turnaround` suffix, so "id is a known block" is an exact
+  // discriminant. The map also carries the full block (reason/notes) for the dialog.
   const blockById = useMemo(() => new Map(blocks.map((b) => [b.id, b])), [blocks])
 
   // Both events fire on a bar click (select first, click on a re-click); wire both
