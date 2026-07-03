@@ -16,6 +16,9 @@ interface DeactivateMemberDialogProps {
   member: OperatorMemberData | null
   onOpenChange: (open: boolean) => void
   csrfToken: string
+  // Picked tenant (picker-admin) or the operator's own id — ignored server-side
+  // for a self-scoped operator.
+  operatorId: string
 }
 
 // #904 slice 2: owner-only deactivation of a staff member. The API refuses the
@@ -26,11 +29,12 @@ export function DeactivateMemberDialog({
   member,
   onOpenChange,
   csrfToken,
+  operatorId,
 }: DeactivateMemberDialogProps) {
   const t = useTranslations('business.team')
   const queryClient = useQueryClient()
   const mutation = useMutation({
-    mutationFn: (id: string) => deactivateMember(id, csrfToken),
+    mutationFn: (id: string) => deactivateMember(id, csrfToken, operatorId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: TEAM_MEMBERS_QUERY_KEY })
       onOpenChange(false)
