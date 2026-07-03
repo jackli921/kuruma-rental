@@ -1,13 +1,14 @@
 import type { Locale } from '@kuruma/shared/i18n/locales'
 import { type LuggageSize, resolveLuggage } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
-import type { ClassComboSearchResult } from '@kuruma/shared/types/search-result'
+import type { ClassComboSearchResult, ResultLocation } from '@kuruma/shared/types/search-result'
 import type { StorefrontAddOnData, StorefrontInsuranceData } from '@kuruma/shared/types/storefront'
 import type { CallerContext } from '../middleware/auth'
 import type {
   AddOnRepository,
   AvailabilityRepository,
   InsuranceOptionRepository,
+  Storefront,
   StorefrontRepository,
   Vehicle,
   VehicleClass,
@@ -216,30 +217,15 @@ export class StorefrontDetailService {
       .map((v) => toAvailableVehicle(v, v.classId ? classById.get(v.classId) : undefined))
       .sort(compareVehicles)
 
-    // #464: the SECOND producer runs over this one store's scope. The RAW storefront
-    // carries lat/lng (the trimmed StorefrontSummary drops them), so the one-entry
-    // locationById map is built here from it. Scoping the plan scan to this store's
-    // operator + location forecloses a stray cross-operator rate plan surfacing a
-    // card under the wrong store. Offerings are unpaginated (only `vehicles` pages).
-    const locationById = new Map([
-      [
-        storefront.id,
-        {
-          locationId: storefront.id,
-          operatorId: storefront.operatorId,
-          operatorName: storefront.operatorName,
-          name: storefront.name,
-          address: storefront.address,
-          latitude: storefront.latitude,
-          longitude: storefront.longitude,
-        },
-      ],
-    ])
+    // #464: the SECOND producer runs over this one store's scope. Scoping the plan
+    // scan to this store's operator + location forecloses a stray cross-operator rate
+    // plan surfacing a card under the wrong store. Offerings are unpaginated (only
+    // `vehicles` pages).
     const classOfferings = await this.classOfferingService.findOfferings({
       planFilters: { operatorId: storefront.operatorId, locationIds: [locationId] },
       from,
       to,
-      locationById,
+      locationById: singleLocationMap(storefront),
       classById,
       requested,
     })
@@ -272,6 +258,29 @@ export class StorefrontDetailService {
       },
     }
   }
+}
+
+/**
+ * The one-entry `locationById` the CLASS_COMBO producer scans against, built from
+ * the RAW storefront — it carries lat/lng (the trimmed StorefrontSummary drops
+ * them). Keyed on `storefront.id` (the location id) so a plan's `pickupLocationId`
+ * resolves; the produced card's `location.locationId` mirrors that same id.
+ */
+function singleLocationMap(storefront: Storefront): Map<string, ResultLocation> {
+  return new Map([
+    [
+      storefront.id,
+      {
+        locationId: storefront.id,
+        operatorId: storefront.operatorId,
+        operatorName: storefront.operatorName,
+        name: storefront.name,
+        address: storefront.address,
+        latitude: storefront.latitude,
+        longitude: storefront.longitude,
+      },
+    ],
+  ])
 }
 
 function keepClass(
