@@ -183,6 +183,7 @@ describe('VehicleForm', () => {
       'veh_1',
       expect.objectContaining({ name: 'Toyota Aqua G', dailyRateJpy: 6800 }),
       'test-csrf',
+      undefined,
     )
     expect(mockedCreate).not.toHaveBeenCalled()
   })
@@ -205,6 +206,7 @@ describe('VehicleForm', () => {
       'veh_1',
       expect.objectContaining({ name: 'Toyota Aqua Legacy' }),
       'test-csrf',
+      undefined,
     )
   })
 
@@ -313,6 +315,7 @@ describe('VehicleForm', () => {
       'veh_1',
       expect.objectContaining({ classId: archivedClassId }),
       'test-csrf',
+      undefined,
     )
   })
 
@@ -417,6 +420,7 @@ describe('VehicleForm', () => {
       'veh_1',
       expect.objectContaining({ pickupLocationId: archivedLocationId }),
       'test-csrf',
+      undefined,
     )
   })
 
@@ -444,6 +448,7 @@ describe('VehicleForm', () => {
       'veh_1',
       expect.objectContaining({ pickupLocationId: missingLocationId }),
       'test-csrf',
+      undefined,
     )
   })
 
@@ -482,5 +487,24 @@ describe('VehicleForm', () => {
 
     await waitFor(() => expect(mockedCreate).toHaveBeenCalled())
     expect(vi.mocked(createVehicle).mock.calls[0]![0]).not.toHaveProperty('operatorId')
+  })
+
+  it('binds the edit write to the picked operator (#1260)', async () => {
+    const user = userEvent.setup()
+    mockedUpdate.mockResolvedValue(existingVehicle())
+    renderForm({ vehicle: existingVehicle(), pickedOperatorId: 'op_9' })
+
+    const nameInput = screen.getByLabelText(en.name)
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Toyota Aqua G')
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1))
+    expect(mockedUpdate).toHaveBeenCalledWith(
+      'veh_1',
+      expect.objectContaining({ name: 'Toyota Aqua G' }),
+      'test-csrf',
+      'op_9',
+    )
   })
 })

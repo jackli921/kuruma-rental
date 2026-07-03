@@ -28,7 +28,11 @@ vi.mock('@/vite/operator-fleet/api', async (importOriginal) => {
 
 const photosCopy = en.business.vehicles.photos
 
-function renderUpload(props: { vehicleId: string | null; photos?: string[] }): ReactNode {
+function renderUpload(props: {
+  vehicleId: string | null
+  photos?: string[]
+  pickedOperatorId?: string
+}): ReactNode {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
@@ -76,7 +80,7 @@ describe('PhotoUpload', () => {
     await userEvent.upload(screen.getByLabelText(photosCopy.uploadPhotos), file)
 
     await waitFor(() => expect(uploadVehiclePhotos).toHaveBeenCalledTimes(1))
-    expect(uploadVehiclePhotos).toHaveBeenCalledWith('veh_1', [file], 'test-csrf')
+    expect(uploadVehiclePhotos).toHaveBeenCalledWith('veh_1', [file], 'test-csrf', undefined)
   })
 
   it('rejects an oversize file client-side, shows an error, and never uploads', async () => {
@@ -96,6 +100,21 @@ describe('PhotoUpload', () => {
     await userEvent.click(screen.getByRole('button', { name: photosCopy.deletePhoto }))
 
     await waitFor(() => expect(deleteVehiclePhoto).toHaveBeenCalledTimes(1))
-    expect(deleteVehiclePhoto).toHaveBeenCalledWith('veh_1', '/p/a.png', 'test-csrf')
+    expect(deleteVehiclePhoto).toHaveBeenCalledWith('veh_1', '/p/a.png', 'test-csrf', undefined)
+  })
+
+  it('binds photo writes to the picked operator (#1260)', async () => {
+    uploadVehiclePhotos.mockResolvedValue({ uploaded: ['/p/a.png'], total: 1 })
+    deleteVehiclePhoto.mockResolvedValue({ deleted: '/p/a.png', remaining: 0 })
+    renderUpload({ vehicleId: 'veh_1', photos: ['/p/a.png'], pickedOperatorId: 'op_42' })
+
+    const file = fileOfSize(1024, 'a.png')
+    await userEvent.upload(screen.getByLabelText(photosCopy.uploadPhotos), file)
+    await waitFor(() => expect(uploadVehiclePhotos).toHaveBeenCalledTimes(1))
+    expect(uploadVehiclePhotos).toHaveBeenCalledWith('veh_1', [file], 'test-csrf', 'op_42')
+
+    await userEvent.click(screen.getByRole('button', { name: photosCopy.deletePhoto }))
+    await waitFor(() => expect(deleteVehiclePhoto).toHaveBeenCalledTimes(1))
+    expect(deleteVehiclePhoto).toHaveBeenCalledWith('veh_1', '/p/a.png', 'test-csrf', 'op_42')
   })
 })

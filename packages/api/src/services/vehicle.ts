@@ -1,3 +1,4 @@
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import { isForeignVehiclePhoto } from '@kuruma/shared/lib/photo-ref'
 import type {
   BulkVehicleStatus,
@@ -14,7 +15,11 @@ import {
 } from '../pg-errors'
 import type { PaginatedResult, VehicleFilters, VehicleRepository } from '../repositories/types'
 import type { Vehicle } from '../stores'
-import type { ResolveWriteOperatorId } from '../tenancy'
+import {
+  type ResolveWriteOperatorId,
+  assertFleetWriteWithinOperator,
+  fleetWriteDenialResult,
+} from '../tenancy'
 
 // A write failure the route maps straight onto an HTTP envelope. `error` is a
 // plain string for most cases, or a field-error map for the min/max rule so the
@@ -22,11 +27,11 @@ import type { ResolveWriteOperatorId } from '../tenancy'
 type FieldErrors = Record<string, string[]>
 export type VehicleResult =
   | { ok: true; vehicle: Vehicle }
-  | { ok: false; error: string | FieldErrors; status: number }
+  | { ok: false; error: string | FieldErrors; status: number; code?: ErrorCode }
 
 export type VehicleBulkResult =
   | { ok: true; vehicles: Vehicle[] }
-  | { ok: false; error: string; status: number }
+  | { ok: false; error: string; status: number; code?: ErrorCode }
 
 // vehicles carries three FKs — composite (operatorId, classId) -> vehicle_classes
 // (#400), composite (operatorId, pickupLocationId) -> locations (#435), and the
@@ -156,9 +161,19 @@ export class VehicleService {
     }
   }
 
-  async update(ctx: CallerContext, id: string, input: UpdateVehicleInput): Promise<VehicleResult> {
+  async update(
+    ctx: CallerContext,
+    id: string,
+    input: UpdateVehicleInput,
+    actingOperatorId?: string,
+  ): Promise<VehicleResult> {
     const existing = await this.repo.findById(ctx, id)
     if (!existing) return { ok: false, error: 'Vehicle not found', status: 404 }
+
+    // #1260: a bypass admin / legacy STAFF reads every operator's vehicles, so bind
+    // this write to the operator it picked — no pick -> 422, wrong pick -> 404.
+    const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, 'Vehicle not found')
 
     // #967: a patched photos array may only carry this vehicle's own bucket
     // URLs (or external images) — never another vehicle's.
@@ -227,6 +242,7 @@ export class VehicleService {
     ctx: CallerContext,
     vehicleIds: string[],
     status: BulkVehicleStatus,
+    actingOperatorId?: string,
   ): Promise<VehicleBulkResult> {
     // Dedup guards non-HTTP callers (e.g. Trip.com). On the route path
     // bulkUpdateVehicleStatusSchema already rejects duplicate IDs, so this is a
@@ -238,6 +254,14 @@ export class VehicleService {
     if (existing.length !== uniqueIds.length) {
       return { ok: false, error: 'One or more vehicles not found', status: 404 }
     }
+
+    // #1260: bind the batch to the picked operator. A bypass caller resolves `all`,
+    // so findByIds can return vehicles across operators — deny the WHOLE batch if any
+    // isn't the acting operator's (no partial cross-tenant write; no existence oracle).
+    for (const v of existing) {
+      const denial = assertFleetWriteWithinOperator(ctx, v.operatorId, actingOperatorId)
+      if (denial) return fleetWriteDenialResult(denial, 'One or more vehicles not found')
+    }
     if (existing.some((v) => v.status === 'RETIRED')) {
       return { ok: false, error: 'Cannot bulk-update retired vehicles', status: 400 }
     }
@@ -246,9 +270,17 @@ export class VehicleService {
     return { ok: true, vehicles }
   }
 
-  async softDelete(ctx: CallerContext, id: string): Promise<VehicleResult> {
+  async softDelete(
+    ctx: CallerContext,
+    id: string,
+    actingOperatorId?: string,
+  ): Promise<VehicleResult> {
     const existing = await this.repo.findById(ctx, id)
     if (!existing) return { ok: false, error: 'Vehicle not found', status: 404 }
+
+    // #1260: bind the delete to the picked operator (see update()).
+    const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, 'Vehicle not found')
 
     const retired = await this.repo.softDelete(ctx, existing.id)
     if (!retired) return { ok: false, error: 'Vehicle not found', status: 404 }
