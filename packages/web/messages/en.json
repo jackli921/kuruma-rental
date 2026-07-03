@@ -1349,8 +1349,11 @@
     "detail": {
       "backToSearch": "Back to search",
       "availableVehicles": "Available cars",
+      "classDeals": "Class deals",
+      "classAvailable": "{count} available",
       "noVehicles": "No cars are available at this store for the selected dates.",
       "book": "Book this car",
+      "bookClass": "Book this class",
       "notFound": "Store not found",
       "notFoundDescription": "This store does not exist or is no longer available."
     }

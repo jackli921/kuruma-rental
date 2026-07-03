@@ -1,5 +1,9 @@
 import { StorefrontDetailView } from '@/vite/storefronts/StorefrontDetailView'
-import type { AvailableVehicleData, StorefrontDetailData } from '@/vite/storefronts/api'
+import type {
+  AvailableVehicleData,
+  ClassOfferingData,
+  StorefrontDetailData,
+} from '@/vite/storefronts/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -18,6 +22,7 @@ vi.mock('@tanstack/react-router', () => ({
     params?: { locale?: string }
     search?: {
       vehicleId?: string
+      classId?: string
       locationId?: string
       from?: string
       to?: string
@@ -30,6 +35,7 @@ vi.mock('@tanstack/react-router', () => ({
       data-to={to}
       data-locale={params?.locale}
       data-vehicle={search?.vehicleId}
+      data-class={search?.classId}
       data-location={search?.locationId}
       data-from={search?.from}
       data-rangeto={search?.to}
@@ -61,7 +67,34 @@ function makeVehicle(overrides: Partial<AvailableVehicleData> = {}): AvailableVe
   }
 }
 
-function makeDetail(vehicles: AvailableVehicleData[]): StorefrontDetailData {
+function makeOffering(overrides: Partial<ClassOfferingData> = {}): ClassOfferingData {
+  return {
+    kind: 'CLASS_COMBO',
+    location: {
+      locationId: 'loc-1',
+      operatorId: 'op-best',
+      operatorName: 'Best Car Rental',
+      name: 'Best Car Rental Osaka',
+      address: '1-2-3 Namba, Osaka',
+      latitude: null,
+      longitude: null,
+    },
+    dailyRateJpy: 9000,
+    hourlyRateJpy: null,
+    classLabel: 'Compact',
+    acrissCode: 'CCAR',
+    seats: 5,
+    photos: [],
+    classId: 'cls-compact',
+    availableCount: 3,
+    ...overrides,
+  }
+}
+
+function makeDetail(
+  vehicles: AvailableVehicleData[],
+  classOfferings: ClassOfferingData[] = [],
+): StorefrontDetailData {
   return {
     storefront: {
       locationId: 'loc-1',
@@ -73,6 +106,7 @@ function makeDetail(vehicles: AvailableVehicleData[]): StorefrontDetailData {
       turnaroundMinutes: 120,
     },
     vehicles,
+    classOfferings,
     nextCursor: null,
   }
 }
@@ -175,5 +209,30 @@ describe('StorefrontDetailView', () => {
     vi.stubEnv('VITE_FEATURE_REVIEWS', undefined)
     renderDetail(makeDetail([makeVehicle({ id: 'v-classed', classId: 'cls-compact' })]))
     expect(screen.queryByTestId('rating-badge-skeleton')).toBeNull()
+  })
+
+  // #464: class-combo deals render in their own section, each linking into the
+  // reservation flow by class (no assigned car yet).
+  it('renders a Class deals section with a card per class offering', () => {
+    renderDetail(makeDetail([], [makeOffering()]))
+    expect(screen.getByText('Class deals')).toBeInTheDocument()
+    expect(screen.getByText('Compact')).toBeInTheDocument()
+    expect(screen.getByText('3 available')).toBeInTheDocument()
+  })
+
+  it('carries the storefront location + dates + classId (never a vehicleId) into the class-deal CTA', () => {
+    renderDetail(makeDetail([], [makeOffering()]))
+    const book = screen.getByRole('link', { name: 'Book this class' })
+    expect(book).toHaveAttribute('data-to', '/$locale/bookings/new')
+    expect(book).toHaveAttribute('data-class', 'cls-compact')
+    expect(book).toHaveAttribute('data-location', 'loc-1')
+    expect(book).toHaveAttribute('data-from', '2026-07-01T10:00')
+    expect(book).toHaveAttribute('data-rangeto', '2026-07-03T10:00')
+    expect(book).not.toHaveAttribute('data-vehicle')
+  })
+
+  it('omits the Class deals section when the store has no offerings', () => {
+    renderDetail(makeDetail([makeVehicle()]))
+    expect(screen.queryByText('Class deals')).toBeNull()
   })
 })

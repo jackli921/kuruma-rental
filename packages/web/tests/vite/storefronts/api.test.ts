@@ -64,6 +64,29 @@ const fullDetail: Record<string, unknown> = {
     turnaroundMinutes: 180,
   },
   vehicles: [fullVehicle],
+  // #464: class-combo deals ride alongside the vehicles on the detail response.
+  classOfferings: [
+    {
+      kind: 'CLASS_COMBO',
+      location: {
+        locationId: 'loc1',
+        operatorId: 'op1',
+        operatorName: 'Osaka Cars',
+        name: 'Namba Pickup',
+        address: '1-1 Namba',
+        latitude: null,
+        longitude: null,
+      },
+      dailyRateJpy: 9000,
+      hourlyRateJpy: null,
+      classLabel: 'Compact',
+      acrissCode: 'CCAR',
+      seats: 5,
+      photos: [],
+      classId: 'cls1',
+      availableCount: 2,
+    },
+  ],
   nextCursor: null,
 }
 

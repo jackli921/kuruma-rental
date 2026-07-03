@@ -1349,8 +1349,11 @@
     "detail": {
       "backToSearch": "返回搜索",
       "availableVehicles": "可用车辆",
+      "classDeals": "车型套餐",
+      "classAvailable": "剩余 {count} 辆",
       "noVehicles": "所选时间内该门店没有可用车辆。",
       "book": "预订此车",
+      "bookClass": "预订此车型",
       "notFound": "未找到门店",
       "notFoundDescription": "该门店不存在或已不可用。"
     }

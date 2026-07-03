@@ -7,6 +7,11 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 
 interface NewBookingSearch {
   vehicleId?: string | undefined
+  // #464: a class-combo deal books a CLASS, not a specific car — the storefront's
+  // ClassOfferingCard links here with classId (and no vehicleId). Accepted +
+  // preserved so the param survives validateSearch; the wizard's CLASS_COMBO
+  // booking branch that consumes it lands in a later #464 slice.
+  classId?: string | undefined
   locationId?: string | undefined
   from?: string | undefined
   to?: string | undefined
@@ -22,6 +27,7 @@ function validateSearch(search: Record<string, unknown>): NewBookingSearch {
   const cls = search.class
   return {
     vehicleId: str(search.vehicleId),
+    classId: str(search.classId),
     locationId: str(search.locationId),
     from: str(search.from),
     to: str(search.to),
