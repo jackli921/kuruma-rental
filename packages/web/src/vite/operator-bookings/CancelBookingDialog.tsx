@@ -17,6 +17,9 @@ import { useTranslations } from 'use-intl'
 interface CancelBookingDialogProps {
   readonly bookingId: string
   readonly csrfToken: string
+  /** #1361: the operator a picker admin has chosen — threaded into the cancel write
+   *  so the #1260 guard binds to it; undefined for a tenant operator. */
+  readonly pickedOperatorId?: string | undefined
 }
 
 // #616: operator cancels a booking. The server applies the tiered cancellation
@@ -26,13 +29,17 @@ interface CancelBookingDialogProps {
 // invalidateBookingCaches so the detail + timeline reflect the CANCELLED state and
 // the dashboard overview drops the trip (#1099 Theme 4).
 // CSRF-gated; the session token rides the write.
-export function CancelBookingDialog({ bookingId, csrfToken }: CancelBookingDialogProps) {
+export function CancelBookingDialog({
+  bookingId,
+  csrfToken,
+  pickedOperatorId,
+}: CancelBookingDialogProps) {
   const t = useTranslations('bookings.operator.detail.cancelBooking')
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
 
   const mutation = useMutation({
-    mutationFn: () => cancelBooking(bookingId, csrfToken),
+    mutationFn: () => cancelBooking(bookingId, csrfToken, pickedOperatorId),
     onSuccess: () => {
       invalidateBookingCaches(queryClient)
       setOpen(false)
