@@ -41,7 +41,11 @@ const sampleBooking = {
   updatedAt: '2026-06-01T00:00:00.000Z',
 }
 
+// #464: SPECIFIC is one of the two `fulfillmentMode` arms — a concrete car booking
+// (requestedVehicleId). `disclaimerAccepted` is the payment-step consent the wizard
+// draft adds at submit, so a full input carries it.
 const baseInput = {
+  fulfillmentMode: 'SPECIFIC' as const,
   requestedVehicleId: 'v1',
   pickupLocationId: 'loc1',
   dropoffLocationId: 'loc1',
@@ -50,6 +54,7 @@ const baseInput = {
   addOnIds: [] as string[],
   insuranceOptionId: null as string | null,
   idempotencyKey: 'idem-1',
+  disclaimerAccepted: true,
 }
 
 describe('createBooking', () => {
@@ -75,6 +80,7 @@ describe('createBooking', () => {
       'Content-Type': 'application/json',
     })
     expect(JSON.parse(init.body as string)).toEqual({
+      fulfillmentMode: 'SPECIFIC',
       requestedVehicleId: 'v1',
       pickupLocationId: 'loc1',
       dropoffLocationId: 'loc1',
@@ -83,7 +89,37 @@ describe('createBooking', () => {
       insuranceOptionId: 'i1',
       addOnIds: ['a1', 'a2'],
       idempotencyKey: 'idem-1',
+      disclaimerAccepted: true,
     })
+  })
+
+  it('POSTs a CLASS_COMBO body with fulfillmentMode + classId and no requestedVehicleId (#464)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: sampleBooking }, 201))
+    vi.stubGlobal('fetch', fetchMock)
+
+    // CLASS_COMBO drops requestedVehicleId and carries classId instead; the
+    // operator assigns a concrete car later (proposal §6.2). The distributive
+    // draft type must keep this arm intact through the wizard's `Omit`.
+    const comboInput = {
+      fulfillmentMode: 'CLASS_COMBO' as const,
+      classId: 'cls-9',
+      pickupLocationId: 'loc1',
+      dropoffLocationId: 'loc1',
+      startAt: '2026-07-01T01:00:00.000Z',
+      endAt: '2026-07-03T01:00:00.000Z',
+      insuranceOptionId: null,
+      addOnIds: [],
+      idempotencyKey: 'idem-2',
+      disclaimerAccepted: true,
+    }
+
+    await createBooking(comboInput, 'csrf-8')
+
+    const body = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string)
+    expect(body.fulfillmentMode).toBe('CLASS_COMBO')
+    expect(body.classId).toBe('cls-9')
+    // Mutation-resistant: the wrong arm's discriminant field must be absent.
+    expect(body).not.toHaveProperty('requestedVehicleId')
   })
 
   it('omits insuranceOptionId from the body when the renter declines coverage', async () => {

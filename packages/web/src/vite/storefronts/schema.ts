@@ -1,4 +1,5 @@
 import { LUGGAGE_SIZES, TRANSMISSIONS } from '@kuruma/shared/enums'
+import type { ClassComboSearchResult } from '@kuruma/shared/types/search-result'
 import { z } from 'zod'
 
 // #711/#785: Zod schemas for the public storefront *response* bodies (#391),
@@ -88,9 +89,45 @@ const storefrontSummarySchema = z.object({
   turnaroundMinutes: z.number(),
 })
 
+// #464: class-combo deals surfaced on the storefront-detail response, so the
+// store page can list "book a class, exact car assigned at pickup" offerings
+// beside its physical cars. Mirrors the shared `ClassComboSearchResult` — the
+// same shape the flat search emits inline in `search/api.ts`; kept byte-identical
+// in field set (not refactored into one module) so each feature owns its DTO.
+const offeringLocationSchema = z.object({
+  locationId: z.string(),
+  operatorId: z.string(),
+  operatorName: z.string(),
+  name: z.string(),
+  address: z.string(),
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
+})
+
+const classOfferingSchema = z.object({
+  kind: z.literal('CLASS_COMBO'),
+  location: offeringLocationSchema,
+  dailyRateJpy: z.number().nullable(),
+  hourlyRateJpy: z.number().nullable(),
+  classLabel: z.string(),
+  acrissCode: z.string().nullable(),
+  seats: z.number(),
+  photos: z.array(z.string()),
+  classId: z.string(),
+  availableCount: z.number(),
+  // #464: `satisfies z.ZodType<ClassComboSearchResult>` pins this hand-written
+  // mirror to the shared DTO (as `search/api.ts` pins its own mirror), so a new
+  // renter-safe field on the shared type fails to compile here instead of being
+  // silently stripped off the store page.
+}) satisfies z.ZodType<ClassComboSearchResult>
+
 export const storefrontDetailResultSchema = z.object({
   storefront: storefrontSummarySchema,
   vehicles: z.array(availableVehicleSchema),
+  // `.default([])` is REQUIRED: web + api workers deploy independently, so a new
+  // web hitting an old API (no `classOfferings`) must not parse-error the store
+  // AND reservation loaders. The schema is never stricter than the wire.
+  classOfferings: z.array(classOfferingSchema).default([]),
   nextCursor: z.string().nullable(),
 })
 
@@ -99,5 +136,6 @@ export type ClassSummaryData = z.infer<typeof classSummarySchema>
 export type StorefrontCardData = z.infer<typeof storefrontCardSchema>
 export type StorefrontSearchResultData = z.infer<typeof storefrontSearchResultSchema>
 export type AvailableVehicleData = z.infer<typeof availableVehicleSchema>
+export type ClassOfferingData = z.infer<typeof classOfferingSchema>
 export type StorefrontSummaryData = z.infer<typeof storefrontSummarySchema>
 export type StorefrontDetailData = z.infer<typeof storefrontDetailResultSchema>
