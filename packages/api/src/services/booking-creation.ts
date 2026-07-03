@@ -8,9 +8,9 @@ import { BOOKING_CODE_CONSTRAINT, PG_ERROR, pgConstraintName, pgErrorCode } from
 import type { BookingRepository, RunInTransaction, TransactionRepos } from '../repositories/types'
 import type { Location, Vehicle } from '../stores'
 import {
-  assertBookingWriteWithinOperator,
+  assertBookingInventoryWithinOperator,
+  bookingInventoryDenialResult,
   bookingReadScope,
-  fleetWriteDenialResult,
 } from '../tenancy'
 import { resolveBookingActor } from './booking-actor'
 import { rejectIfOperatorDeactivated } from './booking-creation-operator-guard'
@@ -255,6 +255,14 @@ export class BookingCreationService {
     if (!vehicle) {
       return { ok: false, status: 400, error: 'Vehicle not found' }
     }
+    const operatorId = vehicle.operatorId
+    // #1260/#1417: bind BEFORE the vehicle-state gates below. The read is SYSTEM_CONTEXT
+    // (unscoped), so a foreign car is reachable by raw id; binding first refuses a cross-
+    // tenant caller uniformly and stops it probing B's status/class/shaken-expiry via the
+    // 400s that follow. Bypass `all` names its operator (404 no-oracle); a tenant operator
+    // is own-fleet only (foreign -> 403); renters pass through (marketplace).
+    const inventoryDenial = assertBookingInventoryWithinOperator(ctx, operatorId, actingOperatorId)
+    if (inventoryDenial) return bookingInventoryDenialResult(inventoryDenial, 'Vehicle not found')
     if (vehicle.status !== 'AVAILABLE') {
       return { ok: false, status: 400, error: 'Vehicle is not available' }
     }
@@ -274,15 +282,6 @@ export class BookingCreationService {
         code: 'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
       }
     }
-    const operatorId = vehicle.operatorId
-    // #1260: bind the booked vehicle to the picked operator — the read above is
-    // SYSTEM_CONTEXT (unscoped), so a bypass admin could otherwise book ANY
-    // operator's car by raw id. 404 (via fleetWriteDenialResult) reveals no more than
-    // the admin already sees. This binds ONLY the bypass `all` tier; the operator
-    // tier is deliberately left unbound here — a tenant operator booking a foreign
-    // operator's car is a separate, pre-existing gap tracked in #1417.
-    const inventoryDenial = assertBookingWriteWithinOperator(ctx, operatorId, actingOperatorId)
-    if (inventoryDenial) return fleetWriteDenialResult(inventoryDenial, 'Vehicle not found')
     const operatorBlock = await rejectIfOperatorDeactivated(repos, operatorId)
     if (operatorBlock) return operatorBlock
     const classId = vehicle.classId
@@ -483,11 +482,12 @@ export class BookingCreationService {
       return { ok: false, status: 400, error: 'Pickup location is not available' }
     }
     const operatorId = pickup.operatorId
-    // #1260: bind the combo's pickup/inventory operator (mirrors the SPECIFIC path);
-    // bypass tier only, operator tier deferred to #1417.
-    const inventoryDenial = assertBookingWriteWithinOperator(ctx, operatorId, actingOperatorId)
+    // #1260/#1417: bind the combo's pickup/inventory operator (mirrors the SPECIFIC
+    // path) — bypass `all` names its operator (404 no-oracle), a tenant operator is
+    // own-fleet only (foreign pickup -> 403), renters pass through (marketplace).
+    const inventoryDenial = assertBookingInventoryWithinOperator(ctx, operatorId, actingOperatorId)
     if (inventoryDenial)
-      return fleetWriteDenialResult(inventoryDenial, 'Pickup location is not available')
+      return bookingInventoryDenialResult(inventoryDenial, 'Pickup location is not available')
     const operatorBlock = await rejectIfOperatorDeactivated(repos, operatorId)
     if (operatorBlock) return operatorBlock
     const classId = input.classId

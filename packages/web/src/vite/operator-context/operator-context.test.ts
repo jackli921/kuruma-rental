@@ -120,11 +120,35 @@ describe('useIsOperatorContextRoute', () => {
     const { result } = renderHook(() => useIsOperatorContextRoute())
     expect(result.current).toBe(true)
   })
+
+  it('is false on the by-id trip-detail route (#1361 — by-id read, no picker chip)', () => {
+    // Like fleet/$vehicleId (#1264), the booking by-id detail is NOT a picker route:
+    // its read is by-id, so an interactive pick that diverges from the booking on
+    // screen would dead-end the write at the API's ownership 404. The write still
+    // binds via the retained ?operator= param, without showing the chip here.
+    h.matches = [
+      { routeId: '/$locale/_business' },
+      { routeId: '/$locale/_business/manage/bookings/$bookingId' },
+    ]
+    const { result } = renderHook(() => useIsOperatorContextRoute())
+    expect(result.current).toBe(false)
+  })
 })
 
 describe('OPERATOR_CONTEXT_ROUTE_IDS', () => {
   it('treats the fleet list as a picker route but not the by-id detail route (#1264)', () => {
     expect(OPERATOR_CONTEXT_ROUTE_IDS.has('/$locale/_business/manage/fleet/')).toBe(true)
     expect(OPERATOR_CONTEXT_ROUTE_IDS.has('/$locale/_business/manage/fleet/$vehicleId')).toBe(false)
+  })
+
+  // The booking LIST is a picker route, but the by-id trip-detail is NOT (#1361) — same
+  // rationale as fleet/$vehicleId: a by-id read the pick does not re-scope must not host
+  // an interactive picker. The detail's status/cancel writes still bind via the retained
+  // ?operator= param (useOperatorContext), so the picker chip is simply not shown there.
+  it('treats the bookings list as a picker route but not the by-id trip-detail (#1361)', () => {
+    expect(OPERATOR_CONTEXT_ROUTE_IDS.has('/$locale/_business/manage/bookings/')).toBe(true)
+    expect(OPERATOR_CONTEXT_ROUTE_IDS.has('/$locale/_business/manage/bookings/$bookingId')).toBe(
+      false,
+    )
   })
 })
