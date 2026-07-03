@@ -1,8 +1,8 @@
 import type { OperatorApplicationInput } from '@kuruma/shared/validators/operator-application'
 import { ConflictError, NotFoundError } from '../auth/guards'
 import {
-  OPERATOR_APPLICATION_EMAIL_CONSTRAINT,
   OPERATORS_SLUG_CONSTRAINT,
+  OPERATOR_APPLICATION_EMAIL_CONSTRAINT,
   PG_ERROR,
   PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT,
   pgConstraintName,
@@ -218,6 +218,61 @@ export class OperatorApplicationService {
           applicationId: id,
         },
       ],
+    }
+  }
+
+  /** Re-mint the OWNER invite for an already-APPROVED application (#1370): the
+   *  original link expired or was lost before the owner accepted. Revokes any live
+   *  PENDING invite for the email and issues a fresh one, atomically. Refuses if
+   *  the application is not APPROVED (404/409) or the owner already onboarded (409)
+   *  — a re-invite must never open a second OWNER path onto a live operator. */
+  async remintInvite(
+    id: string,
+    reviewerUserId: string,
+  ): Promise<{ inviteUrl: string; expiresAt: Date }> {
+    const application = await this.repo.findById(id)
+    if (!application) throw new NotFoundError('no application with that id')
+    if (application.status !== 'APPROVED' || !application.operatorId) {
+      throw new ConflictError('only an approved application can be re-invited')
+    }
+    const operatorId = application.operatorId
+    const email = application.contactEmail
+    const minted = mintInvite({ webBaseUrl: this.config.webBaseUrl })
+
+    try {
+      const event = await this.runApproval(async (repos) => {
+        // An already-onboarded owner (active membership) must not be re-invited: a
+        // fresh OWNER link accepted by someone else would grant a second owner.
+        const existingUser = await repos.users.findByEmail(email)
+        if (existingUser && (await repos.memberships.findActiveByUserId(existingUser.id))) {
+          throw new ConflictError('this email already has an operator')
+        }
+        // Revoke the stale PENDING invite (this operator's) so the partial-unique
+        // (operatorId,email) index admits the replacement; then mint the new one.
+        const pending = await repos.invites.findPendingByEmail(email)
+        if (pending) await repos.invites.revoke(pending.id, operatorId)
+        const invite = buildProviderInviteRecord(minted, {
+          email,
+          operatorId,
+          role: 'OPERATOR_OWNER',
+          invitedByUserId: reviewerUserId,
+        })
+        await repos.invites.create(invite.row)
+        return invite.event
+      })
+      this.recordAudit(event)
+      return { inviteUrl: minted.inviteUrl, expiresAt: minted.expiresAt }
+    } catch (err) {
+      // A concurrent remint won the (operatorId,email) pending slot between our
+      // revoke and insert — the whole tx rolled back. Report a retryable 409, not
+      // a 500, mirroring submit()/provisionApproval()'s constraint handling.
+      if (
+        pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION &&
+        pgConstraintName(err) === PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT
+      ) {
+        throw new ConflictError('a re-invite is already in progress, please retry')
+      }
+      throw err
     }
   }
 

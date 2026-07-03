@@ -90,4 +90,16 @@ export function createAdminOperatorApplicationRoutes(service: OperatorApplicatio
         expiresAt: result.expiresAt,
       })
     })
+    .post('/admin/operator-applications/:id/remint-invite', async (c) => {
+      const user = requireUser(c)
+      requirePlatformAdmin(toCallerContext(user))
+
+      const idr = parseId(c)
+      if (!idr.ok) return idr.response
+      // Re-issue the OWNER invite for an already-approved application (#1370).
+      // NotFoundError (unknown id) → 404. ConflictError (not approved / owner
+      // already onboarded) → 409. No body: the applicant/operator are immutable.
+      const result = await service.remintInvite(idr.id, user.id)
+      return ok(c, { inviteUrl: result.inviteUrl, expiresAt: result.expiresAt })
+    })
 }

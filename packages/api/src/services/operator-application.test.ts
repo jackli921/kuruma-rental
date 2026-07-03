@@ -364,6 +364,88 @@ describe('OperatorApplicationService.approve', () => {
 
     await expect(service.approve(id, 'admin-1')).rejects.toThrow(/invited/)
   })
+
+  describe('remintInvite (#1370)', () => {
+    it('revokes the stale invite and issues a fresh one for an approved application', async () => {
+      const { service, repos, audit } = setupApprove()
+      const { id } = await repos.applications.create(base)
+      const first = await service.approve(id, 'admin-1')
+
+      const second = await service.remintInvite(id, 'admin-2')
+
+      // A genuinely new link (fresh token), not the lost/expired one.
+      expect(second.inviteUrl).not.toBe(first.inviteUrl)
+      expect(second.inviteUrl).toMatch(/\/provider\/invite\//)
+      // Exactly one live invite remains; the prior one is revoked (kept for audit).
+      const invites = [...repos.inviteStore.values()]
+      expect(invites.filter((i) => i.status === 'PENDING')).toHaveLength(1)
+      expect(invites.filter((i) => i.status === 'REVOKED')).toHaveLength(1)
+      // The fresh invite is emitted through the same audit sink, crediting the
+      // re-minting admin.
+      const reminted = (audit.mock.calls as [{ type: string; invitedByUserId?: string }][])
+        .map(([e]) => e)
+        .filter((e) => e.type === 'PROVIDER_INVITE_CREATED' && e.invitedByUserId === 'admin-2')
+      expect(reminted).toHaveLength(1)
+    })
+
+    it('refuses to re-invite an application that is not APPROVED (409)', async () => {
+      const { service, repos } = setupApprove()
+      const { id } = await repos.applications.create(base) // still PENDING
+
+      const err = await service.remintInvite(id, 'admin-1').catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(ConflictError)
+      expect(err instanceof Error ? err.message : '').toMatch(/only an approved application/)
+    })
+
+    it('throws NotFoundError for an unknown id', async () => {
+      const { service } = setupApprove()
+      await expect(service.remintInvite('no-such-id', 'admin-1')).rejects.toThrow(NotFoundError)
+    })
+
+    it('maps a concurrent re-invite race (pending-email 23505) to a retryable 409', async () => {
+      const { service, repos } = setupApprove()
+      const { id } = await repos.applications.create(base)
+      await service.approve(id, 'admin-1') // real invite created
+
+      // A concurrent remint claimed the (operatorId,email) pending slot between our
+      // revoke and insert: the create loses the partial-unique index.
+      repos.invites.create = () =>
+        Promise.reject(
+          Object.assign(new Error('duplicate key value violates unique constraint'), {
+            code: '23505',
+            constraint_name: 'provider_invites_pending_email_unique',
+          }),
+        )
+
+      const err = await service.remintInvite(id, 'admin-2').catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(ConflictError)
+      expect(err instanceof Error ? err.message : '').toMatch(/re-invite is already in progress/)
+    })
+
+    it('refuses to re-invite once the owner has onboarded (active membership) → 409', async () => {
+      const { service, repos } = setupApprove()
+      const { id } = await repos.applications.create(base)
+      const approved = await service.approve(id, 'admin-1')
+
+      // Simulate the owner accepting: a user + ACTIVE membership now exist.
+      const owner = await repos.users.quickCreate({
+        name: 'Owner',
+        email: base.contactEmail,
+        phone: null,
+        language: 'en',
+      })
+      await repos.memberships.create({
+        userId: owner.id,
+        operatorId: approved.operatorId,
+        role: 'OPERATOR_OWNER',
+        status: 'ACTIVE',
+      })
+
+      const err = await service.remintInvite(id, 'admin-2').catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(ConflictError)
+      expect(err instanceof Error ? err.message : '').toMatch(/already has an operator/)
+    })
+  })
 })
 
 // Roll a Map store back to a saved snapshot — the rollback half of the test's

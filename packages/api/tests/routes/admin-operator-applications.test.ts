@@ -361,3 +361,70 @@ describe('POST /admin/operator-applications/:id/approve', () => {
     expect(res.status).toBe(409)
   })
 })
+
+describe('POST /admin/operator-applications/:id/remint-invite', () => {
+  async function approve(
+    app: ReturnType<typeof makeApp>['app'],
+    id: string,
+  ): Promise<{ inviteUrl: string }> {
+    const res = await app.request(`/admin/operator-applications/${id}/approve`, {
+      method: 'POST',
+      headers: await bearer(ADMIN),
+    })
+    const body = (await res.json()) as { data: { inviteUrl: string } }
+    return body.data
+  }
+
+  test('PLATFORM_ADMIN re-mints an approved application (200) with a fresh invite link', async () => {
+    const harness = makeApp()
+    const { id } = await seedApplication(harness.app)
+    const approved = await approve(harness.app, id)
+
+    const res = await harness.app.request(`/admin/operator-applications/${id}/remint-invite`, {
+      method: 'POST',
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      success: boolean
+      data: { inviteUrl: string; expiresAt: string }
+    }
+    expect(body.success).toBe(true)
+    expect(body.data.inviteUrl).toMatch(/\/provider\/invite\//)
+    // A brand-new link, not the one the approval issued.
+    expect(body.data.inviteUrl).not.toBe(approved.inviteUrl)
+    expect(typeof body.data.expiresAt).toBe('string')
+  })
+
+  test('re-minting an unapproved (PENDING) application → 409', async () => {
+    const harness = makeApp()
+    const { id } = await seedApplication(harness.app)
+
+    const res = await harness.app.request(`/admin/operator-applications/${id}/remint-invite`, {
+      method: 'POST',
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(409)
+  })
+
+  test('unknown application id → 404', async () => {
+    const harness = makeApp()
+    const randomId = '00000000-0000-0000-0000-000000000000'
+    const res = await harness.app.request(
+      `/admin/operator-applications/${randomId}/remint-invite`,
+      { method: 'POST', headers: await bearer(ADMIN) },
+    )
+    expect(res.status).toBe(404)
+  })
+
+  test('non-admin (RENTER) cannot re-mint (403)', async () => {
+    const harness = makeApp()
+    const { id } = await seedApplication(harness.app)
+
+    const res = await harness.app.request(`/admin/operator-applications/${id}/remint-invite`, {
+      method: 'POST',
+      headers: await bearer({ sub: 'u1', role: 'RENTER' }),
+    })
+    expect(res.status).toBe(403)
+  })
+})
