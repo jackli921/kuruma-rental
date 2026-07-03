@@ -924,7 +924,21 @@
         "submit": "Submit application",
         "submitting": "Submitting...",
         "individual": "Individual",
-        "company": "Company"
+        "company": "Company",
+        "fleetSizePlaceholder": "Select a fleet size",
+        "businessTypePlaceholder": "Select an option",
+        "errors": {
+          "businessName": "Please enter your business name.",
+          "contactName": "Please enter a contact name.",
+          "contactEmail": "Please enter a valid email address.",
+          "contactPhone": "Please enter a valid phone number.",
+          "serviceArea": "Please enter your service area.",
+          "estimatedFleetSize": "Please select a fleet size.",
+          "website": "Please enter a valid URL starting with http:// or https://.",
+          "businessLicenseNumber": "Please shorten the license number.",
+          "message": "Please shorten your message.",
+          "consent": "You must agree before submitting your application."
+        }
       },
       "errors": {
         "generic": "Couldn't submit your application. Please try again.",
