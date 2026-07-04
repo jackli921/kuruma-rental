@@ -746,3 +746,75 @@ describe('LocationService', () => {
     })
   })
 })
+
+// #1456: PATCH/DELETE bind to the operator a picker admin acts as — parity with
+// bookings/fleet (#1260) and fees (#1442). A bypass admin reads every operator's
+// location by raw id, so an unbound write could touch any tenant; require it to
+// name the picked operator and forbid a mismatch. An operator session is already
+// tenant-clamped by the read scope, so it passes through with no acting id.
+describe('LocationService — update/archive bind to the picked operator (#1456)', () => {
+  const adminCtx: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+  let repo: InMemoryLocationRepository
+  let service: LocationService
+
+  beforeEach(() => {
+    repo = new InMemoryLocationRepository()
+    service = new LocationService(
+      repo,
+      new InMemoryBookingRepository(new Map()),
+      missGeocoder,
+      new InMemoryRegionRepository([SEEDED_AREA]),
+    )
+  })
+
+  async function seedLocationForOpA(): Promise<string> {
+    const created = await service.create(ctxFor(opA), createInput(opA, 'Namba'))
+    if (!created.ok) throw new Error('seed failed')
+    return created.location.id
+  }
+
+  it('rejects an admin update with no picked operator (422 OPERATOR_REQUIRED)', async () => {
+    const id = await seedLocationForOpA()
+    const result = await service.update(adminCtx, id, { name: 'Umeda' }, undefined)
+    expect(result).toMatchObject({ ok: false, status: 422, code: 'OPERATOR_REQUIRED' })
+  })
+
+  it('404s an admin update whose picked operator does not own the location', async () => {
+    const id = await seedLocationForOpA()
+    const result = await service.update(adminCtx, id, { name: 'Umeda' }, opB)
+    expect(result).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('applies an admin update bound to the location-owning operator', async () => {
+    const id = await seedLocationForOpA()
+    const result = await service.update(adminCtx, id, { name: 'Umeda' }, opA)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.location.name).toBe('Umeda')
+  })
+
+  it('lets an operator session update its own location with no acting id', async () => {
+    const id = await seedLocationForOpA()
+    const result = await service.update(ctxFor(opA), id, { name: 'Umeda' })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.location.name).toBe('Umeda')
+  })
+
+  it('rejects an admin archive with no picked operator (422 OPERATOR_REQUIRED)', async () => {
+    const id = await seedLocationForOpA()
+    const result = await service.archive(adminCtx, id, undefined)
+    expect(result).toMatchObject({ ok: false, status: 422, code: 'OPERATOR_REQUIRED' })
+  })
+
+  it('404s an admin archive whose picked operator does not own the location', async () => {
+    const id = await seedLocationForOpA()
+    const result = await service.archive(adminCtx, id, opB)
+    expect(result).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('archives a location bound to the owning operator', async () => {
+    const id = await seedLocationForOpA()
+    const result = await service.archive(adminCtx, id, opA)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.location.status).toBe('ARCHIVED')
+  })
+})

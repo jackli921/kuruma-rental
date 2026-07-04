@@ -123,8 +123,11 @@ describe('locations region loop guard write-path (#651 Slice 2)', () => {
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify(b),
     })
+  // #1456: the caller is a legacy STAFF admin (!isOperatorRole), so a location
+  // write must bind to the operator it acts as via ?operatorId= — else the guard
+  // 422s before the region checks. All PATCH targets here are owned by opId.
   const patch = (id: string, b: unknown) =>
-    app.request(`/locations/${id}`, {
+    app.request(`/locations/${id}?operatorId=${opId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify(b),

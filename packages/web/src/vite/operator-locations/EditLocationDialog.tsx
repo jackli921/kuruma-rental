@@ -20,19 +20,27 @@ import { useTranslations } from 'use-intl'
 interface EditLocationDialogProps {
   location: OperatorLocation | null
   onOpenChange: (open: boolean) => void
+  // #1456: the tenant a picker admin acts as; threaded as ?operatorId= so the API
+  // binds the PATCH to it. Undefined for an operator session (auto-scoped).
+  pickedOperatorId?: string | undefined
 }
 
 // #529 slice 3: edit a location. The row already carries every field, so the
 // form prefills from it — no GET /:id round-trip. PATCH via the no-default
 // update schema (mode="edit"); `key={id}` resets the form when a different row
 // opens. Mirrors AddLocationDialog's invalidate-and-close / reset-on-close flow.
-export function EditLocationDialog({ location, onOpenChange }: EditLocationDialogProps) {
+export function EditLocationDialog({
+  location,
+  onOpenChange,
+  pickedOperatorId,
+}: EditLocationDialogProps) {
   const t = useTranslations('business.locations')
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
   const { data: regions } = useQuery(regionsQueryOptions())
   const mutation = useMutation({
-    mutationFn: (data: UpdateLocationInput) => updateLocation(location?.id ?? '', data, csrfToken),
+    mutationFn: (data: UpdateLocationInput) =>
+      updateLocation(location?.id ?? '', data, csrfToken, pickedOperatorId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LOCATIONS_QUERY_KEY })
       onOpenChange(false)

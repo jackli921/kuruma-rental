@@ -1,5 +1,6 @@
 import type { Locale } from '@kuruma/shared/i18n/locales'
 import type { LocalizedText, LocalizedTextOverride } from '@kuruma/shared/i18n/localized-text'
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import type { OperatorAddOnData } from '@kuruma/shared/types/add-on'
 import type { CallerContext } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
@@ -9,12 +10,18 @@ import type {
   AddOnTemplateRepository,
   AddOnWithTemplate,
 } from '../repositories/types'
-import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
+import {
+  type CrossOperatorRead,
+  applyCrossOperatorReadScope,
+  assertFleetWriteWithinOperator,
+  fleetWriteDenialResult,
+} from '../tenancy'
 import { resolveAddOnDescription, resolveAddOnName } from './add-on-resolve'
 
 export type AddOnResult =
   | { ok: true; option: OperatorAddOnData }
-  | { ok: false; error: string; status: number }
+  // code carries the #1456 OPERATOR_REQUIRED discriminator through failResult.
+  | { ok: false; error: string; status: number; code?: ErrorCode }
 
 /**
  * Catalog i18n: a create is one of two shapes (#1437). Either it PICKS a platform
@@ -216,12 +223,20 @@ export class AddOnService {
     id: string,
     data: AddOnUpdate,
     locale: Locale,
+    actingOperatorId?: string,
   ): Promise<AddOnResult> {
     // Caller-scoped existence check: an operator may only edit its own add-on.
     // A cross-tenant id reads as undefined here, so the write below never runs
     // and the caller sees 404 (not 403 — no cross-tenant existence leak).
     const existing = await this.repo.findById(ctx, id)
     if (!existing) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
+
+    // #1456: a bypass admin reads every operator's add-on by raw id, so bind this
+    // write to the operator it picked — no pick -> 422, wrong pick -> 404. Runs
+    // before the identity/rename checks so a mismatch never probes them. An operator
+    // session is already tenant-clamped, so it passes through.
+    const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, NOT_FOUND_MESSAGE)
 
     // D5: a nameI18n edit is SELF-AUTHORED-only. A picked row's name is the
     // template's — reject the rename with a friendly 4xx so it never reaches the DB
@@ -256,11 +271,20 @@ export class AddOnService {
     }
   }
 
-  async archive(ctx: CallerContext, id: string, locale: Locale): Promise<AddOnResult> {
+  async archive(
+    ctx: CallerContext,
+    id: string,
+    locale: Locale,
+    actingOperatorId?: string,
+  ): Promise<AddOnResult> {
     // Same caller-scoped guard as update — load before mutate so a cross-tenant
     // id can never be archived.
     const existing = await this.repo.findById(ctx, id)
     if (!existing) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
+
+    // #1456: bind the archive to the picked operator (see update()).
+    const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, NOT_FOUND_MESSAGE)
 
     const archived = await this.repo.archive(ctx, id)
     if (!archived) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }

@@ -2,7 +2,7 @@ import type { OperatorScope } from '@/vite/operator-context'
 import { OperatorLocationsView } from '@/vite/operator-locations/OperatorLocationsView'
 import type { OperatorLocation } from '@/vite/operator-locations/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
@@ -187,5 +187,65 @@ describe('OperatorLocationsView', () => {
     expect(screen.getByTestId('location-row')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: en.editLocation })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: en.archiveAction })).not.toBeInTheDocument()
+  })
+})
+
+// #1456 seam guard: the view threads `scope.pickedOperatorId` into the Edit/Archive
+// dialogs so a picker admin's update/archive binds to the chosen tenant via
+// ?operatorId=. Drop the prop on any of view -> dialog -> api and the write loses
+// its binding (a silent 422 / wrong-tenant write in prod) -- these drive the real
+// fetch to catch that. Mirrors the fees seam guard (#1442).
+describe('OperatorLocationsView picker threading (#1456)', () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+  afterEach(() => fetchSpy.mockReset())
+
+  function stubWrite() {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: location({ status: 'ARCHIVED' }) }), {
+        status: 200,
+      }),
+    )
+  }
+
+  function writeCall(method: string) {
+    return fetchSpy.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === method,
+    )
+  }
+
+  it('binds the edit PATCH to the picked operator via ?operatorId=', async () => {
+    stubWrite()
+    const user = userEvent.setup()
+    renderView([location()], scopedWriteScope)
+
+    await user.click(screen.getByRole('button', { name: en.editLocation }))
+    await user.click(await screen.findByRole('button', { name: en.form.save }))
+
+    await waitFor(() => expect(writeCall('PATCH')).toBeDefined())
+    expect(String(writeCall('PATCH')?.[0])).toContain('operatorId=op_9')
+  })
+
+  it('binds the archive DELETE to the picked operator via ?operatorId=', async () => {
+    stubWrite()
+    const user = userEvent.setup()
+    renderView([location()], scopedWriteScope)
+
+    await user.click(screen.getByRole('button', { name: en.archiveAction }))
+    await user.click(await screen.findByRole('button', { name: en.archiveConfirm }))
+
+    await waitFor(() => expect(writeCall('DELETE')).toBeDefined())
+    expect(String(writeCall('DELETE')?.[0])).toContain('operatorId=op_9')
+  })
+
+  it('omits operatorId when no operator is picked (operator session auto-scopes)', async () => {
+    stubWrite()
+    const user = userEvent.setup()
+    renderView([location()], writeScope)
+
+    await user.click(screen.getByRole('button', { name: en.archiveAction }))
+    await user.click(await screen.findByRole('button', { name: en.archiveConfirm }))
+
+    await waitFor(() => expect(writeCall('DELETE')).toBeDefined())
+    expect(String(writeCall('DELETE')?.[0])).not.toContain('operatorId=')
   })
 })

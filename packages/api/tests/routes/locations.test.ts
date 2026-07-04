@@ -235,4 +235,54 @@ describe('Location routes — platform-admin scoping', () => {
     expect(res.status).toBe(201)
     expect((await res.json()).data.operatorId).toBe(OP_A)
   })
+
+  // #1456: PATCH/DELETE bind a bypass admin's write to the operator it picked via
+  // ?operatorId= — parity with fees (#1442). No pick -> 422; wrong pick -> 404 (no
+  // existence oracle); right pick -> the write applies.
+  const PATCH = (app: Hono, id: string, qs = '') =>
+    app.request(`/locations/${id}${qs}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Renamed' }),
+    })
+  const DELETE = (app: Hono, id: string, qs = '') =>
+    app.request(`/locations/${id}${qs}`, { method: 'DELETE' })
+
+  it('422 when a PLATFORM_ADMIN edits a location without a picked operator', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect((await PATCH(mountFor(repo, 'PLATFORM_ADMIN'), a.id)).status).toBe(422)
+  })
+
+  it('404 when a PLATFORM_ADMIN edits a location whose picked operator does not own it', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect(
+      (await PATCH(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_B}`)).status,
+    ).toBe(404)
+  })
+
+  it('200 when a PLATFORM_ADMIN edits a location bound to its owning operator', async () => {
+    const { repo, a } = await seedTwoOperators()
+    const res = await PATCH(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_A}`)
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.name).toBe('Renamed')
+  })
+
+  it('422 when a PLATFORM_ADMIN archives a location without a picked operator', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect((await DELETE(mountFor(repo, 'PLATFORM_ADMIN'), a.id)).status).toBe(422)
+  })
+
+  it('404 when a PLATFORM_ADMIN archives a location whose picked operator does not own it', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect(
+      (await DELETE(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_B}`)).status,
+    ).toBe(404)
+  })
+
+  it('200 when a PLATFORM_ADMIN archives a location bound to its owning operator', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect(
+      (await DELETE(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_A}`)).status,
+    ).toBe(200)
+  })
 })

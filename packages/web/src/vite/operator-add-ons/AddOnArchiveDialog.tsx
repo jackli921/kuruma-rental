@@ -15,15 +15,22 @@ import { useTranslations } from 'use-intl'
 interface AddOnArchiveDialogProps {
   addOn: OperatorAddOnData | null
   onOpenChange: (open: boolean) => void
+  // #1456: the tenant a picker admin acts as; threaded as ?operatorId= so the API
+  // binds the DELETE to it. Undefined for an operator session (auto-scoped).
+  pickedOperatorId?: string | undefined
 }
 
-export function AddOnArchiveDialog({ addOn, onOpenChange }: AddOnArchiveDialogProps) {
+export function AddOnArchiveDialog({
+  addOn,
+  onOpenChange,
+  pickedOperatorId,
+}: AddOnArchiveDialogProps) {
   const t = useTranslations('business.addOns')
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
 
   const { mutate, isPending, error } = useMutation({
-    mutationFn: (id: string) => archiveAddOn(id, csrfToken),
+    mutationFn: (id: string) => archiveAddOn(id, csrfToken, pickedOperatorId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADDON_QUERY_KEY })
       onOpenChange(false)
