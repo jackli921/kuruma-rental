@@ -75,8 +75,16 @@ export function OperatorAddOnsView({ addOns, scope }: OperatorAddOnsViewProps) {
             onOpenChange={setShowAdd}
             pickedOperatorId={pickedOperatorId}
           />
-          <EditAddOnDialog addOn={editing} onOpenChange={() => setEditing(null)} />
-          <AddOnArchiveDialog addOn={archiving} onOpenChange={() => setArchiving(null)} />
+          <EditAddOnDialog
+            addOn={editing}
+            onOpenChange={() => setEditing(null)}
+            pickedOperatorId={pickedOperatorId}
+          />
+          <AddOnArchiveDialog
+            addOn={archiving}
+            onOpenChange={() => setArchiving(null)}
+            pickedOperatorId={pickedOperatorId}
+          />
         </>
       ) : null}
     </div>

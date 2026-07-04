@@ -345,3 +345,76 @@ describe('AddOnService', () => {
     })
   })
 })
+
+// #1456: PATCH/DELETE bind to the operator a picker admin acts as — parity with
+// bookings/fleet (#1260), fees (#1442), and locations. A bypass admin reads every
+// operator's add-on by raw id (operatorReadScope -> 'all'), so an unbound write
+// could touch any tenant; require it to name the picked operator and forbid a
+// mismatch. An operator session is already tenant-clamped by the read scope, so it
+// passes through with no acting id.
+describe('AddOnService — update/archive bind to the picked operator (#1456)', () => {
+  const adminCtx: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+  let repo: InMemoryAddOnRepository
+  let service: AddOnService
+
+  beforeEach(() => {
+    repo = new InMemoryAddOnRepository()
+    service = new AddOnService(repo, new InMemoryAddOnTemplateRepository())
+  })
+
+  // Self-authored so the seed needs no template setup and survives the kill-switch.
+  async function seedAddOnForOpA(): Promise<string> {
+    const created = await service.create(
+      ctxFor(opA),
+      selfAuthoredInput(opA, { en: 'GPS unit' }),
+      LOCALE,
+    )
+    if (!created.ok) throw new Error('seed failed')
+    return created.option.id
+  }
+
+  it('rejects an admin update with no picked operator (422 OPERATOR_REQUIRED)', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.update(adminCtx, id, { priceJpy: 3000 }, LOCALE, undefined)
+    expect(result).toMatchObject({ ok: false, status: 422, code: 'OPERATOR_REQUIRED' })
+  })
+
+  it('404s an admin update whose picked operator does not own the add-on', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.update(adminCtx, id, { priceJpy: 3000 }, LOCALE, opB)
+    expect(result).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('applies an admin update bound to the add-on-owning operator', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.update(adminCtx, id, { priceJpy: 3000 }, LOCALE, opA)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.option.priceJpy).toBe(3000)
+  })
+
+  it('lets an operator session update its own add-on with no acting id', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.update(ctxFor(opA), id, { priceJpy: 3000 }, LOCALE)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.option.priceJpy).toBe(3000)
+  })
+
+  it('rejects an admin archive with no picked operator (422 OPERATOR_REQUIRED)', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.archive(adminCtx, id, LOCALE, undefined)
+    expect(result).toMatchObject({ ok: false, status: 422, code: 'OPERATOR_REQUIRED' })
+  })
+
+  it('404s an admin archive whose picked operator does not own the add-on', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.archive(adminCtx, id, LOCALE, opB)
+    expect(result).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('archives an add-on bound to the owning operator', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.archive(adminCtx, id, LOCALE, opA)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.option.status).toBe('ARCHIVED')
+  })
+})

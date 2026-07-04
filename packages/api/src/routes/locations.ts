@@ -123,6 +123,8 @@ export function createLocationRoutes(
           toCallerContext(user),
           idResult.id,
           stripUndefined(parsed.data),
+          // #1456: bind a bypass-admin edit to the operator it picked (?operatorId=).
+          c.req.query('operatorId'),
         )
         if (!result.ok) return failResult(c, result)
         return ok(c, result.location)
@@ -142,7 +144,12 @@ export function createLocationRoutes(
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
 
-      const result = await service.archive(toCallerContext(user), idResult.id)
+      // #1456: bind a bypass-admin archive to the operator it picked (?operatorId=).
+      const result = await service.archive(
+        toCallerContext(user),
+        idResult.id,
+        c.req.query('operatorId'),
+      )
       // The active-bookings discriminator (code + activeBookingsCount) rides through
       // failResult so the portal can prompt the owner to reassign/cancel first
       // instead of showing a generic 409 (#412).
