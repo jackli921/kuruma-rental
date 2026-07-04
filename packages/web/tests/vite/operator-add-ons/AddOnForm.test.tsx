@@ -30,6 +30,22 @@ describe('AddOnForm', () => {
       expect(screen.getByRole('option', { name: 'ETC card' })).toBeInTheDocument()
     })
 
+    it('hides the picker and forces the custom path when the shared catalog is off (#1437)', () => {
+      render(
+        <AddOnForm
+          mode="create"
+          templates={templates}
+          sharedCatalogEnabled={false}
+          onSubmit={vi.fn()}
+        />,
+      )
+      // No picker, no template-vs-custom toggle: self-author is the only path.
+      expect(screen.queryByLabelText('form.template')).not.toBeInTheDocument()
+      expect(screen.queryByText('form.identityTemplate')).not.toBeInTheDocument()
+      // The custom English-name field is shown instead.
+      expect(screen.getByLabelText('form.nameEn')).toBeInTheDocument()
+    })
+
     it('submits the picked templateId with priceJpy as a number (valueAsNumber coercion)', async () => {
       const onSubmit = vi.fn().mockResolvedValue(undefined)
       const user = userEvent.setup()

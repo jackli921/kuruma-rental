@@ -151,6 +151,31 @@ describe('AddOnService', () => {
       expect(result.ok).toBe(true)
     })
 
+    it('rejects a template-picked create when the shared catalog is disabled (#1437)', async () => {
+      const off = new AddOnService(repo, new InMemoryAddOnTemplateRepository(), () =>
+        Promise.resolve(false),
+      )
+      const result = await off.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.status).toBe(403)
+        expect(result.error).toBe('The shared catalog is disabled; create a custom add-on instead')
+      }
+    })
+
+    it('still allows a self-authored create when the shared catalog is disabled (#1437)', async () => {
+      // The escape hatch must survive the kill-switch: operators can always self-author.
+      const off = new AddOnService(repo, new InMemoryAddOnTemplateRepository(), () =>
+        Promise.resolve(false),
+      )
+      const result = await off.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'GPS unit' }),
+        LOCALE,
+      )
+      expect(result.ok).toBe(true)
+    })
+
     it('rejects a second self-authored add-on with the same en name (distinct 409)', async () => {
       await service.create(ctxFor(opA), selfAuthoredInput(opA, { en: 'GPS unit' }), LOCALE)
       const result = await service.create(

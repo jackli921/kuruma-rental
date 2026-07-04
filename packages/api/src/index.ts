@@ -486,8 +486,17 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const vehicleService = new VehicleService(vehicleRepo, resolveWriteOperatorId, photosPublicUrl)
   const locationService = new LocationService(locationRepo, bookingRepo, cachedGeocoder, regionRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
-  const addOnService = new AddOnService(addOnRepo, addOnTemplateRepo)
-  const addOnTemplateService = new AddOnTemplateService(addOnTemplateRepo, addOnRepo)
+  const featureFlagsService = new FeatureFlagsService(featureFlagRepo)
+  // #1437: SHARED_CATALOG is server-enforced. Both the operator picker read (empty when
+  // off) and the add-on create path (reject a templateId when off) gate on ONE narrow
+  // thunk (ISP) rather than the whole FeatureFlagsService.
+  const isSharedCatalogEnabled = () => featureFlagsService.isEnabled('SHARED_CATALOG')
+  const addOnService = new AddOnService(addOnRepo, addOnTemplateRepo, isSharedCatalogEnabled)
+  const addOnTemplateService = new AddOnTemplateService(
+    addOnTemplateRepo,
+    addOnRepo,
+    isSharedCatalogEnabled,
+  )
   const templateLibraryService = new TemplateLibraryService(
     addOnTemplateRepo,
     insuranceTemplateRepo,
@@ -524,7 +533,6 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   )
   const reviewAggregateService = new ReviewAggregateService(reviewRepo)
   const reviewListService = new ReviewListService(reviewRepo)
-  const featureFlagsService = new FeatureFlagsService(featureFlagRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.

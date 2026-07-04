@@ -49,6 +49,7 @@ export type AddOnUpdate = {
 const DUPLICATE_TEMPLATE_MESSAGE = 'You already offer this add-on'
 const DUPLICATE_NAME_MESSAGE = 'You already offer an add-on with this name'
 const UNKNOWN_TEMPLATE_MESSAGE = 'Unknown or unavailable add-on template'
+const CATALOG_DISABLED_MESSAGE = 'The shared catalog is disabled; create a custom add-on instead'
 const PICKED_RENAME_MESSAGE =
   'A template-based add-on cannot be renamed; its name comes from the catalog'
 const MISSING_IDENTITY_MESSAGE = 'An add-on needs either a template or a custom name'
@@ -77,9 +78,13 @@ function toOperatorAddOn(row: AddOnWithTemplate, locale: Locale): OperatorAddOnD
 }
 
 export class AddOnService {
+  // #1437: the SHARED_CATALOG kill-switch. Defaults to ON, mirroring the registry
+  // serverDefault (and the feature's fail-OPEN stance) so existing callers/tests need
+  // no change; the composition root injects the real flag-backed thunk.
   constructor(
     private readonly repo: AddOnRepository,
     private readonly templateRepo: AddOnTemplateRepository,
+    private readonly isSharedCatalogEnabled: () => Promise<boolean> = () => Promise.resolve(true),
   ) {}
 
   async findAll(
@@ -110,7 +115,15 @@ export class AddOnService {
    */
   async create(_ctx: CallerContext, data: AddOnCreate, locale: Locale): Promise<AddOnResult> {
     if (data.nameI18n) return this.createSelfAuthored(data, data.nameI18n, locale)
-    if (data.templateId) return this.createFromTemplate(data, data.templateId, locale)
+    if (data.templateId) {
+      // Kill-switch: picking from the shared catalog is server-enforced. When off, the
+      // operator must self-author (the escape hatch above stays open). Checked here, so
+      // a client that bypasses the hidden picker still cannot pick a template.
+      if (!(await this.isSharedCatalogEnabled())) {
+        return { ok: false, error: CATALOG_DISABLED_MESSAGE, status: 403 }
+      }
+      return this.createFromTemplate(data, data.templateId, locale)
+    }
     return { ok: false, error: MISSING_IDENTITY_MESSAGE, status: 400 }
   }
 
