@@ -69,6 +69,9 @@ const sampleReview = {
   subRatings: { cleanliness: 5 },
   comment: 'great',
   publishedAt: '2026-06-02T03:00:00.000Z',
+  // #1450: faithful to the wire shape — the schema now requires this field, so omitting it
+  // would make fetchOperatorReviews' seam parse throw (a floating rejection, green-locally-red-CI).
+  reviewerFirstName: 'Jack',
 }
 
 describe('fetchOperatorReviews', () => {

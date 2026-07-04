@@ -30,6 +30,7 @@ const sample: PublicReview = {
   subRatings: { cleanliness: 5 },
   comment: 'great',
   publishedAt: '2026-06-02T03:00:00.000Z',
+  reviewerFirstName: 'Jack',
 }
 
 const PUBLISHED = new Date('2026-06-26T00:00:00Z')

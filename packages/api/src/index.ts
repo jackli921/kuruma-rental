@@ -532,7 +532,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorMembershipRepo,
   )
   const reviewAggregateService = new ReviewAggregateService(reviewRepo)
-  const reviewListService = new ReviewListService(reviewRepo)
+  const reviewListService = new ReviewListService(reviewRepo, userRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
