@@ -37,7 +37,7 @@ A build-time-only flag needs either a deploy that sets its `VITE_FEATURE_*=true`
 | **0** | Already on | `SHARED_CATALOG` |
 | **1** | Complete, runtime-controlled — **flip on now, zero code** (a go-live decision, not engineering) | `REVIEWS`, `CANCELLATION`, `OPERATOR_BLOCKS`, `OPERATOR_TEAM`, `OPERATOR_SETTINGS`, `MULTI_CURRENCY`, `OPERATOR_MANUAL_BOOKING` (polish-later) |
 | **2** | Complete but **build-time only** — ~2h migration to the runtime hook (#1322), then flip | `OPERATOR_TODAY`, `CALENDAR_QUICKVIEW` |
-| **3** | Complete but **one real engineering gate** — now in-flight (PR #1469) | `FLEET_TIMELINE` → #1349 a11y |
+| **3** | Complete, last engineering gate **cleared** (PR #1469 merged) — now flip-ready, joins Tier 1 | `FLEET_TIMELINE` (was → #1349 a11y) |
 | **4** | **Product decision or larger build** before it can go on | `RENTER_DOCUMENTS`, `MESSAGING`, `VITE_SEARCH_MAP_ENABLED` |
 
 ## Per-flag detail
@@ -69,12 +69,12 @@ Both are complete and correct but read a **build-time** function, so an admin to
 - **`OPERATOR_TODAY`** — Today's pickups/returns/overdue dispatch panel (server-bucketed). Swap `isOperatorTodayEnabled()` → `useFeatureFlag('OPERATOR_TODAY')` in `OperatorDashboardView.tsx`, flip `runtimeControlled: true`, add a toggle test. ~2h, low risk. (#1102 closed; #1322 open.)
 - **`CALENDAR_QUICKVIEW`** — Hover/click booking quick-view on the calendar. Swap the build-time reader → hook in 2 places (`BookingsCalendar.tsx`, bookings route index). ~2h, low risk. (#1282/#1329 closed; #1322 open.)
 
-### Tier 3 — one real engineering gate
+### Tier 3 — last engineering gate cleared (now flip-ready)
 
 - **`FLEET_TIMELINE`** — Vehicle-row planning board (the fleet-ops centerpiece). Fully built and code-split.
-  **Gate: #1349 (open).** The board is built on a pinned pre-release `react-calendar-timeline@0.30.0-beta.18` whose bars are **mouse-only** — no keyboard nav, no ARIA. There is no React-19-compatible stable upgrade (#1330).
-  Two documented paths (`docs/2026-07-02-fleet-timeline-lib-pin.md`): (1) add keyboard + ARIA to the bars (medium effort, upstream unmaintained), or (2) document + test the quick-view calendar (#1282) as the accessible fallback for keyboard/SR users (lower effort, owner-preferred).
-  **Now in-flight:** a session took path (1) — **PR #1469** (open) adds keyboard + ARIA to the bars. Once it merges, `FLEET_TIMELINE`'s only gate closes and it joins Tier 1 (flip-on). No new work needed unless #1469 stalls.
+  **Former gate: #1349.** The board is built on a pinned pre-release `react-calendar-timeline@0.30.0-beta.18` whose bars were **mouse-only** — no keyboard nav, no ARIA. There is no React-19-compatible stable upgrade (#1330).
+  Two documented paths existed (`docs/2026-07-02-fleet-timeline-lib-pin.md`): (1) add keyboard + ARIA to the bars, or (2) document the quick-view calendar (#1282) as the accessible fallback.
+  **Gate cleared:** a session took path (1) — **PR #1469 merged** to develop (`3a812c88`, #1349 closed), adding keyboard + ARIA to the bars. `FLEET_TIMELINE` now has no engineering gate and joins **Tier 1** (flip-on, zero code). Follow-ups #1470 (roving tabindex) / #1471 (focus-on-date-nav) are polish, not gates.
 
 ### Tier 4 — product decision or larger build
 
@@ -86,7 +86,7 @@ Both are complete and correct but read a **build-time** function, so an admin to
 
 1. **Tier 1 go-live** — the owner decides which complete features to switch on (admin switchboard, no deploy). Optional: a smoke pass per feature before flipping. Biggest ROI by far — up to 7 finished features light up.
 2. **Tier 2 migrations** — fold `OPERATOR_TODAY` + `CALENDAR_QUICKVIEW` into the #1322 build-time→runtime batch (~half a day total), then flip.
-3. **Tier 3 — #1349** — already in-flight via **PR #1469** (keyboard + ARIA on the bars); once it merges, flip `FLEET_TIMELINE` on. No new work unless #1469 stalls.
+3. **Tier 3 — done.** #1349 shipped (**PR #1469 merged**, keyboard + ARIA on the bars); `FLEET_TIMELINE` is now flip-ready and folds into the Tier 1 go-live decision. No remaining work.
 4. **Tier 4** — resolve `RENTER_DOCUMENTS` (product call) and scope `MESSAGING` operator side if wanted; treat `SEARCH_MAP` as a build-config decision for paid tiers.
 
 ## Open questions for the owner
