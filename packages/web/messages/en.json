@@ -1903,6 +1903,13 @@
       "rating": "★ {avg} ({count})",
       "noReviews": "No reviews yet",
       "ratingAria": "{avg} stars, {count} reviews"
+    },
+    "list": {
+      "heading": "Reviews",
+      "empty": "No reviews yet",
+      "reviewer": "Verified renter",
+      "overallAria": "{n} out of 5 stars",
+      "dimensionValue": "{n}/5"
     }
   },
   "currency": {

@@ -63,6 +63,7 @@ import { createProviderInviteRoutes } from './routes/provider-invites'
 import { rateLimitByIpExcept } from './routes/rate-limit'
 import { createRegionRoutes } from './routes/regions'
 import { createReviewAggregateRoutes } from './routes/review-aggregates'
+import { createReviewListRoutes } from './routes/review-list'
 import { createReviewRoutes } from './routes/reviews'
 import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
@@ -123,6 +124,7 @@ import { ProviderInviteService } from './services/provider-invite'
 import { RenterDocumentService } from './services/renter-document'
 import { ReviewService } from './services/review'
 import { ReviewAggregateService } from './services/review-aggregate'
+import { ReviewListService } from './services/review-list'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
 import { TemplateLibraryService } from './services/template-library'
@@ -521,6 +523,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorMembershipRepo,
   )
   const reviewAggregateService = new ReviewAggregateService(reviewRepo)
+  const reviewListService = new ReviewListService(reviewRepo)
   const featureFlagsService = new FeatureFlagsService(featureFlagRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.
@@ -578,6 +581,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createReviewRoutes(reviewService))
     .route('/', createAdminReviewRoutes(reviewService))
     .route('/', createReviewAggregateRoutes(reviewAggregateService, publicCatalogLimiter))
+    .route('/', createReviewListRoutes(reviewListService, publicCatalogLimiter))
     .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityService))
     .route('/', createStatsRoutes(statsRepo))

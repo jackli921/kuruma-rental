@@ -77,4 +77,14 @@ export interface ReviewRepository {
   // The admin moderation queue (slice 6): every review with >=1 report, each with its
   // distinct-reporter count + reasons, newest-reported first. Bounded by reported reviews.
   listReported(): Promise<ReportedReview[]>
+  // Public display read (review-display slice). The newest published + VISIBLE
+  // reviews whose subject key matches, capped at `limit`, ordered publishedAt DESC.
+  // subject='OPERATOR' scopes on the denormalized operatorId; 'VEHICLE' on
+  // subjectVehicleId. RENTER is never listable (privacy) — the service enforces that,
+  // so this port only accepts the two public subjects.
+  listPublishedForSubject(
+    subject: 'OPERATOR' | 'VEHICLE',
+    subjectId: string,
+    limit: number,
+  ): Promise<Review[]>
 }
