@@ -28,14 +28,14 @@ Defined in `packages/api/src/middleware/auth.ts`:
 
 | Route | Enforced at | Gate | Rationale |
 |-------|-------------|------|-----------|
-| `POST /bookings` | route (PARTNER 403) | any authed user **except PARTNER** (books for self) | Instant-book. Only `STAFF_ROLES` may set `renterId` / `source=MANUAL` (on-behalf). Operators are excluded from on-behalf: `UserRepository` is not tenant-scoped, so letting an operator resolve an arbitrary `renterId` reopens the #396 cross-tenant user-enumeration vector. A `RENTER` must accept the liability disclaimer (#613). #1440: a `PARTNER` is rejected 403 at the route — a channel books through its integration, not this manual-create endpoint; the previous pass-through was only *accidentally* safe (its synthetic `partner:api-key` renterId FK-fails), so the exclusion is now explicit (see PARTNER section). |
+| `POST /bookings` | route (PARTNER 403) + service | any authed user **except PARTNER** (books for self) | Instant-book. Only `STAFF_ROLES` may set `renterId` / `source=MANUAL` (on-behalf); every non-manual caller is forced to `renterId = self` + `source=DIRECT` by `resolveBookingActor`, so it cannot impersonate another renter nor skip advance-booking-hours via `MANUAL`. Operators are excluded from on-behalf: `UserRepository` is not tenant-scoped, so letting an operator resolve an arbitrary `renterId` reopens the #396 cross-tenant user-enumeration vector. A `RENTER` must accept the liability disclaimer (#613). #1417/#1439: the vehicle/pickup anchor is read with the caller's own `ctx`, so a tenant operator can only reference its OWN fleet (a foreign row returns the same not-found as an unknown id — see the no-oracle principle); non-operators read the cross-operator marketplace unchanged. #1440: a `PARTNER` is rejected 403 at the route — a channel books through its integration, not this manual-create endpoint; the previous pass-through was only *accidentally* safe (its synthetic `partner:api-key` renterId FK-fails), so the exclusion is now explicit (see PARTNER section). |
 | `PATCH /:id/status` | route + service | `MANAGEMENT_READ_ROLES`, then operator-bound | Lifecycle advance (`CONFIRMED → ACTIVE → COMPLETED`) is a physical pickup/return event — operational, so platform support is admitted alongside operators. Row-scoping alone would let a renter self-advance via the raw API and skew dashboards / settlement (#643). #1260: a bypass admin (`bookingReadScope = all`) reads every tenant's bookings, so the service binds the write to the operator it picked via `?operatorId=` — unbound → 422 `OPERATOR_REQUIRED`, non-owning → 404 (no oracle). Tenant operators are clamped by read scope and ignore it. |
 | `POST /:id/cancel` | route (PARTNER 403) + service | renter (own) + operator + bypass-admin operator-bound; PARTNER excluded | Tiered cancellation (72h / 48h / 24h / same-day) is a renter-facing feature, so there is **no management route gate**; the service authorizes renter-own and operator-tenant. #1260: because there is no management gate, a bypass admin could otherwise cancel ANY tenant's booking by raw id (a refund-moving cross-tenant write), so it must bind to the operator it picked via `?operatorId=` — same 422/404 contract as `/status`. Renters (renter scope) and operators (tenant scope) are already clamped by `findById`, so they need no `operatorId`. #1367: a PARTNER's `partner` read scope resolves any `source=TRIP_COM` booking across operators, which the operator-binding guard cannot clamp (a channel is not one operator), so the PARTNER is rejected 403 at the route — cancelling is *managing the order*, which a channel does not do (see PARTNER section). |
 | `POST /:id/substitute` | route | `isOperatorRole` | Choosing which car serves a booking is a **fleet-ownership** decision, named to the operator in the marketplace proposal (§321 / §345). There is no admin substitute UI and the audit `actorId` assumes an operator, so platform staff are deliberately excluded. |
 | `GET /:id/substitution-candidates` | route | `isOperatorRole` | Feeds the substitute write only — inherits its gate (see below). |
 | `GET /:id/events` | route | `MANAGEMENT_READ_ROLES` | The lifecycle log exposes `actorId`, internal vehicle ids and substitution reasons. No renter UI consumes a timeline, so renters are rejected (403) rather than served a sanitized projection (§549). |
 
-## Two principles
+## Principles
 
 **A feeder-read inherits its write's gate.** `GET /:id/substitution-candidates`
 exists solely to populate the operator's substitute dialog. It is gated
@@ -53,6 +53,33 @@ sets — the only difference is whether platform staff are admitted, and that
 tracks operational-support vs. ownership, not "how destructive." Do not collapse
 the two onto one set.
 
+**A cross-tenant reference returns the caller's own not-found, never a distinct
+403.** When a caller names inventory or a booking outside its tenant, the response
+is the same not-found it would get for an unknown id — never a `403 Forbidden` that
+confirms the target exists. A distinct 403 is an *existence oracle*: it lets one
+operator probe which vehicle ids, statuses, or bookings belong to a competitor.
+This shows up in three places, and they must stay consistent:
+
+- **Create** (#1417/#1439): `POST /bookings` reads its anchor (SPECIFIC vehicle /
+  CLASS_COMBO pickup) with the caller's own `ctx`, so `operatorReadScope` clamps a
+  tenant operator to its own fleet — a foreign row returns `undefined` and yields
+  the plain `Vehicle not found` / `Pickup location is not available` 400, identical
+  to an unknown id. The read is scoped so the foreign row is *unreachable*, rather
+  than fetched-then-denied.
+- **Lifecycle** (`/status`, `/cancel`, #1260): a bypass admin acting as a
+  non-owning operator gets 404 with the caller's own not-found message, not a 403.
+- **Substitute / assign**: a foreign vehicle returns the same 404 as an unknown
+  vehicle. Both are `isOperatorRole`-gated (#1440), so no bypass `all` reader
+  reaches them — they need no service-level operator bind the way `/status` and
+  `/cancel` do (those admit the `all` reader and bind via
+  `assertBookingWriteWithinOperator`). If a future change admits platform staff to
+  either route, add the #1260 bind then — the route gate alone would no longer
+  clamp them.
+
+Do not "improve" any of these into a 403 — the ambiguity *is* the security
+property. Prefer scoping the read (so the foreign row is never returned) over
+reading unscoped and bolting on a role-keyed denial.
+
 ## PARTNER (Trip.com)
 
 `PARTNER` is a 3rd-party booking channel: it does not manage orders or read
@@ -66,55 +93,10 @@ an explicit 403:
 - `POST /bookings` (#1440) — renters self-book, so the route admits any authed
   user. A PARTNER's create was only *accidentally* safe: `resolveBookingActor`
   forces its synthetic `partner:api-key` id as `renterId` (no user row → renter FK
-  fails) and the inventory bind passes partners through (`bookingReadScope =
+  fails) and the operator bind passes partners through (`bookingReadScope =
   partner`, never `all`). The route 403 makes the exclusion designed rather than an
   FK accident. A partner-initiated create is a future channel integration, not this
   endpoint.
 - `POST /:id/cancel` (#1367) — otherwise a PARTNER's cross-operator `partner` read
   scope would let it cancel any `TRIP_COM`-sourced booking (a channel is not one
   operator, so the operator-binding guard cannot clamp it).
-
-## Cross-tenant references resolve to the caller's own not-found (#1440)
-
-When a write names inventory (a vehicle, a pickup location, a booking) the caller
-cannot see, the refusal must be **indistinguishable from a genuinely unknown id** —
-never a distinct 403 that confirms "this exists, but not for you" (an existence
-oracle). How the booking-create path (`packages/api/src/services/booking-creation.ts`,
-`submitInTx`) enforces it:
-
-- **The anchor read is caller-scoped (#1417 / #1439).** The requested vehicle is
-  read with the caller's own `ctx` (`vehicleRepo.findById(ctx, …)`), so
-  `operatorReadScope` clamps a tenant operator to its own fleet: a foreign car
-  returns `undefined` → a plain `400 'Vehicle not found'`, identical to a truly
-  unknown id. The marketplace tiers (renter, PARTNER, bypass admin) resolve `all` and
-  read any public vehicle, unchanged.
-- **The bypass `all` tier binds to a named operator — still no oracle.** A platform
-  admin reads every tenant's inventory, so it must name the operator it acts as via
-  `?operatorId=` (#1260). Only that `all` reader is bound:
-  `assertBookingWriteWithinOperator` short-circuits to `null` for every non-`all`
-  caller, and `fleetWriteDenialResult` maps a non-owning pick to **404**
-  `not-in-scope` (the caller's own not-found) and an absent pick to **422**
-  `OPERATOR_REQUIRED`. Renters and operators are already clamped by the read scope;
-  a PARTNER never reaches here (route 403, above).
-
-There is **no 403 existence oracle** in the inventory path: a cross-tenant vehicle
-reference is always a not-found (`400`/`404`), never a distinguishable "forbidden".
-#1439 removed the earlier explicit-403 branch by moving the clamp into the
-`ctx`-scoped anchor read. (The only 403 in create is a different axis — a manual
-booker naming a `renterId` outside its own customer scope, `booking-creation.ts`
-`assertRenterWithinScope` — not an inventory reference.) Do not reintroduce a
-403 for an unreachable-inventory reference: it hands an attacker an id-enumeration
-oracle. Cross-ref `operatorReadScope`, `assertBookingWriteWithinOperator`, and
-`fleetWriteDenialResult` in `tenancy.ts`.
-
-## Why `/substitute` and `/assign` carry no service-level operator bind (#1440)
-
-`/status` and `/cancel` bind the write to the picked operator at the *service*
-(the #1260 `assertBookingWriteWithinOperator` guard) because they admit the
-bypass-admin `all` reader, which `findById` hands every tenant's booking. `POST
-/:id/substitute` and `POST /:id/assign` do **not** need that bind: both are gated
-`isOperatorRole` at the route, so the only callers are tenant-scoped operators that
-`findById` already clamps to their own fleet (foreign id → 404, no oracle). There
-is no `all`-scope caller to bind, so the single route seal is sufficient. If a
-future change admits platform staff (an `all` reader) to either route, add the
-service-level operator-bind then — the route gate alone would no longer clamp them.
