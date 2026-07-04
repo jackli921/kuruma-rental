@@ -99,6 +99,24 @@ describe('createFeeSchedule', () => {
     expect(JSON.parse(init.body as string)).toEqual(input)
   })
 
+  it('stamps the picked operatorId into the body when a picker admin supplies it (#1442)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: fee }, 201))
+
+    await createFeeSchedule(
+      {
+        feeType: 'CLEANING_FLAT',
+        unit: 'FLAT',
+        amountJpy: 3000,
+        vehicleClassId: null,
+        operatorId: 'op_9',
+      },
+      'csrf',
+    )
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toMatchObject({ operatorId: 'op_9' })
+  })
+
   it('surfaces the INVALID_VEHICLE_CLASS failure (foreign class) as an ApiError', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse(
@@ -128,6 +146,15 @@ describe('updateFeeSchedule', () => {
     expect(init.headers).toEqual({ 'Content-Type': 'application/json', 'X-CSRF-Token': 'csrf-8' })
     expect(JSON.parse(init.body as string)).toEqual({ amountJpy: 4000 })
   })
+
+  it('binds the PATCH to the picked operator via ?operatorId= when supplied (#1442)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: fee }))
+
+    await updateFeeSchedule('fee_1', { amountJpy: 4000 }, 'csrf', 'op_9')
+
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/fee-schedules/fee_1?operatorId=op_9')
+  })
 })
 
 describe('archiveFeeSchedule', () => {
@@ -144,6 +171,17 @@ describe('archiveFeeSchedule', () => {
     expect(init.method).toBe('DELETE')
     expect(init.headers).toEqual({ 'X-CSRF-Token': 'csrf-9' })
     expect(init.body).toBeUndefined()
+  })
+
+  it('binds the DELETE to the picked operator via ?operatorId= when supplied (#1442)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { ...fee, status: 'ARCHIVED' } }),
+    )
+
+    await archiveFeeSchedule('fee_1', 'csrf', 'op_9')
+
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/fee-schedules/fee_1?operatorId=op_9')
   })
 })
 

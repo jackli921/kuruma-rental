@@ -20,15 +20,24 @@ interface EditFeeDialogProps {
   fee: FeeScheduleData | null
   onOpenChange: (open: boolean) => void
   classes: readonly FeeClassOption[]
+  /** #1442: binds the PATCH to the picked operator via `?operatorId=`; omitted for
+   *  an operator session (tenant-clamped server-side). */
+  pickedOperatorId?: string | undefined
 }
 
-export function EditFeeDialog({ fee, onOpenChange, classes }: EditFeeDialogProps) {
+export function EditFeeDialog({
+  fee,
+  onOpenChange,
+  classes,
+  pickedOperatorId,
+}: EditFeeDialogProps) {
   const t = useTranslations('business.fees')
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
 
   const { mutateAsync, isPending, error } = useMutation({
-    mutationFn: (data: CreateFeeScheduleInput) => updateFeeSchedule(fee?.id ?? '', data, csrfToken),
+    mutationFn: (data: CreateFeeScheduleInput) =>
+      updateFeeSchedule(fee?.id ?? '', data, csrfToken, pickedOperatorId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: FEE_QUERY_KEY })
       onOpenChange(false)

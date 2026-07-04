@@ -8,8 +8,8 @@ import { describe, expect, it, vi } from 'vitest'
 // resolves without a FOUC and the class dropdown is fed scoped classes. It reads
 // the operator from loaderDeps so a context switch refetches; the fee key is
 // scoped to the picked operator (or 'all'). The class dropdown uses the same
-// picked operator now that /vehicle-classes/manage accepts operatorId; fees
-// writes remain operator-session-only until create bodies stamp picked operatorId.
+// picked operator now that /vehicle-classes/manage accepts operatorId; #1442
+// threads that same picked operator into the create/update/archive writes too.
 const loaderDeps = Route.options.loaderDeps as (args: {
   search: { operator?: string | undefined }
 }) => { operator: string | undefined }
