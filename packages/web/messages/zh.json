@@ -1770,7 +1770,12 @@
       "hidden": "已隐藏",
       "hideError": "无法隐藏评价，请重试。",
       "loadError": "无法加载被举报的评价。",
-      "retry": "重试"
+      "retry": "重试",
+      "filterLabel": "筛选评价",
+      "filterUnactioned": "待处理",
+      "filterResolved": "已处理",
+      "loadMore": "加载更多",
+      "loadingMore": "加载中…"
     }
   },
   "documents": {

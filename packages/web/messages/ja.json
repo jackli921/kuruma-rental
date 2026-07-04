@@ -1770,7 +1770,12 @@
       "hidden": "非表示",
       "hideError": "レビューを非表示にできませんでした。もう一度お試しください。",
       "loadError": "通報されたレビューを読み込めませんでした。",
-      "retry": "再試行"
+      "retry": "再試行",
+      "filterLabel": "レビューを絞り込む",
+      "filterUnactioned": "要対応",
+      "filterResolved": "対応済み",
+      "loadMore": "さらに読み込む",
+      "loadingMore": "読み込み中…"
     }
   },
   "documents": {

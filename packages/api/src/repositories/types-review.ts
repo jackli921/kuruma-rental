@@ -22,6 +22,30 @@ export interface ReportedReview {
   reasons: readonly string[]
 }
 
+/** Keyset cursor for the moderation queue (#1451): the previous page's last boundary — a
+ *  report-recency instant plus a reviewId tiebreak, matching the queue's
+ *  (lastReportedAt DESC, reviewId DESC) order. Opaque to callers above the repo. */
+export interface ReportedQueueCursor {
+  lastReportedAt: Date
+  reviewId: string
+}
+
+/** Query for the moderation queue (#1451). `status` partitions it: 'VISIBLE' = unactioned
+ *  (the default working set — hidden rows never accumulate here), 'HIDDEN' = already
+ *  resolved. `limit` + `cursor` bound each page so the payload/query can't grow unbounded. */
+export interface ListReportedOptions {
+  limit: number
+  status: ReviewModerationStatus
+  cursor?: ReportedQueueCursor | undefined
+}
+
+/** One page of the moderation queue: the reported reviews plus the cursor for the next
+ *  page, or null when no further page may exist. */
+export interface ReportedReviewPage {
+  items: readonly ReportedReview[]
+  nextCursor: ReportedQueueCursor | null
+}
+
 /** reviews data access (#1067 slice 1, extended slice 2). The submission service is
  *  the only writer; reveal-on-read (slice 2) and subject aggregates (slice 5) layer on
  *  top of this contract. */
@@ -71,12 +95,23 @@ export interface ReviewRepository {
   // constraint_name === REVIEW_REPORT_UNIQUE_CONSTRAINT when this user already reported
   // the review, so the service maps a duplicate to 409 without a check-then-act race.
   insertReport(report: NewReviewReport): Promise<ReviewReport>
-  // Flip a review's moderation status (admin hide, slice 6). Returns the updated row, or
-  // undefined when no review has that id (→ 404). Idempotent — re-hiding is a no-op flip.
-  setModerationStatus(id: string, status: ReviewModerationStatus): Promise<Review | undefined>
-  // The admin moderation queue (slice 6): every review with >=1 report, each with its
-  // distinct-reporter count + reasons, newest-reported first. Bounded by reported reviews.
-  listReported(): Promise<ReportedReview[]>
+  // Flip a review's moderation status (admin hide, slice 6). Stamps the moderation audit
+  // (#1454): `moderatedBy` = the acting admin, `moderatedAt` = the moderation instant — so a
+  // multi-admin platform can attribute the action (distinct from the mutable `updatedAt`).
+  // Returns the updated row, or undefined when no review has that id (→ 404). Idempotent on
+  // status, but each call re-stamps the audit with the latest actor/time.
+  setModerationStatus(
+    id: string,
+    status: ReviewModerationStatus,
+    moderatedBy: string,
+    moderatedAt: Date,
+  ): Promise<Review | undefined>
+  // The admin moderation queue (slice 6 #1086), keyset-paginated + status-partitioned
+  // (#1451). Reviews with >=1 report whose moderationStatus === options.status, each with
+  // its distinct-reporter count + reasons, ordered (lastReportedAt DESC, reviewId DESC),
+  // capped at options.limit, starting after options.cursor. `nextCursor` is non-null only
+  // when the page was full (a further page may exist).
+  listReported(options: ListReportedOptions): Promise<ReportedReviewPage>
   // Public display read (review-display slice). The newest published + VISIBLE
   // reviews whose subject key matches, capped at `limit`, ordered publishedAt DESC.
   // subject='OPERATOR' scopes on the denormalized operatorId; 'VEHICLE' on

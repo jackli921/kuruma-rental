@@ -1,18 +1,36 @@
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
-import { ADMIN_REPORTED_REVIEWS_QUERY_KEY, type ReportedReviewDto, hideReview } from './api'
+import {
+  ADMIN_REPORTED_REVIEWS_QUERY_KEY,
+  type ModerationFilter,
+  type ReportedReviewDto,
+  hideReview,
+} from './api'
 
 interface Props {
-  readonly reported: readonly ReportedReviewDto[]
+  readonly items: readonly ReportedReviewDto[]
+  readonly status: ModerationFilter
+  readonly onStatusChange: (status: ModerationFilter) => void
+  readonly hasNextPage: boolean
+  readonly isFetchingNextPage: boolean
+  readonly onLoadMore: () => void
 }
 
 /**
- * Platform-admin review moderation queue (#1086). Pure over its `reported` prop
- * (the route owns the fetch). Lists every reported review with its distinct-reporter
- * count + reasons; the admin soft-hides an abusive one (a report never auto-hides).
+ * Platform-admin review moderation queue (#1086, paginated #1451). Presentational over
+ * its props — the route owns the infinite query + filter state. Partitioned into a
+ * "needs review" (VISIBLE) and a "resolved" (HIDDEN) tab; each keyset page is appended via
+ * Load more. The admin soft-hides an abusive review (a report never auto-hides).
  */
-export function ReviewModerationView({ reported }: Props) {
+export function ReviewModerationView({
+  items,
+  status,
+  onStatusChange,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+}: Props) {
   const t = useTranslations('admin.reviewModeration')
 
   return (
@@ -22,18 +40,70 @@ export function ReviewModerationView({ reported }: Props) {
         <p className="mt-1 text-sm text-muted-foreground">{t('description')}</p>
       </header>
 
-      {reported.length === 0 ? (
+      <fieldset aria-label={t('filterLabel')} className="mb-6 flex gap-2 border-0 p-0">
+        <FilterTab
+          label={t('filterUnactioned')}
+          active={status === 'VISIBLE'}
+          onClick={() => onStatusChange('VISIBLE')}
+        />
+        <FilterTab
+          label={t('filterResolved')}
+          active={status === 'HIDDEN'}
+          onClick={() => onStatusChange('HIDDEN')}
+        />
+      </fieldset>
+
+      {items.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border px-4 py-12 text-center text-sm text-muted-foreground">
           {t('empty')}
         </p>
       ) : (
-        <ul className="flex flex-col gap-4">
-          {reported.map((entry) => (
-            <ReportedReviewRow key={entry.review.id} entry={entry} />
-          ))}
-        </ul>
+        <>
+          <ul className="flex flex-col gap-4">
+            {items.map((entry) => (
+              <ReportedReviewRow key={entry.review.id} entry={entry} />
+            ))}
+          </ul>
+          {hasNextPage ? (
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                disabled={isFetchingNextPage}
+                onClick={onLoadMore}
+                className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
+              >
+                {isFetchingNextPage ? t('loadingMore') : t('loadMore')}
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
     </div>
+  )
+}
+
+function FilterTab({
+  label,
+  active,
+  onClick,
+}: {
+  readonly label: string
+  readonly active: boolean
+  readonly onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={
+        active
+          ? 'rounded-full bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground'
+          : 'rounded-full border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted'
+      }
+    >
+      {label}
+    </button>
   )
 }
 

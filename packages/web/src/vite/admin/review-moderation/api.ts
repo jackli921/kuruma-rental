@@ -5,7 +5,7 @@ import {
   REVIEW_MODERATION_STATUSES,
   REVIEW_SUBJECTS,
 } from '@kuruma/shared/enums'
-import { queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
 
 // Platform-admin review moderation (#1086). Cookie-based (credentials:'include') so
@@ -28,25 +28,60 @@ const reportedReviewSchema = z.object({
 })
 export type ReportedReviewDto = z.infer<typeof reportedReviewSchema>
 
-const reportedReviewsResponseSchema = z.object({ reported: z.array(reportedReviewSchema) })
+// The moderation queue is partitioned (#1451): VISIBLE = unactioned (needs review),
+// HIDDEN = already resolved. Anchored to the shared enum so the filter can't drift.
+export type ModerationFilter = (typeof REVIEW_MODERATION_STATUSES)[number]
+
+// Opaque keyset cursor echoed back to fetch the next page (recency instant + id tiebreak).
+const cursorSchema = z.object({ lastReportedAt: z.string(), reviewId: z.string() })
+export type ReportedCursor = z.infer<typeof cursorSchema>
+
+// The server always sends nextCursor (null when the queue is exhausted) — modelled as a
+// required, nullable field so a faithful response is validated, not silently defaulted.
+const reportedReviewsResponseSchema = z.object({
+  reported: z.array(reportedReviewSchema),
+  nextCursor: cursorSchema.nullable(),
+})
+
+export interface ReportedReviewsPage {
+  items: ReportedReviewDto[]
+  nextCursor: ReportedCursor | null
+}
 
 export const ADMIN_REPORTED_REVIEWS_QUERY_KEY = ['admin-reported-reviews'] as const
 
-export async function fetchReportedReviews(): Promise<ReportedReviewDto[]> {
-  const res = await fetch(`${getApiBaseUrl()}/admin/reviews/reported`, { credentials: 'include' })
-  return (await unwrap(res, reportedReviewsResponseSchema)).reported
+export async function fetchReportedReviews(params: {
+  status: ModerationFilter
+  cursor?: ReportedCursor | null
+}): Promise<ReportedReviewsPage> {
+  const query = new URLSearchParams({ status: params.status })
+  if (params.cursor) {
+    query.set('cursorTs', params.cursor.lastReportedAt)
+    query.set('cursorId', params.cursor.reviewId)
+  }
+  const { reported, nextCursor } = await unwrap(
+    await fetch(`${getApiBaseUrl()}/admin/reviews/reported?${query}`, { credentials: 'include' }),
+    reportedReviewsResponseSchema,
+  )
+  return { items: reported, nextCursor }
 }
 
-export function reportedReviewsQueryOptions() {
-  return queryOptions({
-    queryKey: ADMIN_REPORTED_REVIEWS_QUERY_KEY,
-    queryFn: fetchReportedReviews,
+// Keyset-paginated queue (#1451). Each status partition is its own infinite query so the
+// filter toggle swaps cleanly; the page param is the previous page's nextCursor (null =
+// first page / no more pages).
+export function reportedReviewsInfiniteQueryOptions(status: ModerationFilter) {
+  return infiniteQueryOptions({
+    queryKey: [...ADMIN_REPORTED_REVIEWS_QUERY_KEY, status],
+    queryFn: ({ pageParam }) => fetchReportedReviews({ status, cursor: pageParam }),
+    initialPageParam: null as ReportedCursor | null,
+    getNextPageParam: (lastPage: ReportedReviewsPage) => lastPage.nextCursor,
   })
 }
 
 // Soft-hide a reported review (#1086). Cookie-authenticated + CSRF-gated; the server
 // (requirePlatformAdmin) rejects a non-admin. The response is validated but discarded
-// — the caller invalidates ADMIN_REPORTED_REVIEWS_QUERY_KEY to refetch the queue.
+// — the caller invalidates ADMIN_REPORTED_REVIEWS_QUERY_KEY (prefix-matches every status
+// partition) to refetch the queue.
 const hideResponseSchema = z.object({
   review: z.object({ id: z.string(), moderationStatus: z.enum(REVIEW_MODERATION_STATUSES) }),
 })

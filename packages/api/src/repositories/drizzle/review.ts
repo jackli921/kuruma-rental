@@ -1,12 +1,28 @@
 import type { ReviewModerationStatus } from '@kuruma/shared/enums'
 import { reviewReports, reviews } from '@kuruma/shared/db/schema'
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lte, max, sql, sum } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  max,
+  or,
+  sql,
+  sum,
+} from 'drizzle-orm'
 import type { PgColumn } from 'drizzle-orm/pg-core'
 import type { Review, ReviewReport } from '../../stores'
 import type {
+  ListReportedOptions,
   NewReview,
   NewReviewReport,
-  ReportedReview,
+  ReportedReviewPage,
   ReviewEdit,
   ReviewRepository,
 } from '../types'
@@ -113,18 +129,36 @@ export class DrizzleReviewRepository implements ReviewRepository {
   async setModerationStatus(
     id: string,
     status: ReviewModerationStatus,
+    moderatedBy: string,
+    moderatedAt: Date,
   ): Promise<Review | undefined> {
     const [row] = await this.db
       .update(reviews)
-      .set({ moderationStatus: status, updatedAt: new Date() })
+      .set({ moderationStatus: status, moderatedBy, moderatedAt, updatedAt: new Date() })
       .where(eq(reviews.id, id))
       .returning(reviewColumns)
     return row ? toReview(row) : undefined
   }
 
-  async listReported(): Promise<ReportedReview[]> {
-    // One aggregate pass over review_reports (count + reasons + latest per review), newest
-    // reported first, then hydrate the reviews. reportCount === distinct reporters (unique seal).
+  async listReported(options: ListReportedOptions): Promise<ReportedReviewPage> {
+    const { limit, status, cursor } = options
+    // One aggregate pass over review_reports (count + reasons + recency per review), joined
+    // to reviews so we can (a) partition by moderationStatus — the queue defaults to
+    // unactioned (VISIBLE) and never accumulates HIDDEN rows (#1451) — and (b) keyset-
+    // paginate on (lastReportedAt DESC, reviewId DESC). reportCount === distinct reporters
+    // (the one-per-reporter unique seal), so the join to reviews doesn't fan out the count.
+    const lastReportedAt = max(reviewReports.createdAt)
+    // Keyset in HAVING (the sort key is an aggregate): strictly past the previous page's
+    // (lastReportedAt, reviewId) boundary in the DESC ordering.
+    const keyset = cursor
+      ? or(
+          lt(lastReportedAt, cursor.lastReportedAt),
+          and(
+            eq(lastReportedAt, cursor.lastReportedAt),
+            lt(reviewReports.reviewId, cursor.reviewId),
+          ),
+        )
+      : undefined
     const grouped = await this.db
       .select({
         reviewId: reviewReports.reviewId,
@@ -132,27 +166,43 @@ export class DrizzleReviewRepository implements ReviewRepository {
         reasons: sql<
           string[]
         >`array_agg(${reviewReports.reason} order by ${reviewReports.createdAt} desc)`,
-        lastReportedAt: max(reviewReports.createdAt),
+        lastReportedAt,
       })
       .from(reviewReports)
+      .innerJoin(reviews, eq(reviews.id, reviewReports.reviewId))
+      .where(eq(reviews.moderationStatus, status))
       .groupBy(reviewReports.reviewId)
-      .orderBy(desc(max(reviewReports.createdAt)))
-    if (grouped.length === 0) return []
+      .having(keyset)
+      .orderBy(desc(lastReportedAt), desc(reviewReports.reviewId))
+      // Peek one past the page so `nextCursor` is precise (null exactly when exhausted),
+      // never handing back a cursor that resolves to an empty page.
+      .limit(limit + 1)
+    if (grouped.length === 0) return { items: [], nextCursor: null }
+    const hasMore = grouped.length > limit
+    const pageGroups = grouped.slice(0, limit)
     const rows = await this.db
       .select(reviewColumns)
       .from(reviews)
       .where(
         inArray(
           reviews.id,
-          grouped.map((g) => g.reviewId),
+          pageGroups.map((g) => g.reviewId),
         ),
       )
     const reviewsById = new Map(rows.map((r) => [r.id, toReview(r)]))
     // Skip an orphan report whose review was hard-deleted (cascade makes this latent).
-    return grouped.flatMap((g) => {
+    const items = pageGroups.flatMap((g) => {
       const review = reviewsById.get(g.reviewId)
       return review ? [{ review, reportCount: Number(g.reportCount), reasons: g.reasons }] : []
     })
+    // The boundary is the last GROUPED row on the page (pagination follows the grouped
+    // order, even if an orphan trimmed it from `items`).
+    const last = pageGroups[pageGroups.length - 1]
+    const nextCursor =
+      hasMore && last?.lastReportedAt
+        ? { lastReportedAt: last.lastReportedAt, reviewId: last.reviewId }
+        : null
+    return { items, nextCursor }
   }
 
   // Public review-list read (review-display slice, #1067).
