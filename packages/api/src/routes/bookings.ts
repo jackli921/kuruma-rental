@@ -152,6 +152,19 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
     .post('/bookings', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
+      // #1440 (MED-2): a PARTNER (Trip.com) is a booking CHANNEL, not a manual booker.
+      // Unlike /status and /substitution-candidates, this route has no
+      // MANAGEMENT_READ_ROLES gate (renters self-serve), so a PARTNER would otherwise
+      // reach the service — where its create is only *accidentally* safe (the synthetic
+      // 'partner:api-key' renterId FK-fails; the inventory bind passes partners through,
+      // bookingReadScope='partner' never 'all'). Reject at the route so the exclusion is
+      // DESIGNED, not reliant on an FK accident. A partner-initiated create is a future
+      // channel integration (its own issue), not this endpoint.
+      // authz model: docs/architecture/booking-authz.md
+      if (ctx.role === 'PARTNER') {
+        return fail(c, 'Partners cannot create bookings', 403)
+      }
+
       const parsed = await parseBody(c, createBookingSchema)
       if (!parsed.ok) return parsed.response
 
