@@ -10,12 +10,18 @@ import type {
   LocationRepository,
   RegionRepository,
 } from '../repositories/types'
-import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
+import {
+  type CrossOperatorRead,
+  applyCrossOperatorReadScope,
+  assertFleetWriteWithinOperator,
+  fleetWriteDenialResult,
+} from '../tenancy'
 import type { GeocodeOutcome, Geocoder } from './geocoding/types'
 
 export type LocationResult =
   | { ok: true; location: Location }
-  | { ok: false; error: string; status: number }
+  // code carries the #1456 OPERATOR_REQUIRED discriminator through failResult.
+  | { ok: false; error: string; status: number; code?: ErrorCode }
 
 export type LocationArchiveResult =
   | { ok: true; location: Location }
@@ -23,7 +29,8 @@ export type LocationArchiveResult =
       ok: false
       error: string
       status: number
-      code?: 'LOCATION_HAS_ACTIVE_BOOKINGS'
+      // LOCATION_HAS_ACTIVE_BOOKINGS (#412) or OPERATOR_REQUIRED (#1456).
+      code?: ErrorCode
       activeBookingsCount?: number
     }
 
@@ -143,12 +150,24 @@ export class LocationService {
     }
   }
 
-  async update(ctx: CallerContext, id: string, data: LocationUpdateData): Promise<LocationResult> {
+  async update(
+    ctx: CallerContext,
+    id: string,
+    data: LocationUpdateData,
+    actingOperatorId?: string,
+  ): Promise<LocationResult> {
     // Caller-scoped existence check: an operator may only edit its own location.
     // A cross-tenant id reads as undefined here, so the write below never runs
     // and the caller sees 404 (not 403 — no cross-tenant existence leak).
     const existing = await this.repo.findById(ctx, id)
     if (!existing) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
+
+    // #1456: a bypass admin reads every operator's location by raw id, so bind this
+    // write to the operator it picked — no pick -> 422, wrong pick -> 404. Runs
+    // before the name/region checks so a mismatch never probes them. An operator
+    // session is already tenant-clamped, so it passes through.
+    const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, NOT_FOUND_MESSAGE)
 
     if (data.name !== undefined && data.name !== existing.name) {
       const duplicate = await this.repo.findByOperatorAndName(existing.operatorId, data.name)
@@ -187,11 +206,19 @@ export class LocationService {
     }
   }
 
-  async archive(ctx: CallerContext, id: string): Promise<LocationArchiveResult> {
+  async archive(
+    ctx: CallerContext,
+    id: string,
+    actingOperatorId?: string,
+  ): Promise<LocationArchiveResult> {
     // Same caller-scoped guard as update — load before mutate so a cross-tenant
     // id can never be archived.
     const existing = await this.repo.findById(ctx, id)
     if (!existing) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
+
+    // #1456: bind the archive to the picked operator (see update()).
+    const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, NOT_FOUND_MESSAGE)
 
     // Guard (#412): a location still referenced as pickup OR dropoff by a live
     // (CONFIRMED/ACTIVE) booking cannot be archived — the owner must reassign or
