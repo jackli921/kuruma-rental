@@ -420,11 +420,19 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
     expect(screen.getByRole('button', { name: B.scheduleAction })).toBeInTheDocument()
   })
 
-  it('hides the Schedule affordance on the default timeline view (a created block renders no band there)', () => {
+  it('hides the Schedule affordance on the timeline view (its create is an rbc slot-drag the timeline lib lacks)', () => {
     vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', 'true')
     searchState.value = { view: 'timeline', date: ANCHOR }
     renderRoute(operatorSession, blocksFleet)
     expect(screen.queryByRole('button', { name: B.scheduleAction })).not.toBeInTheDocument()
+  })
+
+  it('shows the block legend on the timeline view too, since its bands now render there (#1244)', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', 'true')
+    searchState.value = { view: 'timeline', date: ANCHOR }
+    renderRoute(operatorSession, blocksFleet, [], { blocks: [maintenanceBlock] })
+    expect(screen.getByTestId('fleet-timeline')).toBeInTheDocument()
+    expect(screen.getByText(B.legend.title)).toBeInTheDocument()
   })
 })
 

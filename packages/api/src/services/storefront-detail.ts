@@ -1,18 +1,21 @@
 import type { Locale } from '@kuruma/shared/i18n/locales'
 import { type LuggageSize, resolveLuggage } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
+import type { ClassComboSearchResult, ResultLocation } from '@kuruma/shared/types/search-result'
 import type { StorefrontAddOnData, StorefrontInsuranceData } from '@kuruma/shared/types/storefront'
 import type { CallerContext } from '../middleware/auth'
 import type {
   AddOnRepository,
   AvailabilityRepository,
   InsuranceOptionRepository,
+  Storefront,
   StorefrontRepository,
   Vehicle,
   VehicleClass,
   VehicleClassRepository,
 } from '../repositories/types'
 import { resolveAddOnDescription, resolveAddOnName } from './add-on-resolve'
+import type { ClassOfferingService } from './class-offering'
 import { clampLimit, decodeCursor, encodeCursor } from './search-paging'
 
 export interface StorefrontSummary {
@@ -64,6 +67,10 @@ export interface AvailableVehicle {
 export interface StorefrontDetailData {
   storefront: StorefrontSummary
   vehicles: AvailableVehicle[]
+  /** #464: the store's active class rate plans as CLASS_COMBO cards (a class with
+   *  an inventory count, exact car assigned on pickup day). Unpaginated — combos
+   *  are one row per (class, location), so P stays small; only `vehicles` paginates. */
+  classOfferings: ClassComboSearchResult[]
   nextCursor: string | null
 }
 
@@ -119,6 +126,7 @@ export class StorefrontDetailService {
     private readonly classRepo: VehicleClassRepository,
     private readonly insuranceOptionRepo: InsuranceOptionRepository,
     private readonly addOnRepo: AddOnRepository,
+    private readonly classOfferingService: ClassOfferingService,
   ) {}
 
   /**
@@ -209,6 +217,26 @@ export class StorefrontDetailService {
       .map((v) => toAvailableVehicle(v, v.classId ? classById.get(v.classId) : undefined))
       .sort(compareVehicles)
 
+    // #464: the SECOND producer runs over this one store's scope. Scoping the plan
+    // scan to this store's operator + location forecloses a stray cross-operator rate
+    // plan surfacing a card under the wrong store. Offerings are unpaginated (only
+    // `vehicles` pages).
+    // #1422: they ship on the FIRST page only. A load-more `cursor` request already
+    // has them client-side, so re-running the scan (1 plan + 2 count queries per plan)
+    // would be pure waste — skip it and ship `[]` on cursor pages (the response
+    // contract keeps the field; the web client defaults a missing one to `[]`).
+    const classOfferings = cursor
+      ? []
+      : await this.classOfferingService.findOfferings({
+          planFilters: { operatorId: storefront.operatorId, locationIds: [locationId] },
+          from,
+          to,
+          locationById: singleLocationMap(storefront),
+          classById,
+          turnaroundByLocationId: new Map([[storefront.id, storefront.defaultTurnaroundMinutes]]),
+          requested,
+        })
+
     let start = 0
     if (cursor) {
       const decoded = decodeCursor(cursor)
@@ -232,10 +260,34 @@ export class StorefrontDetailService {
           turnaroundMinutes: storefront.defaultTurnaroundMinutes,
         },
         vehicles: page,
+        classOfferings,
         nextCursor,
       },
     }
   }
+}
+
+/**
+ * The one-entry `locationById` the CLASS_COMBO producer scans against, built from
+ * the RAW storefront — it carries lat/lng (the trimmed StorefrontSummary drops
+ * them). Keyed on `storefront.id` (the location id) so a plan's `pickupLocationId`
+ * resolves; the produced card's `location.locationId` mirrors that same id.
+ */
+function singleLocationMap(storefront: Storefront): Map<string, ResultLocation> {
+  return new Map([
+    [
+      storefront.id,
+      {
+        locationId: storefront.id,
+        operatorId: storefront.operatorId,
+        operatorName: storefront.operatorName,
+        name: storefront.name,
+        address: storefront.address,
+        latitude: storefront.latitude,
+        longitude: storefront.longitude,
+      },
+    ],
+  ])
 }
 
 function keepClass(

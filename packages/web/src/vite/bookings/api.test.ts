@@ -1,6 +1,6 @@
 import { bookingEventSchema, operatorBookingDetailSchema } from '@/vite/operator-bookings/schema'
-import { describe, expect, it } from 'vitest'
-import { bookingDtoSchema } from './api'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { bookingDtoSchema, fetchBookingDetail } from './api'
 
 // Minimal valid SPECIFIC booking — all required fields, both vehicle ids present.
 const baseBooking = {
@@ -56,6 +56,58 @@ describe('operatorBookingDetailSchema — #464 CLASS_COMBO null vehicle ids', ()
     const result = operatorBookingDetailSchema.parse(comboBooking)
     expect(result.requestedVehicleId).toBeNull()
     expect(result.assignedVehicleId).toBeNull()
+  })
+})
+
+describe('fetchBookingDetail — #464 renter confirmation expanded read', () => {
+  const fetchMock = vi.fn()
+  vi.stubGlobal('fetch', fetchMock)
+  afterEach(() => fetchMock.mockReset())
+
+  function jsonResponse(body: unknown, status = 200): Response {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => body,
+    } as Response
+  }
+
+  it('GETs /bookings/:id with expand=vehicle,renter and credentials', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: baseBooking }))
+
+    await fetchBookingDetail(baseBooking.id)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/bookings/${baseBooking.id}?expand=vehicle,renter`,
+      { credentials: 'include' },
+    )
+  })
+
+  it('parses the assigned vehicle when the payload includes it (post-assign)', async () => {
+    const payload = { ...baseBooking, vehicle: { name: 'Toyota Aqua', photos: ['a.jpg'] } }
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: payload }))
+
+    const result = await fetchBookingDetail(baseBooking.id)
+
+    expect(result?.vehicle).toEqual({ name: 'Toyota Aqua', photos: ['a.jpg'] })
+  })
+
+  it('tolerates an absent vehicle — a float returns a valid detail with vehicle undefined', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: comboBooking }))
+
+    const result = await fetchBookingDetail(comboBooking.id)
+
+    expect(result?.id).toBe(comboBooking.id)
+    expect(result?.classId).toBe(comboBooking.classId)
+    expect(result?.vehicle).toBeUndefined()
+  })
+
+  it('maps a 404 (IDOR-sealed) to null', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: false }, 404))
+
+    const result = await fetchBookingDetail(baseBooking.id)
+
+    expect(result).toBeNull()
   })
 })
 

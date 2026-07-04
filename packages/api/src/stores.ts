@@ -46,7 +46,10 @@ import type { ComplianceAlertBand, ComplianceDocumentType } from '@kuruma/shared
 import type { DocumentSnapshot } from '@kuruma/shared/lib/consent-canonical'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
-import type { PaymentAnomalyResolution } from '@kuruma/shared/types/payment-anomaly'
+import type {
+  PaymentAnomalyKind,
+  PaymentAnomalyResolution,
+} from '@kuruma/shared/types/payment-anomaly'
 
 /**
  * The notification kind/status sets have a single source of truth: the
@@ -207,7 +210,9 @@ export interface PaymentRefund {
   updatedAt: Date
 }
 
-export type PaymentAnomalyKind = 'DOUBLE_PAYMENT' | 'AMOUNT_MISMATCH'
+// Kind lives in the @kuruma/shared enums.ts SSoT (#1383/#1427); re-exported so
+// api consumers (services/payment/payment.ts) keep importing it from ../../stores.
+export type { PaymentAnomalyKind }
 
 // A verified Stripe charge that needs human review rather than becoming revenue
 // (#508 P2): a duplicate charge on an already-paid booking (DOUBLE_PAYMENT) or an

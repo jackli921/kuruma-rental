@@ -6,6 +6,7 @@ import {
   reviewAggregatesQueryOptions,
 } from '@/vite/reviews'
 import { AvailableVehicleCard } from '@/vite/storefronts/AvailableVehicleCard'
+import { ClassOfferingCard } from '@/vite/storefronts/ClassOfferingCard'
 import type { StorefrontDetailData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
 import { turnaroundHours } from '@/vite/storefronts/turnaround'
@@ -43,7 +44,7 @@ export function StorefrontDetailView({
   const t = useTranslations('search')
   const locale = useLocale()
   const reviewsEnabled = useFeatureFlag('REVIEWS')
-  const { storefront, vehicles } = detail
+  const { storefront, vehicles, classOfferings } = detail
 
   // #1085 slice 5: one query for the storefront's operator badge + one batched
   // query for every visible vehicle's class badge. The class fetch drops null
@@ -111,6 +112,31 @@ export function StorefrontDetailView({
           ))}
         </div>
       )}
+
+      {/* #464: class-combo deals for this store. The section identity comes from
+          `storefront` (each offering redundantly echoes its location, but the
+          store owns the pickup id — deferring to `offering.location` would let a
+          future mismatch silently mis-route the booking). */}
+      {classOfferings.length > 0 && (
+        <section className="mt-12">
+          <h2 className="mb-4 text-xl font-semibold tracking-tight">{t('detail.classDeals')}</h2>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {classOfferings.map((offering) => (
+              <ClassOfferingCard
+                key={offering.classId}
+                offering={offering}
+                locationId={storefront.locationId}
+                from={from}
+                to={to}
+                classFilter={classFilter}
+                pickupLocationId={pickupLocationId}
+                region={region}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       {operatorReviews !== undefined ? <ReviewList reviews={operatorReviews} /> : null}
     </div>
   )

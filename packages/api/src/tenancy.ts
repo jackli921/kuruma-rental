@@ -258,6 +258,12 @@ export function assertFleetWriteWithinOperator(
  * `!isOperatorRole` (the fleet key): `/cancel` has no route gate and admits
  * renters (self-cancel) and legacy STAFF/ADMIN — both renter-scoped for bookings —
  * who must never be forced to name an operator, and the fleet key would 422 them.
+ *
+ * Also guards booking CREATE (#1417): that path now reads the vehicle/pickup anchor
+ * with the caller's own ctx, so a tenant operator can no longer reach a foreign car
+ * at all (`findById` returns undefined -> a plain 'not found'). Only the bypass `all`
+ * tier still reads cross-operator inventory, so this same pick-an-operator bind is all
+ * create needs — no create-specific denial kind.
  */
 export function assertBookingWriteWithinOperator(
   ctx: CallerContext,
@@ -273,8 +279,9 @@ export function assertBookingWriteWithinOperator(
 
 /**
  * Map a {@link FleetWriteDenial} to the shape a fleet-write service returns
- * (#1260). Wired to booking status writes today; the block/vehicle slices adopt
- * the same mapper so the refusal contract stays identical everywhere:
+ * (#1260). Wired to booking status writes and booking CREATE (#1417); the
+ * block/vehicle slices adopt the same mapper so the refusal contract stays
+ * identical everywhere:
  * - operator-required -> 422 carrying the same OPERATOR_REQUIRED code the global
  *   OperatorRequiredError emits, so the web can discriminate "pick an operator".
  * - not-in-scope      -> 404 with the CALLER's own not-found message: from the

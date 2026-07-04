@@ -4,7 +4,7 @@ import { formatDateTime, formatJpy } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { CancelBookingDialog } from '@/vite/bookings/CancelBookingDialog'
 import { PreAuthHandoffCard } from '@/vite/bookings/PreAuthHandoffCard'
-import type { BookingDto } from '@/vite/bookings/api'
+import type { RenterBookingDetail } from '@/vite/bookings/api'
 import { buildStorefrontSearch } from '@/vite/bookings/storefront-link'
 import { useFeatureFlag } from '@/vite/config'
 import { IndicativeNote, useIndicative } from '@/vite/currency'
@@ -16,7 +16,7 @@ import { CheckCircle } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
 interface BookingConfirmationViewProps {
-  readonly booking: BookingDto
+  readonly booking: RenterBookingDetail
   /** Resolved class label, or `null` when archived/unknown — the row is omitted. */
   readonly vehicleClass: VehicleClassData | null
   /** Session CSRF token for the self-cancel write; `null` hides the cancel control (#856). */
@@ -68,11 +68,30 @@ export function BookingConfirmationView({
             <span className="text-sm text-muted-foreground">{t('bookingCode')}</span>
             <span className="font-mono text-sm font-semibold">{booking.bookingCode}</span>
           </div>
-          {vehicleClass && (
+          {/* #464: a CLASS_COMBO booking floats until the operator assigns a car.
+              Post-assign the single read carries the concrete vehicle
+              (expand=vehicle,renter), so show its name; pre-assign show the class
+              plus a note. The note is keyed on assignedVehicleId === null (the true
+              not-yet-assigned signal), so a SPECIFIC booking whose car was deleted
+              (vehicle absent but assignedVehicleId set) falls through to the plain
+              class row without promising a future assignment. */}
+          {booking.vehicle?.name ? (
             <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">{t('vehicleClass')}</span>
-              <span className="text-sm font-medium">{vehicleClass.name}</span>
+              <span className="text-sm text-muted-foreground">{t('vehicle')}</span>
+              <span className="text-sm font-medium">{booking.vehicle.name}</span>
             </div>
+          ) : (
+            vehicleClass && (
+              <div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">{t('vehicleClass')}</span>
+                  <span className="text-sm font-medium">{vehicleClass.name}</span>
+                </div>
+                {booking.assignedVehicleId === null && booking.classId !== null && (
+                  <p className="mt-1 text-xs text-muted-foreground">{t('assignmentNote')}</p>
+                )}
+              </div>
+            )
           )}
           <div className="flex justify-between">
             <span className="text-sm text-muted-foreground">{t('pickupDate')}</span>

@@ -98,6 +98,11 @@ export const OPERATOR_CONTEXT_ROUTE_IDS: ReadonlySet<string> = new Set([
   '/$locale/_business/dashboard', // slice 4 — overview + fleet-overview narrow to picked operator
   '/$locale/_business/manage/add-ons',
   '/$locale/_business/manage/bookings/', // slice 5a — bookings reads narrow to picked operator
+  // NB: the by-id trip-detail ($bookingId) is intentionally NOT registered — like
+  // fleet/$vehicleId (#1264). Its read is by-id (not pick-scoped), so showing an
+  // interactive picker there would let the pick diverge from the booking on screen and
+  // dead-end the write at the API's ownership 404 (#1361). The write still binds: the
+  // route reads the ?operator= param (retained by _business) via useOperatorContext.
   '/$locale/_business/manage/classes',
   '/$locale/_business/manage/fees',
   '/$locale/_business/manage/fleet/', // slice 4 residual (#1264) — list reads narrow; detail is by-id, intentionally NOT registered

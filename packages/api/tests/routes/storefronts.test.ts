@@ -4,6 +4,7 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
   InMemoryOperatorRepository,
@@ -11,7 +12,13 @@ import {
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
-import type { InsuranceOption, Location, Vehicle, VehicleClass } from '../../src/stores'
+import type {
+  ClassRatePlan,
+  InsuranceOption,
+  Location,
+  Vehicle,
+  VehicleClass,
+} from '../../src/stores'
 import { setupAuthEnv } from '../helpers/auth'
 
 const FROM = '2026-08-01T10:00:00Z'
@@ -31,6 +38,7 @@ function setup() {
   )
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
   const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
+  const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const app = createApp({
     vehicleRepo,
     bookingRepo,
@@ -39,8 +47,17 @@ function setup() {
     locationRepo,
     operatorRepo,
     insuranceOptionRepo,
+    classRatePlanRepo,
   })
-  return { app, operatorRepo, locationRepo, vehicleRepo, vehicleClassRepo, insuranceOptionRepo }
+  return {
+    app,
+    operatorRepo,
+    locationRepo,
+    vehicleRepo,
+    vehicleClassRepo,
+    insuranceOptionRepo,
+    classRatePlanRepo,
+  }
 }
 
 type Ctx = ReturnType<typeof setup>
@@ -133,6 +150,21 @@ function makeVehicle(
     hourlyRateJpy: null,
     shakenExpiryDate: '2099-06-15',
     insuranceExpiryDate: '2099-01-01',
+    ...overrides,
+  })
+}
+
+function makeRatePlan(
+  ctx: Ctx,
+  overrides: Partial<Omit<ClassRatePlan, 'id' | 'createdAt' | 'updatedAt'>>,
+) {
+  return ctx.classRatePlanRepo.create({
+    operatorId: 'op_a',
+    classId: 'class_compact',
+    pickupLocationId: 'loc_namba',
+    dayRateJpy: 6000,
+    isActive: true,
+    label: null,
     ...overrides,
   })
 }
@@ -238,6 +270,33 @@ describe('storefront routes (#391)', () => {
       const res = await ctx.app.request(`/storefronts/${namba.id}/vehicles?from=${FROM}&to=${TO}`)
 
       expect(res.headers.get('Cache-Control')).toBe('public, s-maxage=10')
+    })
+
+    it('includes the location class-combo offerings in the payload (#464)', async () => {
+      const ctx = setup()
+      const { op, compact, namba } = await seedStorefront(ctx, 1)
+      await makeRatePlan(ctx, {
+        operatorId: op.id,
+        classId: compact.id,
+        pickupLocationId: namba.id,
+        dayRateJpy: 6000,
+      })
+
+      const res = await ctx.app.request(`/storefronts/${namba.id}/vehicles?from=${FROM}&to=${TO}`)
+
+      expect(res.status).toBe(200)
+      // Still edge-cached: the combo producer is part of the same public read.
+      expect(res.headers.get('Cache-Control')).toBe('public, s-maxage=10')
+      const body = await res.json()
+      expect(body.data.classOfferings).toEqual([
+        expect.objectContaining({
+          kind: 'CLASS_COMBO',
+          classId: compact.id,
+          dailyRateJpy: 6000,
+          availableCount: 1,
+        }),
+      ])
+      expect(body.data.vehicles).toHaveLength(1)
     })
 
     it('returns 404 for an unknown locationId (does not cache the miss)', async () => {

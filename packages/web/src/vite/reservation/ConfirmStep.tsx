@@ -13,6 +13,9 @@ interface ConfirmStepProps {
   readonly insuranceName: string | null
   /** Pickup time — drives which cancellation tier is highlighted (#657). */
   readonly pickupAt: Date
+  /** #464: a class-combo books a class, not a car — this note tells the renter the
+   *  exact vehicle is assigned before pickup. Null (and hidden) for a SPECIFIC car. */
+  readonly assignmentNote?: string | null | undefined
 }
 
 /**
@@ -26,6 +29,7 @@ export function ConfirmStep({
   selectedAddOns,
   insuranceName,
   pickupAt,
+  assignmentNote,
 }: ConfirmStepProps) {
   const t = useTranslations('reservation')
   const tCurrency = useTranslations('currency')
@@ -71,6 +75,11 @@ export function ConfirmStep({
       {showCurrencyDisclaimer && (
         <p className="text-xs text-muted-foreground">{tCurrency('disclaimer')}</p>
       )}
+      {assignmentNote ? (
+        <p className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-foreground">
+          {assignmentNote}
+        </p>
+      ) : null}
       <p className="text-sm text-muted-foreground">{t('confirm.note')}</p>
       {/* #937: self-cancel is gated for the beta demo (#868), so don't advertise the
           tiered policy at checkout when the feature is OFF — it would promise a flow
