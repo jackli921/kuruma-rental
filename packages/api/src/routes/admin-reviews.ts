@@ -15,7 +15,6 @@ import { fail, ok, parseId } from './helpers'
  */
 export function createAdminReviewRoutes(service: ReviewService) {
   const app = new Hono()
-  app.use('/admin/reviews', requireAuth())
   app.use('/admin/reviews/*', requireAuth())
 
   return app
