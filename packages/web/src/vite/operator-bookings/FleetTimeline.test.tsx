@@ -184,6 +184,21 @@ describe('FleetTimeline keyboard + ARIA (#1349)', () => {
     expect(onSelectEvent).not.toHaveBeenCalled()
   })
 
+  it('promises a dialog only on block bars — a booking bar navigates, so it must not', () => {
+    // aria-haspopup="dialog" is a contract that activation opens an overlay. A block bar
+    // opens BlockDetailDialog (true); a booking bar navigates to a full page (false), so
+    // announcing a dialog would misinform screen-reader users — the defect this GA-gate fixes.
+    const blk = block({ id: 'blk7', title: 'Bodywork', reason: 'Bodywork', kind: 'MAINTENANCE' })
+    renderTimeline([row({ id: 'b1', renterName: 'Alice' })], { blocks: [blk] })
+    expect(screen.getByRole('button', { name: /Maintenance block: Bodywork/ })).toHaveAttribute(
+      'aria-haspopup',
+      'dialog',
+    )
+    expect(screen.getByRole('button', { name: /Booking: Alice/ })).not.toHaveAttribute(
+      'aria-haspopup',
+    )
+  })
+
   it('makes a booking exactly one keyboard stop, aria-hiding the redundant turnaround tail', () => {
     // Booked + tail both in-window: the booked band is the sole button; the tail bar
     // still renders for mouse users but is removed from the a11y tree (no second stop).

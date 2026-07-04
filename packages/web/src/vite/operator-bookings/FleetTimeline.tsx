@@ -217,11 +217,13 @@ export function FleetTimeline({
           // detail on Enter/Space (parity with click). A suppressed turnaround tail is
           // taken out of the a11y tree (aria-hidden + non-focusable) so a keyboard user
           // never lands on two bars for one booking; a mouse click on it still works.
+          // aria-haspopup only on block bars: they open BlockDetailDialog, whereas a
+          // booking bar navigates to a full page — promising a dialog there would mislead AT.
           itemProps: it.interactive
             ? {
                 role: 'button',
                 tabIndex: 0,
-                'aria-haspopup': 'dialog',
+                ...(it.type === 'block' ? { 'aria-haspopup': 'dialog' as const } : {}),
                 'aria-label': label,
                 onKeyDown: (e: ReactKeyboardEvent<HTMLDivElement>) => handleItemKeyDown(e, it.id),
               }
