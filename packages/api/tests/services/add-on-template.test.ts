@@ -72,6 +72,21 @@ describe('AddOnTemplateService.listForPicker', () => {
 
     expect(picker.map((t) => t.resolvedName)).toEqual(['Additional driver', 'Snow tires'])
   })
+
+  it('returns an empty picker when the shared catalog is disabled (#1437)', async () => {
+    // Seed a real ACTIVE template so an empty result proves the kill-switch gate,
+    // not merely an empty catalog.
+    const store = new Map<string, AddOnTemplate>([
+      ['a', row({ id: 'a', key: 'child_seat', name: { en: 'Child seat' } })],
+    ])
+    const service = new AddOnTemplateService(
+      new InMemoryAddOnTemplateRepository(store),
+      emptyAddOnRepo(),
+      () => Promise.resolve(false),
+    )
+
+    expect(await service.listForPicker('en')).toEqual([])
+  })
 })
 
 describe('AddOnTemplateService.listForPicker — already-offered exclusion (P1-3)', () => {
