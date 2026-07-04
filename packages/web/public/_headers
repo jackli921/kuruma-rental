@@ -25,6 +25,8 @@
   # at source, scripts/lint-csp-hash.ts against dist) so it can't silently drift
   # and block the script. style-src keeps 'unsafe-inline' — inline style attributes
   # can't be hashed. COEP is omitted — `require-corp` would block Unsplash images.
-  # Verified locally against the app shell, the OAuth redirect init, and Unsplash
-  # imagery (zero violations); final sign-off on a live CF preview tracks in #1009.
-  Content-Security-Policy: default-src 'self'; img-src 'self' data: https://images.unsplash.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-2S6frsINm4/FKaaiq6qA65fjvkeL2N9Um5j1Yra+lT0='; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  # img-src also allows *.googleusercontent.com for the signed-in user's Google
+  # avatar (UserMenu). Verified locally against the app shell, OAuth redirect init,
+  # Unsplash imagery, and the signed-in avatar (zero violations); final sign-off on
+  # a live CF preview tracks in #1009.
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: https://images.unsplash.com https://*.googleusercontent.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-2S6frsINm4/FKaaiq6qA65fjvkeL2N9Um5j1Yra+lT0='; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
