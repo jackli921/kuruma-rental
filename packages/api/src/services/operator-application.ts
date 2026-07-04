@@ -247,10 +247,18 @@ export class OperatorApplicationService {
         if (existingUser && (await repos.memberships.findActiveByUserId(existingUser.id))) {
           throw new ConflictError('this email already has an operator')
         }
-        // Revoke the stale PENDING invite (this operator's) so the partial-unique
-        // (operatorId,email) index admits the replacement; then mint the new one.
+        // Revoke the stale PENDING invite so the partial-unique (operatorId,email)
+        // index admits the replacement; then mint the new one. findPendingByEmail is
+        // cross-operator (the C1 guard), but revoke is operator-scoped — so a pending
+        // invite owned by ANOTHER operator must block here (mirroring approve()'s C1),
+        // not silently no-op the revoke and leave two live invites for the email (#1277).
         const pending = await repos.invites.findPendingByEmail(email)
-        if (pending) await repos.invites.revoke(pending.id, operatorId)
+        if (pending) {
+          if (pending.operatorId !== operatorId) {
+            throw new ConflictError('this email is already invited to an operator')
+          }
+          await repos.invites.revoke(pending.id, operatorId)
+        }
         const invite = buildProviderInviteRecord(minted, {
           email,
           operatorId,
