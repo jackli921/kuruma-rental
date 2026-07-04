@@ -80,6 +80,159 @@ describe('InMemoryReviewRepository', () => {
   })
 })
 
+// review-display slice (#1067): public listing of published+visible reviews for a subject.
+describe('listPublishedForSubject', () => {
+  it('returns only published + VISIBLE operator reviews, newest first, excludes hidden/unrevealed/other-op/vehicle', async () => {
+    const repo = new InMemoryReviewRepository()
+
+    const rOld = await repo.insert(
+      renterReview({
+        bookingId: 'bk_old',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: new Date('2026-06-01T00:00:00Z'),
+        moderationStatus: 'VISIBLE',
+      }),
+    )
+    const rNew = await repo.insert(
+      renterReview({
+        bookingId: 'bk_new',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: new Date('2026-06-03T00:00:00Z'),
+        moderationStatus: 'VISIBLE',
+        authorUserId: 'user_renter_2',
+      }),
+    )
+    // HIDDEN — must be excluded
+    await repo.insert(
+      renterReview({
+        bookingId: 'bk_hidden',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: new Date('2026-06-02T00:00:00Z'),
+        moderationStatus: 'HIDDEN',
+        authorUserId: 'user_renter_3',
+      }),
+    )
+    // unrevealed (publishedAt: null) — must be excluded
+    await repo.insert(
+      renterReview({
+        bookingId: 'bk_unrevealed',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: null,
+        moderationStatus: 'VISIBLE',
+        authorUserId: 'user_renter_4',
+      }),
+    )
+    // different operator — must be excluded
+    await repo.insert(
+      renterReview({
+        bookingId: 'bk_otherop',
+        operatorId: 'op2',
+        subject: 'OPERATOR',
+        publishedAt: new Date('2026-06-02T00:00:00Z'),
+        moderationStatus: 'VISIBLE',
+        authorUserId: 'user_renter_5',
+      }),
+    )
+    // VEHICLE subject for op1 — must be excluded
+    await repo.insert(
+      renterReview({
+        bookingId: 'bk_vehicle',
+        operatorId: 'op1',
+        subject: 'VEHICLE',
+        subjectVehicleId: 'v1',
+        publishedAt: new Date('2026-06-02T00:00:00Z'),
+        moderationStatus: 'VISIBLE',
+        authorUserId: 'user_renter_6',
+      }),
+    )
+
+    const result = await repo.listPublishedForSubject('OPERATOR', 'op1', 20)
+    expect(result.map((r) => r.id)).toEqual([rNew.id, rOld.id])
+  })
+
+  it('respects the limit, returning the newest N reviews', async () => {
+    const repo = new InMemoryReviewRepository()
+
+    // Seed 5 published+visible OPERATOR reviews for op1 with ascending publishedAt
+    const inserted: string[] = []
+    for (let i = 0; i < 5; i++) {
+      const r = await repo.insert(
+        renterReview({
+          bookingId: `bk_limit_${i}`,
+          operatorId: 'op1',
+          subject: 'OPERATOR',
+          publishedAt: new Date(`2026-06-0${i + 1}T00:00:00Z`),
+          moderationStatus: 'VISIBLE',
+          authorUserId: `user_${i}`,
+        }),
+      )
+      inserted.push(r.id)
+    }
+    // inserted[0]..inserted[4] = oldest..newest
+    const result = await repo.listPublishedForSubject('OPERATOR', 'op1', 2)
+    expect(result).toHaveLength(2)
+    expect(result.map((r) => r.id)).toEqual([inserted[4], inserted[3]])
+  })
+
+  it('VEHICLE subject scopes on subjectVehicleId, not operatorId', async () => {
+    const repo = new InMemoryReviewRepository()
+    const vehicleReview = await repo.insert(
+      renterReview({
+        bookingId: 'bk_v1',
+        operatorId: 'op1',
+        subject: 'VEHICLE',
+        subjectVehicleId: 'v1',
+        publishedAt: new Date('2026-06-01T00:00:00Z'),
+        moderationStatus: 'VISIBLE',
+      }),
+    )
+    // same operatorId but OPERATOR-subject — must NOT appear in a VEHICLE query
+    await repo.insert(
+      renterReview({
+        bookingId: 'bk_op1',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: new Date('2026-06-01T00:00:00Z'),
+        moderationStatus: 'VISIBLE',
+        authorUserId: 'user_renter_2',
+      }),
+    )
+    const result = await repo.listPublishedForSubject('VEHICLE', 'v1', 20)
+    expect(result.map((r) => r.id)).toEqual([vehicleReview.id])
+  })
+
+  it('breaks publishedAt ties by id descending', async () => {
+    const repo = new InMemoryReviewRepository()
+    const sameDate = new Date('2026-06-01T00:00:00Z')
+    const r1 = await repo.insert(
+      renterReview({
+        bookingId: 'bk_tie1',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: sameDate,
+        moderationStatus: 'VISIBLE',
+      }),
+    )
+    const r2 = await repo.insert(
+      renterReview({
+        bookingId: 'bk_tie2',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: sameDate,
+        moderationStatus: 'VISIBLE',
+        authorUserId: 'user_renter_2',
+      }),
+    )
+    const expectedOrder = [r1.id, r2.id].sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))
+    const result = await repo.listPublishedForSubject('OPERATOR', 'op1', 20)
+    expect(result.map((r) => r.id)).toEqual(expectedOrder)
+  })
+})
+
 // #1085 slice 5 aggregates. The InMemory predicate is the source of truth tests can
 // mutation-prove against (the Drizzle SQL mirrors the same predicate, locked by the
 // real-pg suite). Both impls return ABSENT entries — not {sum:0,count:0} — for ids

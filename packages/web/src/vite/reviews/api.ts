@@ -166,6 +166,38 @@ function normalizeAggregateIds(ids: readonly string[]): readonly string[] {
   return Array.from(new Set(ids)).sort()
 }
 
+// --- #1067 review-display slice: public per-operator review list ---------------
+
+// Schema is the single source of truth; the type is derived so the two can't drift.
+const publicReviewDtoSchema = z.object({
+  id: z.string(),
+  overall: z.number(),
+  subRatings: z.record(z.string(), z.number()),
+  comment: z.string().nullable(),
+  publishedAt: z.string(),
+})
+
+/** Public review wire shape from GET /reviews/for/operators/:id.
+ *  Curated: no bookingId or authorUserId exposed to the render tier.
+ *  subRatings is the dimension→stars map ({} when no sub-dimensions rated). */
+export type PublicReviewDto = z.infer<typeof publicReviewDtoSchema>
+
+/** GET /reviews/for/operators/:id — public, anonymous (no credentials needed). */
+export async function fetchOperatorReviews(operatorId: string): Promise<PublicReviewDto[]> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/reviews/for/operators/${encodeURIComponent(operatorId)}`,
+  )
+  const { reviews } = await unwrap(res, z.object({ reviews: z.array(publicReviewDtoSchema) }))
+  return reviews
+}
+
+export function operatorReviewsQueryOptions(operatorId: string) {
+  return queryOptions({
+    queryKey: ['reviews', 'list', 'operators', operatorId] as const,
+    queryFn: () => fetchOperatorReviews(operatorId),
+  })
+}
+
 /** GET /reviews/aggregates/:kind?ids=… (public; no cookie needed). Empty `ids`
  *  bypasses the network and returns `{}` so a render with no subjects to fetch
  *  still resolves immediately — matches `queryOptions.enabled: false` below. */

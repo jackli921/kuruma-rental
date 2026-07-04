@@ -55,4 +55,14 @@ export interface ReviewRepository {
   aggregateByClass(
     classIds: readonly string[],
   ): Promise<Map<string, { sum: number; count: number }>>
+  // Public display read (review-display slice). The newest published + VISIBLE
+  // reviews whose subject key matches, capped at `limit`, ordered publishedAt DESC.
+  // subject='OPERATOR' scopes on the denormalized operatorId; 'VEHICLE' on
+  // subjectVehicleId. RENTER is never listable (privacy) — the service enforces that,
+  // so this port only accepts the two public subjects.
+  listPublishedForSubject(
+    subject: 'OPERATOR' | 'VEHICLE',
+    subjectId: string,
+    limit: number,
+  ): Promise<Review[]>
 }
