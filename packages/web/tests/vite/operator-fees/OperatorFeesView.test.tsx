@@ -1,7 +1,7 @@
 import type { OperatorScope } from '@/vite/operator-context'
 import { OperatorFeesView } from '@/vite/operator-fees/OperatorFeesView'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -166,5 +166,86 @@ describe('OperatorFeesView', () => {
     )
     expect(screen.getByRole('button', { name: 'editFee' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'archiveAction' })).toBeInTheDocument()
+  })
+})
+
+// #1442 seam guard: the view threads `scope.pickedOperatorId` into all three write
+// dialogs so a picker admin's create/update/archive binds to the chosen tenant.
+// Drop the prop on any of view -> dialog -> api and the corresponding call loses
+// its operator binding (a silent 422 / wrong-tenant write in prod) -- these drive
+// the real fetch to catch that, mirroring AddAddOnDialog's stub-fetch pattern.
+describe('OperatorFeesView picker threading (#1442)', () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+  afterEach(() => fetchSpy.mockReset())
+
+  function stubWrite() {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: operatorWideFee }), { status: 200 }),
+    )
+  }
+
+  function writeCall(method: string) {
+    return fetchSpy.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === method,
+    )
+  }
+
+  const pickedScope = scope({ canWrite: true, pickedOperatorId: 'op_9' })
+
+  it('stamps the picked operatorId into the create POST body', async () => {
+    stubWrite()
+    const user = userEvent.setup()
+    render(<OperatorFeesView fees={[]} classes={classes} scope={pickedScope} />, { wrapper })
+
+    await user.click(screen.getByRole('button', { name: 'addFee' }))
+    await user.click(await screen.findByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => expect(writeCall('POST')).toBeDefined())
+    const body = JSON.parse(String((writeCall('POST')?.[1] as RequestInit).body))
+    expect(body).toMatchObject({ operatorId: 'op_9' })
+  })
+
+  it('binds the edit PATCH to the picked operator via ?operatorId=', async () => {
+    stubWrite()
+    const user = userEvent.setup()
+    render(<OperatorFeesView fees={[operatorWideFee]} classes={classes} scope={pickedScope} />, {
+      wrapper,
+    })
+
+    await user.click(screen.getByRole('button', { name: 'editFee' }))
+    await user.click(await screen.findByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => expect(writeCall('PATCH')).toBeDefined())
+    expect(String(writeCall('PATCH')?.[0])).toContain('operatorId=op_9')
+  })
+
+  it('binds the archive DELETE to the picked operator via ?operatorId=', async () => {
+    stubWrite()
+    const user = userEvent.setup()
+    render(<OperatorFeesView fees={[operatorWideFee]} classes={classes} scope={pickedScope} />, {
+      wrapper,
+    })
+
+    await user.click(screen.getByRole('button', { name: 'archiveAction' }))
+    await user.click(await screen.findByRole('button', { name: 'archiveConfirm' }))
+
+    await waitFor(() => expect(writeCall('DELETE')).toBeDefined())
+    expect(String(writeCall('DELETE')?.[0])).toContain('operatorId=op_9')
+  })
+
+  it('omits operatorId entirely when no operator is picked (operator session auto-scopes)', async () => {
+    stubWrite()
+    const user = userEvent.setup()
+    render(<OperatorFeesView fees={[]} classes={classes} scope={scope({ canWrite: true })} />, {
+      wrapper,
+    })
+
+    await user.click(screen.getByRole('button', { name: 'addFee' }))
+    await user.click(await screen.findByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => expect(writeCall('POST')).toBeDefined())
+    const body = JSON.parse(String((writeCall('POST')?.[1] as RequestInit).body))
+    expect(body).not.toHaveProperty('operatorId')
+    expect(String(writeCall('POST')?.[0])).not.toContain('operatorId')
   })
 })

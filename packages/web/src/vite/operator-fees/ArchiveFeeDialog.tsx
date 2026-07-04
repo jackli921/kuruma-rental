@@ -15,15 +15,18 @@ import { useTranslations } from 'use-intl'
 interface ArchiveFeeDialogProps {
   fee: FeeScheduleData | null
   onOpenChange: (open: boolean) => void
+  /** #1442: binds the DELETE to the picked operator via `?operatorId=`; omitted for
+   *  an operator session (tenant-clamped server-side). */
+  pickedOperatorId?: string | undefined
 }
 
-export function ArchiveFeeDialog({ fee, onOpenChange }: ArchiveFeeDialogProps) {
+export function ArchiveFeeDialog({ fee, onOpenChange, pickedOperatorId }: ArchiveFeeDialogProps) {
   const t = useTranslations('business.fees')
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
 
   const { mutate, isPending, error } = useMutation({
-    mutationFn: (id: string) => archiveFeeSchedule(id, csrfToken),
+    mutationFn: (id: string) => archiveFeeSchedule(id, csrfToken, pickedOperatorId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: FEE_QUERY_KEY })
       onOpenChange(false)

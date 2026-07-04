@@ -29,8 +29,9 @@ export const Route = createFileRoute('/$locale/_business/manage/fees')({
   component: OperatorFeesRoute,
 })
 
-// Exported so a route-level test can pin the P1b read-only override (the
-// `feesScope` junction below); the file route mounts it as the component.
+// Exported so a route-level test can pin that the picker scope is forwarded
+// unchanged (#1442 — no read-only override); the file route mounts it as the
+// component.
 export function OperatorFeesRoute() {
   const t = useTranslations('business.fees')
   const scope = useOperatorScope()
