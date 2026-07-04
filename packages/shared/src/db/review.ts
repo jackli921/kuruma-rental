@@ -67,6 +67,12 @@ export const reviews = pgTable(
     subRatings: jsonb('subRatings').$type<Record<string, number>>().notNull().default({}),
     comment: text('comment'),
     moderationStatus: reviewModerationStatusEnum('moderationStatus').notNull().default('VISIBLE'),
+    // Moderation audit trail (#1454): which platform admin last flipped moderationStatus,
+    // and when. Both NULL on a never-moderated review; stamped together on every hide so a
+    // multi-admin platform can attribute the action. `moderatedAt` is distinct from the
+    // mutable `updatedAt` (which any write bumps) — it marks the moderation instant only.
+    moderatedBy: text('moderatedBy').references(() => users.id, { onDelete: 'restrict' }),
+    moderatedAt: timestamp('moderatedAt', { withTimezone: true }),
     // The 14-day double-blind deadline; reveal fires at the earlier of both-submitted or this.
     revealDeadlineAt: timestamp('revealDeadlineAt', { withTimezone: true }).notNull(),
     submittedAt: timestamp('submittedAt', { withTimezone: true }).notNull().defaultNow(),
@@ -111,6 +117,8 @@ export const reviews = pgTable(
     // serves findByBookingId AND satisfies the lint (which reads CREATE [UNIQUE] INDEX). A separate
     // idx_reviews_bookingId would be a redundant second btree on the same prefix — dropped in #1225.
     index('idx_reviews_authorUserId').on(t.authorUserId),
+    // moderatedBy FK cover (#1454). Sparse (NULL on unmoderated rows); satisfies lint:fk-indexes.
+    index('idx_reviews_moderatedBy').on(t.moderatedBy),
     // operatorId FK cover + the slice-5 published-aggregate scan.
     index('idx_reviews_operator_published').on(t.operatorId, t.publishedAt),
     index('idx_reviews_subject_vehicle').on(t.subjectVehicleId),

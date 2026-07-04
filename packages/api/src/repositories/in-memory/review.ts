@@ -6,9 +6,10 @@ import {
 } from '../../pg-errors'
 import type { Review, ReviewReport } from '../../stores'
 import type {
+  ListReportedOptions,
   NewReview,
   NewReviewReport,
-  ReportedReview,
+  ReportedReviewPage,
   ReviewEdit,
   ReviewListCursor,
   ReviewRepository,
@@ -123,27 +124,38 @@ export class InMemoryReviewRepository implements ReviewRepository {
   async setModerationStatus(
     id: string,
     status: ReviewModerationStatus,
+    moderatedBy: string,
+    moderatedAt: Date,
   ): Promise<Review | undefined> {
     const existing = this.store.get(id)
     if (!existing) return undefined
-    const updated: Review = { ...existing, moderationStatus: status, updatedAt: new Date() }
+    // Mirror the Drizzle write: flip status AND stamp the moderation audit (#1454).
+    const updated: Review = {
+      ...existing,
+      moderationStatus: status,
+      moderatedBy,
+      moderatedAt,
+      updatedAt: new Date(),
+    }
     this.store.set(id, updated)
     return updated
   }
 
-  async listReported(): Promise<ReportedReview[]> {
-    // Group reports by review; emit each still-present review with its distinct-reporter
-    // count (the unique seal makes report count === reporter count) + reasons, newest
-    // report first. Orphan reports (review gone) are skipped — cascade makes that latent.
+  async listReported(options: ListReportedOptions): Promise<ReportedReviewPage> {
+    const { limit, status, cursor } = options
+    // Group reports by review; emit each still-present review WHOSE moderationStatus matches
+    // the requested partition (#1451: VISIBLE = unactioned queue, HIDDEN = resolved) with
+    // its distinct-reporter count (the unique seal makes report count === reporter count) +
+    // reasons, newest report first. Orphan reports (review gone) are skipped — cascade latent.
     const byReview = new Map<string, ReviewReport[]>()
     for (const report of this.reports.values()) {
       byReview.set(report.reviewId, [...(byReview.get(report.reviewId) ?? []), report])
     }
-    const withRecency = [...byReview.entries()].flatMap(([reviewId, reports]) => {
+    const entries = [...byReview.entries()].flatMap(([reviewId, reports]) => {
       const review = this.store.get(reviewId)
-      if (!review) return []
+      if (!review || review.moderationStatus !== status) return []
       const newestFirst = [...reports].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      const lastReportedAt = newestFirst[0]?.createdAt.getTime() ?? 0
+      const lastReportedAt = newestFirst[0]?.createdAt ?? new Date(0)
       return [
         {
           review,
@@ -153,9 +165,33 @@ export class InMemoryReviewRepository implements ReviewRepository {
         },
       ]
     })
-    return withRecency
-      .sort((a, b) => b.lastReportedAt - a.lastReportedAt)
-      .map(({ review, reportCount, reasons }) => ({ review, reportCount, reasons }))
+    // (lastReportedAt DESC, reviewId DESC) — mirrors the Drizzle orderBy so the keyset
+    // boundary is byte-identical across drivers (the reveal sweep and same-ms reports make
+    // the id tiebreak necessary for a stable page boundary).
+    entries.sort((a, b) => {
+      const byDate = b.lastReportedAt.getTime() - a.lastReportedAt.getTime()
+      if (byDate !== 0) return byDate
+      return a.review.id < b.review.id ? 1 : a.review.id > b.review.id ? -1 : 0
+    })
+    const afterCursor = cursor
+      ? entries.filter((e) => {
+          const boundary = cursor.lastReportedAt.getTime()
+          const t = e.lastReportedAt.getTime()
+          return t < boundary || (t === boundary && e.review.id < cursor.reviewId)
+        })
+      : entries
+    // Peek one past the page so `nextCursor` is precise (null exactly when exhausted),
+    // mirroring the Drizzle limit+1.
+    const slice = afterCursor.slice(0, limit + 1)
+    const hasMore = slice.length > limit
+    const page = slice.slice(0, limit)
+    const last = page[page.length - 1]
+    const nextCursor =
+      hasMore && last ? { lastReportedAt: last.lastReportedAt, reviewId: last.review.id } : null
+    return {
+      items: page.map(({ review, reportCount, reasons }) => ({ review, reportCount, reasons })),
+      nextCursor,
+    }
   }
 
   async listPublishedForSubject(

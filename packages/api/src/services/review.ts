@@ -1,4 +1,4 @@
-import type { ReviewAuthorRole, ReviewSubject } from '@kuruma/shared/enums'
+import type { ReviewAuthorRole, ReviewModerationStatus, ReviewSubject } from '@kuruma/shared/enums'
 import {
   computeRevealDeadline,
   decideReveal,
@@ -22,7 +22,8 @@ import type {
   BookingRepository,
   NewReview,
   OperatorMembershipRepository,
-  ReportedReview,
+  ReportedQueueCursor,
+  ReportedReviewPage,
   ReviewEdit,
   ReviewRepository,
   VehicleRepository,
@@ -47,6 +48,12 @@ export interface SweepSummary {
 }
 
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error })
+
+// Moderation-queue page bounds (#1451). The queue is admin-only and small today, but a
+// list endpoint ships with a limit from day one — an unbounded payload/query is a latent
+// scaling cliff. Callers may request a smaller page; the max caps a hostile/large `limit`.
+const DEFAULT_MODERATION_QUEUE_LIMIT = 20
+const MAX_MODERATION_QUEUE_LIMIT = 100
 
 // The sub-dimensions each direction may rate (#1067). The KEYS of each inner record
 // double as the subjects a given author role is allowed to review — so this one table
@@ -172,6 +179,8 @@ export class ReviewService {
       subRatings,
       comment: input.comment ?? null,
       moderationStatus: 'VISIBLE',
+      moderatedBy: null,
+      moderatedAt: null,
       revealDeadlineAt: computeRevealDeadline(completedAt),
       submittedAt: now,
       publishedAt: null,
@@ -310,18 +319,33 @@ export class ReviewService {
 
   /** Admin soft-hide (#1086): flip a review to HIDDEN so it stops surfacing publicly and
    *  to the counterparty (getForBooking + slice-5 aggregates both gate on VISIBLE), while
-   *  the row is kept for audit. Returns the updated row, or undefined when no review has
-   *  that id (→ 404 at the route). Idempotent — re-hiding is a no-op flip. The
+   *  the row is kept for audit. Records WHO hid it and WHEN (#1454) — `ctx.userId` +
+   *  `now` — so a multi-admin platform can attribute the action. Returns the updated row,
+   *  or undefined when no review has that id (→ 404 at the route). Idempotent on status —
+   *  re-hiding stays HIDDEN (and re-stamps the audit with the latest actor). The
    *  platform-admin write gate is applied in the route (routes/admin-reviews.ts), atop the
    *  structural `/admin/*` floor. */
-  async hideReview(reviewId: string): Promise<Review | undefined> {
-    return this.reviewRepo.setModerationStatus(reviewId, 'HIDDEN')
+  async hideReview(ctx: CallerContext, reviewId: string, now: Date): Promise<Review | undefined> {
+    return this.reviewRepo.setModerationStatus(reviewId, 'HIDDEN', ctx.userId, now)
   }
 
-  /** The admin moderation queue (#1086): every review with >=1 report, each with its
-   *  distinct-reporter count + reasons, newest-reported first. Read-gated by the route. */
-  async listReported(): Promise<ReportedReview[]> {
-    return this.reviewRepo.listReported()
+  /** The admin moderation queue (#1086), keyset-paginated + status-partitioned (#1451).
+   *  Defaults to the UNACTIONED partition (VISIBLE) so already-hidden rows don't pile up in
+   *  the working queue; pass status: 'HIDDEN' for the resolved view. `limit` is clamped to
+   *  [1, MAX] so a caller can page smaller but never unbounded. Read-gated by the route. */
+  async listReported(
+    options: {
+      readonly limit?: number | undefined
+      readonly status?: ReviewModerationStatus | undefined
+      readonly cursor?: ReportedQueueCursor | undefined
+    } = {},
+  ): Promise<ReportedReviewPage> {
+    const limit = Math.min(
+      Math.max(Math.trunc(options.limit ?? DEFAULT_MODERATION_QUEUE_LIMIT), 1),
+      MAX_MODERATION_QUEUE_LIMIT,
+    )
+    const status = options.status ?? 'VISIBLE'
+    return this.reviewRepo.listReported({ limit, status, cursor: options.cursor })
   }
 
   /** Daily backstop: publish window-elapsed reviews that no read has settled. Bounded

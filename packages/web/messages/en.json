@@ -1770,7 +1770,12 @@
       "hidden": "Hidden",
       "hideError": "Could not hide the review. Please try again.",
       "loadError": "Could not load reported reviews.",
-      "retry": "Try again"
+      "retry": "Try again",
+      "filterLabel": "Filter reviews",
+      "filterUnactioned": "Needs review",
+      "filterResolved": "Resolved",
+      "loadMore": "Load more",
+      "loadingMore": "Loading…"
     }
   },
   "documents": {

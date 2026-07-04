@@ -18,6 +18,8 @@ function review(over: Partial<Review>): Review {
     subRatings: { cleanliness: 5 },
     comment: 'great',
     moderationStatus: 'VISIBLE',
+    moderatedBy: null,
+    moderatedAt: null,
     revealDeadlineAt: new Date('2026-01-01'),
     submittedAt: new Date('2026-01-01'),
     publishedAt: new Date('2026-06-02T03:00:00.000Z'),

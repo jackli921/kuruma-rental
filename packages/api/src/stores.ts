@@ -668,6 +668,10 @@ export interface Review {
   subRatings: Record<string, number>
   comment: string | null
   moderationStatus: ReviewModerationStatus
+  // Moderation audit (#1454): the platform admin who last flipped moderationStatus and
+  // when. Both null on a never-moderated review; stamped together on hide.
+  moderatedBy: string | null
+  moderatedAt: Date | null
   // The fixed double-blind deadline; reveal fires at the earlier of both-submitted
   // or this instant.
   revealDeadlineAt: Date

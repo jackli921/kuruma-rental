@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PG_ERROR, REVIEWS_SUBJECT_CONSTRAINT } from '../../src/pg-errors'
 import { InMemoryReviewRepository } from '../../src/repositories/in-memory/review'
 import type { NewReview } from '../../src/repositories/types'
+import type { Review, ReviewReport } from '../../src/stores'
 
 // Slice 1 (#1067): the InMemory ReviewRepository must mirror the single DB seal — assign
 // id/timestamps on insert and throw a PG-shaped UNIQUE_VIOLATION (with `constraint_name`)
@@ -446,5 +447,111 @@ describe('InMemoryReviewRepository — aggregates (#1085)', () => {
     )
     const out = await repo.aggregateByClass(['cls_1'])
     expect(out.get('cls_1')).toEqual({ sum: 9, count: 2 })
+  })
+})
+
+// Moderation queue keyset pagination + status partition (#1451). Report timestamps drive
+// the (lastReportedAt DESC, reviewId DESC) order, so this seeds the store + reports Maps
+// directly (insertReport stamps createdAt = now, which can't be controlled). The Drizzle
+// mirror of this order/filter is locked by the real-pg integration suite.
+describe('listReported — keyset pagination + status partition (#1451)', () => {
+  const T1 = new Date('2026-06-01T00:00:00Z')
+  const T2 = new Date('2026-06-02T00:00:00Z')
+  const T3 = new Date('2026-06-03T00:00:00Z')
+
+  function review(id: string, over: Partial<Review> = {}): Review {
+    return {
+      id,
+      bookingId: `bk_${id}`,
+      operatorId: 'op_1',
+      authorUserId: `author_${id}`,
+      authorRole: 'RENTER',
+      subject: 'OPERATOR',
+      subjectVehicleId: null,
+      subjectClassId: null,
+      overall: 3,
+      subRatings: {},
+      comment: null,
+      moderationStatus: 'VISIBLE',
+      moderatedBy: null,
+      moderatedAt: null,
+      revealDeadlineAt: REVEAL_DEADLINE,
+      submittedAt: SUBMITTED,
+      publishedAt: SUBMITTED,
+      createdAt: SUBMITTED,
+      updatedAt: SUBMITTED,
+      ...over,
+    }
+  }
+  function report(id: string, reviewId: string, createdAt: Date, reason = 'spam'): ReviewReport {
+    return { id, reviewId, reporterUserId: `reporter_${id}`, reason, createdAt }
+  }
+
+  // Three VISIBLE reviews reported at ascending times + one HIDDEN review with a report.
+  function seed() {
+    const store = new Map<string, Review>([
+      ['rv1', review('rv1')],
+      ['rv2', review('rv2')],
+      ['rv3', review('rv3')],
+      ['rh', review('rh', { moderationStatus: 'HIDDEN' })],
+    ])
+    const reports = new Map<string, ReviewReport>([
+      ['p1', report('p1', 'rv1', T1)],
+      ['p2', report('p2', 'rv2', T2)],
+      ['p3', report('p3', 'rv3', T3)],
+      ['ph', report('ph', 'rh', T2)],
+    ])
+    return new InMemoryReviewRepository(store, reports)
+  }
+
+  it('pages newest-reported first and hands back a cursor to the next page', async () => {
+    const repo = seed()
+    const page1 = await repo.listReported({ limit: 2, status: 'VISIBLE' })
+    expect(page1.items.map((e) => e.review.id)).toEqual(['rv3', 'rv2'])
+    expect(page1.nextCursor).toEqual({ lastReportedAt: T2, reviewId: 'rv2' })
+
+    const page2 = await repo.listReported({
+      limit: 2,
+      status: 'VISIBLE',
+      cursor: page1.nextCursor ?? undefined,
+    })
+    // Only the oldest-reported visible review remains, and the queue is exhausted.
+    expect(page2.items.map((e) => e.review.id)).toEqual(['rv1'])
+    expect(page2.nextCursor).toBeNull()
+  })
+
+  it('the VISIBLE partition never surfaces a HIDDEN review; HIDDEN is a separate queue', async () => {
+    const repo = seed()
+    const visible = await repo.listReported({ limit: 10, status: 'VISIBLE' })
+    expect(visible.items.map((e) => e.review.id)).toEqual(['rv3', 'rv2', 'rv1'])
+    expect(visible.items.some((e) => e.review.id === 'rh')).toBe(false)
+
+    const hidden = await repo.listReported({ limit: 10, status: 'HIDDEN' })
+    expect(hidden.items.map((e) => e.review.id)).toEqual(['rh'])
+  })
+
+  it('breaks a lastReportedAt tie by reviewId descending, and the cursor splits the tie cleanly', async () => {
+    // Two visible reviews reported at the SAME instant -> id-desc tiebreak (rb before ra).
+    const store = new Map<string, Review>([
+      ['ra', review('ra')],
+      ['rb', review('rb')],
+    ])
+    const reports = new Map<string, ReviewReport>([
+      ['pa', report('pa', 'ra', T2)],
+      ['pb', report('pb', 'rb', T2)],
+    ])
+    const repo = new InMemoryReviewRepository(store, reports)
+
+    const page1 = await repo.listReported({ limit: 1, status: 'VISIBLE' })
+    expect(page1.items.map((e) => e.review.id)).toEqual(['rb'])
+    expect(page1.nextCursor).toEqual({ lastReportedAt: T2, reviewId: 'rb' })
+
+    const page2 = await repo.listReported({
+      limit: 1,
+      status: 'VISIBLE',
+      cursor: page1.nextCursor ?? undefined,
+    })
+    expect(page2.items.map((e) => e.review.id)).toEqual(['ra'])
+    expect(page2.nextCursor).toBeNull()
   })
 })
