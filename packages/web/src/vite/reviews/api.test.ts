@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchAggregates,
   fetchOperatorReviews,
-  operatorReviewsQueryOptions,
+  operatorReviewsInfiniteQueryOptions,
   reviewAggregatesQueryOptions,
 } from './api'
 
@@ -63,33 +63,73 @@ describe('fetchAggregates (#1085 slice 5)', () => {
   })
 })
 
+const sampleReview = {
+  id: 'r1',
+  overall: 5,
+  subRatings: { cleanliness: 5 },
+  comment: 'great',
+  publishedAt: '2026-06-02T03:00:00.000Z',
+}
+
 describe('fetchOperatorReviews', () => {
-  it('parses the published-review list from the {data:{reviews}} envelope', async () => {
-    const reviews = [
-      {
-        id: 'r1',
-        overall: 5,
-        subRatings: { cleanliness: 5 },
-        comment: 'great',
-        publishedAt: '2026-06-02T03:00:00.000Z',
-      },
-    ]
-    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: { reviews } }))
+  it('parses the {reviews, nextCursor} page from the data envelope', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { reviews: [sampleReview], nextCursor: 'TOK' } }),
+    )
     const result = await fetchOperatorReviews('op1')
-    expect(result).toEqual(reviews)
+    expect(result).toEqual({ reviews: [sampleReview], nextCursor: 'TOK' })
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/reviews/for/operators/op1')
   })
 
-  it('throws ParseError when a field is dropped (seam parse)', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: { reviews: [{ id: 'r1' }] } }))
+  it('appends the ?after cursor (url-encoded) when paging', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { reviews: [], nextCursor: null } }),
+    )
+    await fetchOperatorReviews('op1', 'a+b/c=')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/reviews/for/operators/op1?after=a%2Bb%2Fc%3D')
+  })
+
+  it('omits ?after entirely for the first page (null/undefined cursor)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { reviews: [], nextCursor: null } }),
+    )
+    await fetchOperatorReviews('op1', null)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/reviews/for/operators/op1')
+  })
+
+  it('throws ParseError when nextCursor is missing (seam parse)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: { reviews: [sampleReview] } }))
+    await expect(fetchOperatorReviews('op1')).rejects.toThrow(ParseError)
+  })
+
+  it('throws ParseError when a review field is dropped (seam parse)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { reviews: [{ id: 'r1' }], nextCursor: null } }),
+    )
     await expect(fetchOperatorReviews('op1')).rejects.toThrow(ParseError)
   })
 })
 
-describe('operatorReviewsQueryOptions', () => {
+describe('operatorReviewsInfiniteQueryOptions', () => {
   it('keys the cache with the operator id so a refactor cannot silently bust the entry', () => {
-    const opts = operatorReviewsQueryOptions('op_abc')
+    const opts = operatorReviewsInfiniteQueryOptions('op_abc')
     expect(opts.queryKey).toEqual(['reviews', 'list', 'operators', 'op_abc'])
+  })
+
+  it('starts with no cursor and advances the page param via nextCursor', () => {
+    const opts = operatorReviewsInfiniteQueryOptions('op1')
+    expect(opts.initialPageParam).toBeNull()
+    expect(
+      opts.getNextPageParam({ reviews: [sampleReview], nextCursor: 'NEXT' }, [], null, []),
+    ).toBe('NEXT')
+  })
+
+  it('stops paging when a page returns nextCursor null', () => {
+    const opts = operatorReviewsInfiniteQueryOptions('op1')
+    // A null nextCursor tells react-query there is no further page (hasNextPage=false).
+    expect(
+      opts.getNextPageParam({ reviews: [sampleReview], nextCursor: null }, [], null, []),
+    ).toBeNull()
   })
 })
 

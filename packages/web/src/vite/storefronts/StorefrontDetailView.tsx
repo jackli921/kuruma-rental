@@ -2,7 +2,7 @@ import { useFeatureFlag } from '@/vite/config'
 import {
   RatingBadge,
   ReviewList,
-  operatorReviewsQueryOptions,
+  operatorReviewsInfiniteQueryOptions,
   reviewAggregatesQueryOptions,
 } from '@/vite/reviews'
 import { AvailableVehicleCard } from '@/vite/storefronts/AvailableVehicleCard'
@@ -10,7 +10,7 @@ import { ClassOfferingCard } from '@/vite/storefronts/ClassOfferingCard'
 import type { StorefrontDetailData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
 import { turnaroundHours } from '@/vite/storefronts/turnaround'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft, Clock, MapPin } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
@@ -55,10 +55,18 @@ export function StorefrontDetailView({
   )
   const classIds = vehicles.map((v) => v.classId).filter((id): id is string => id !== null)
   const { data: classRatings } = useQuery(reviewAggregatesQueryOptions('classes', classIds))
-  const { data: operatorReviews } = useQuery({
-    ...operatorReviewsQueryOptions(storefront.operatorId),
+  // #1449: paginated "load more" over the operator's reviews. Flatten the pages into one
+  // list for render; the cursor lives in react-query's page params, not component state.
+  const {
+    data: reviewPages,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    ...operatorReviewsInfiniteQueryOptions(storefront.operatorId),
     enabled: reviewsEnabled,
   })
+  const operatorReviews = reviewPages?.pages.flatMap((page) => page.reviews)
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -137,7 +145,16 @@ export function StorefrontDetailView({
         </section>
       )}
 
-      {operatorReviews !== undefined ? <ReviewList reviews={operatorReviews} /> : null}
+      {operatorReviews !== undefined ? (
+        <ReviewList
+          reviews={operatorReviews}
+          hasMore={hasNextPage}
+          onLoadMore={() => {
+            void fetchNextPage()
+          }}
+          isLoadingMore={isFetchingNextPage}
+        />
+      ) : null}
     </div>
   )
 }

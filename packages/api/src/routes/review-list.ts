@@ -1,7 +1,8 @@
 import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
 import { Hono } from 'hono'
+import { decodeReviewCursor } from '../services/review-cursor'
 import type { ReviewListService } from '../services/review-list'
-import { ok } from './helpers'
+import { fail, ok } from './helpers'
 import { rateLimitByIp } from './rate-limit'
 
 /**
@@ -25,11 +26,19 @@ export function createReviewListRoutes(
 
   return app
     .get('/reviews/for/operators/:id', async (c) => {
-      const reviews = await service.forOperator(c.req.param('id'))
-      return ok(c, { reviews })
+      // A present-but-malformed cursor is a 400 (parsing untrusted query input is an HTTP
+      // concern); `after` stays typed via inference, so no repository type is imported here.
+      const raw = c.req.query('after')
+      const after = raw ? decodeReviewCursor(raw) : undefined
+      if (raw && !after) return fail(c, 'INVALID_CURSOR', 400)
+      const page = await service.forOperator(c.req.param('id'), after)
+      return ok(c, page)
     })
     .get('/reviews/for/vehicles/:id', async (c) => {
-      const reviews = await service.forVehicle(c.req.param('id'))
-      return ok(c, { reviews })
+      const raw = c.req.query('after')
+      const after = raw ? decodeReviewCursor(raw) : undefined
+      if (raw && !after) return fail(c, 'INVALID_CURSOR', 400)
+      const page = await service.forVehicle(c.req.param('id'), after)
+      return ok(c, page)
     })
 }
