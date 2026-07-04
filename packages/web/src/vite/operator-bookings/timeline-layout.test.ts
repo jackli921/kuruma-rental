@@ -92,6 +92,7 @@ describe('buildTimelineLayout', () => {
         end: Date.UTC(2027, 0, 14),
         band: 'booked',
         status: 'CONFIRMED',
+        interactive: true,
       },
     ])
   })
@@ -146,6 +147,34 @@ describe('buildTimelineLayout', () => {
     const { items: i2 } = build([row({ renterName: null, renterEmail: null })])
     expect(i2[0]?.title).toBe('KUR-1')
   })
+
+  // #1349 a11y: a booking must be exactly ONE keyboard/screen-reader stop. When both
+  // its booked band and turnaround tail render, the booked band is the interactive one
+  // and the tail is suppressed (aria-hidden, non-focusable) so a keyboard user does not
+  // land on two bars that open the same trip.
+  it('marks the booked band interactive and its turnaround tail non-interactive', () => {
+    const { items } = build([row({ effectiveEndAt: iso(2027, 1, 16) })])
+    const booked = items.find((i) => i.type === 'booking' && i.band === 'booked')
+    const tail = items.find((i) => i.type === 'booking' && i.band === 'turnaround')
+    expect(booked?.interactive).toBe(true)
+    expect(tail?.interactive).toBe(false)
+  })
+
+  // But a tail that is its booking's ONLY in-window bar (the booked band was clipped
+  // out before the window) must stay interactive — else the booking is visible on
+  // screen yet unreachable by keyboard, a worse failure than the double-stop.
+  it('keeps a lone surviving turnaround tail interactive (booked band clipped out)', () => {
+    const { items } = build([
+      row({ startAt: iso(2027, 1, 4), endAt: iso(2027, 1, 8), effectiveEndAt: iso(2027, 1, 12) }),
+    ])
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ band: 'turnaround', interactive: true })
+  })
+
+  it('marks a scheduled block interactive (always its own keyboard stop)', () => {
+    const { items } = build([], FLEET, [block()])
+    expect(items[0]?.interactive).toBe(true)
+  })
 })
 
 describe('buildTimelineLayout blocks', () => {
@@ -161,6 +190,7 @@ describe('buildTimelineLayout blocks', () => {
         start: Date.UTC(2027, 0, 12),
         end: Date.UTC(2027, 0, 14),
         kind: 'MAINTENANCE',
+        interactive: true,
       },
     ])
   })

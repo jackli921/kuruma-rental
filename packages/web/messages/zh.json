@@ -293,6 +293,11 @@
             "empty": "暂无待分配的浮动预订",
             "overflowLabel": "至少 {limit} 项待分配（仅显示前 {limit} 项）"
           }
+        },
+        "board": {
+          "label": "车队排期板，{range}",
+          "bookingBar": "{vehicle}。预订：{renter}，{status}，{range}",
+          "blockBar": "{vehicle}。{kind}封锁：{title}，{range}"
         }
       },
       "detail": {

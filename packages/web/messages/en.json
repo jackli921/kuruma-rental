@@ -293,6 +293,11 @@
             "empty": "No floats awaiting assignment",
             "overflowLabel": "At least {limit} awaiting assignment (showing the first {limit})"
           }
+        },
+        "board": {
+          "label": "Fleet planning board, {range}",
+          "bookingBar": "{vehicle}. Booking: {renter}, {status}, {range}",
+          "blockBar": "{vehicle}. {kind} block: {title}, {range}"
         }
       },
       "detail": {

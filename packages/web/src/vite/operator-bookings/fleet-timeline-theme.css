@@ -17,6 +17,17 @@
   line-height: 1.3;
 }
 
+/* #1349 keyboard focus: a clear ring on the focused bar so a keyboard user can see
+   which booking/block is active. :focus-visible keeps it keyboard-only (no ring on a
+   mouse click). An outline (not box-shadow) is unaffected by the !important bar
+   backgrounds below and survives forced-colors/high-contrast mode; the raised z-index
+   keeps the ring above adjacent absolutely-positioned bars instead of being clipped. */
+.rct-item:focus-visible {
+  outline: 2px solid oklch(0.45 0.19 264);
+  outline-offset: 2px;
+  z-index: 90;
+}
+
 /* Status-based bar colors — same tokens as the rbc calendar so the two views read
    identically. */
 .rct-item.rbc-event--confirmed {
