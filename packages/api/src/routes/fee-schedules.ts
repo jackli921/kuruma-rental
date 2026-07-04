@@ -108,6 +108,7 @@ export function createFeeScheduleRoutes(
         toCallerContext(user),
         idResult.id,
         stripUndefined(parsed.data),
+        c.req.query('operatorId'),
       )
       if (!result.ok) return failResult(c, result)
       return ok(c, result.feeSchedule)
@@ -119,7 +120,11 @@ export function createFeeScheduleRoutes(
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
 
-      const result = await service.archive(toCallerContext(user), idResult.id)
+      const result = await service.archive(
+        toCallerContext(user),
+        idResult.id,
+        c.req.query('operatorId'),
+      )
       if (!result.ok) return failResult(c, result)
       return ok(c, result.feeSchedule)
     })

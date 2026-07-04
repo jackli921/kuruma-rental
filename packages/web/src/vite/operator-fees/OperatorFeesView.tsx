@@ -26,11 +26,12 @@ interface OperatorFeesViewProps {
 // In all-mode (a cross-operator reader with no picked operator) the page is
 // read-only: `canWrite` is false so no write affordances render, and
 // `showOperator` turns on the per-row operator label so the mixed-tenant list is
-// legible. P1b: the fee create path is NOT threaded `pickedOperatorId` — only a
-// real operator session writes (the route forces `canWrite` to operator-only
-// until slice 3 scopes the class dropdown), and the server stamps the tenant.
+// legible. #1442: writes are picker-aware — a picker admin who has chosen an
+// operator (`canWrite` true, `pickedOperatorId` set) threads that id into the
+// create body and the update/archive `?operatorId=` so the write binds to the
+// chosen tenant; an operator session omits it and is tenant-clamped server-side.
 export function OperatorFeesView({ fees, classes, scope }: OperatorFeesViewProps) {
-  const { canWrite, showOperator, operatorNameById } = scope
+  const { pickedOperatorId, canWrite, showOperator, operatorNameById } = scope
   const t = useTranslations('business.fees')
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<FeeScheduleData | null>(null)
@@ -80,9 +81,23 @@ export function OperatorFeesView({ fees, classes, scope }: OperatorFeesViewProps
 
       {canWrite ? (
         <>
-          <AddFeeDialog open={showAdd} onOpenChange={setShowAdd} classes={classes} />
-          <EditFeeDialog fee={editing} onOpenChange={() => setEditing(null)} classes={classes} />
-          <ArchiveFeeDialog fee={archiving} onOpenChange={() => setArchiving(null)} />
+          <AddFeeDialog
+            open={showAdd}
+            onOpenChange={setShowAdd}
+            classes={classes}
+            pickedOperatorId={pickedOperatorId}
+          />
+          <EditFeeDialog
+            fee={editing}
+            onOpenChange={() => setEditing(null)}
+            classes={classes}
+            pickedOperatorId={pickedOperatorId}
+          />
+          <ArchiveFeeDialog
+            fee={archiving}
+            onOpenChange={() => setArchiving(null)}
+            pickedOperatorId={pickedOperatorId}
+          />
         </>
       ) : null}
     </div>

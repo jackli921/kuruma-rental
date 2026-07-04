@@ -274,3 +274,70 @@ describe('FeeScheduleService — findAll enforces cross-operator read scope (aud
     expect(mine.map((f) => f.operatorId)).toEqual([opA])
   })
 })
+
+// #1442: PATCH/DELETE bind to the operator a picker admin acts as — parity with
+// bookings/fleet (#1260). A bypass admin reads every operator's fees by raw id, so
+// an unbound write could touch any tenant's fee; require it to name the operator it
+// picked and forbid a mismatch. An operator session is already tenant-clamped by the
+// read scope, so it passes through with no acting id.
+describe('FeeScheduleService — update/archive bind to the picked operator (#1442)', () => {
+  const adminCtx: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+  let repo: InMemoryFeeScheduleRepository
+  let service: FeeScheduleService
+
+  beforeEach(() => {
+    repo = new InMemoryFeeScheduleRepository()
+    service = new FeeScheduleService(repo)
+  })
+
+  async function seedFeeForOpA(): Promise<string> {
+    const created = await service.create(ctxFor(opA), createInput(opA))
+    if (!created.ok) throw new Error('seed failed')
+    return created.feeSchedule.id
+  }
+
+  it('rejects an admin update with no picked operator (422 OPERATOR_REQUIRED)', async () => {
+    const id = await seedFeeForOpA()
+    const result = await service.update(adminCtx, id, { amountJpy: 5000 }, undefined)
+    expect(result).toMatchObject({ ok: false, status: 422, code: 'OPERATOR_REQUIRED' })
+  })
+
+  it('404s an admin update whose picked operator does not own the fee', async () => {
+    const id = await seedFeeForOpA()
+    const result = await service.update(adminCtx, id, { amountJpy: 5000 }, opB)
+    expect(result).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('applies an admin update bound to the fee-owning operator', async () => {
+    const id = await seedFeeForOpA()
+    const result = await service.update(adminCtx, id, { amountJpy: 5000 }, opA)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.feeSchedule.amountJpy).toBe(5000)
+  })
+
+  it('lets an operator session update its own fee with no acting id', async () => {
+    const id = await seedFeeForOpA()
+    const result = await service.update(ctxFor(opA), id, { amountJpy: 5000 })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.feeSchedule.amountJpy).toBe(5000)
+  })
+
+  it('rejects an admin archive with no picked operator (422 OPERATOR_REQUIRED)', async () => {
+    const id = await seedFeeForOpA()
+    const result = await service.archive(adminCtx, id, undefined)
+    expect(result).toMatchObject({ ok: false, status: 422, code: 'OPERATOR_REQUIRED' })
+  })
+
+  it('404s an admin archive whose picked operator does not own the fee', async () => {
+    const id = await seedFeeForOpA()
+    const result = await service.archive(adminCtx, id, opB)
+    expect(result).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('archives a fee bound to the fee-owning operator', async () => {
+    const id = await seedFeeForOpA()
+    const result = await service.archive(adminCtx, id, opA)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.feeSchedule.status).toBe('ARCHIVED')
+  })
+})
