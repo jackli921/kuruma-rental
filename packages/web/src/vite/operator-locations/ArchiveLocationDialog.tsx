@@ -20,18 +20,25 @@ import { useTranslations } from 'use-intl'
 interface ArchiveLocationDialogProps {
   location: OperatorLocation | null
   onOpenChange: (open: boolean) => void
+  // #1456: the tenant a picker admin acts as; threaded as ?operatorId= so the API
+  // binds the DELETE to it. Undefined for an operator session (auto-scoped).
+  pickedOperatorId?: string | undefined
 }
 
 // #529 slice 4: soft-archive a location. The API refuses (#412) when live
 // bookings still point at it, returning a count this dialog renders localized so
 // the owner knows how many to reassign/cancel first; any other failure shows its
 // raw message. Closing resets the mutation so a prior refusal never lingers.
-export function ArchiveLocationDialog({ location, onOpenChange }: ArchiveLocationDialogProps) {
+export function ArchiveLocationDialog({
+  location,
+  onOpenChange,
+  pickedOperatorId,
+}: ArchiveLocationDialogProps) {
   const t = useTranslations('business.locations')
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
   const mutation = useMutation({
-    mutationFn: (id: string) => archiveLocation(id, csrfToken),
+    mutationFn: (id: string) => archiveLocation(id, csrfToken, pickedOperatorId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LOCATIONS_QUERY_KEY })
       onOpenChange(false)
