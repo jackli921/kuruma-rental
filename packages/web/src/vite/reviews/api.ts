@@ -175,6 +175,9 @@ const publicReviewDtoSchema = z.object({
   subRatings: z.record(z.string(), z.number()),
   comment: z.string().nullable(),
   publishedAt: z.string(),
+  // #1450: the reviewer's first name only (server-derived; the full name never crosses the
+  // wire), or null for the anonymous fallback. Required so a dropped field fails at the seam.
+  reviewerFirstName: z.string().nullable(),
 })
 
 /** Public review wire shape from GET /reviews/for/operators/:id.

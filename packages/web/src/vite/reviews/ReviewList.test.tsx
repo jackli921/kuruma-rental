@@ -12,6 +12,7 @@ const sample: PublicReviewDto[] = [
     subRatings: { cleanliness: 4 },
     comment: 'Spotless car',
     publishedAt: '2026-06-02T03:00:00.000Z',
+    reviewerFirstName: null,
   },
 ]
 
@@ -52,6 +53,22 @@ describe('ReviewList', () => {
     vi.stubEnv('VITE_FEATURE_REVIEWS', 'true')
     renderList([])
     expect(screen.getByText('No reviews yet')).toBeInTheDocument()
+  })
+
+  // #1450 reviewer first-name projection.
+  it("shows the reviewer's first name when the server provides one", () => {
+    vi.stubEnv('VITE_FEATURE_REVIEWS', 'true')
+    renderList([{ ...sample[0]!, reviewerFirstName: 'Jack' }])
+    expect(screen.getByText('Jack')).toBeInTheDocument()
+    // The anonymous fallback must NOT also render for a named reviewer.
+    expect(screen.queryByText('Verified renter')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the anonymous label when reviewerFirstName is null', () => {
+    vi.stubEnv('VITE_FEATURE_REVIEWS', 'true')
+    renderList(sample) // sample carries reviewerFirstName: null
+    expect(screen.getByText('Verified renter')).toBeInTheDocument()
+    expect(screen.queryByText('Jack')).not.toBeInTheDocument()
   })
 
   // #1449 "load more" affordance.

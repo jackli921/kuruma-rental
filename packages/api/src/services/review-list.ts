@@ -1,6 +1,7 @@
-import type { ReviewListCursor, ReviewRepository } from '../repositories/types'
+import type { ReviewListCursor, ReviewRepository, UserRepository } from '../repositories/types'
 import type { Review } from '../stores'
 import { encodeReviewCursor } from './review-cursor'
+import { toReviewerFirstName } from './reviewer-name'
 
 /**
  * Public review-list read service (review-display slice, #1067). Returns the newest
@@ -20,6 +21,9 @@ export interface PublicReview {
   readonly comment: string | null
   /** ISO 8601 (UTC). Non-null — the repo only returns published rows. */
   readonly publishedAt: string
+  /** #1450: the reviewer's FIRST name only (never the full name — see toReviewerFirstName),
+   *  or null when the author has no usable name. Null renders as the anonymous label. */
+  readonly reviewerFirstName: string | null
 }
 
 /** One page of the review list plus the keyset cursor for the next one (#1449). */
@@ -34,7 +38,12 @@ export interface ReviewPage {
 export const MAX_REVIEW_LIST = 20
 
 export class ReviewListService {
-  constructor(private readonly reviewRepo: ReviewRepository) {}
+  constructor(
+    private readonly reviewRepo: ReviewRepository,
+    // Narrow slice of UserRepository: the service resolves reviewer names but must never
+    // touch the rest of a user row — see toReviewerFirstName for the privacy boundary (#1450).
+    private readonly userRepo: Pick<UserRepository, 'findByIds'>,
+  ) {}
 
   forOperator(operatorId: string, after?: ReviewListCursor): Promise<ReviewPage> {
     return this.list('OPERATOR', operatorId, after)
@@ -59,7 +68,11 @@ export class ReviewListService {
     )
     const hasMore = rows.length > MAX_REVIEW_LIST
     const page = hasMore ? rows.slice(0, MAX_REVIEW_LIST) : rows
-    const reviews = page.map(toPublicReview)
+    // Resolve every author's first name in ONE batch lookup (no N+1), then project.
+    const firstNameByUserId = await this.resolveFirstNames(page)
+    const reviews = page.map((r) =>
+      toPublicReview(r, firstNameByUserId.get(r.authorUserId) ?? null),
+    )
     const last = page.at(-1)
     // The keyset cursor is only meaningful when a further page exists. `last.publishedAt`
     // is non-null (toPublicReview above would have thrown otherwise), but guard for the type.
@@ -69,9 +82,17 @@ export class ReviewListService {
         : null
     return { reviews, nextCursor }
   }
+
+  /** Map author userId -> display first name for one page. A single findByIds over the page's
+   *  distinct authors; a missing author (deleted user) simply never enters the map -> null. */
+  private async resolveFirstNames(page: Review[]): Promise<Map<string, string | null>> {
+    const authorIds = [...new Set(page.map((r) => r.authorUserId))]
+    const users = await this.userRepo.findByIds(authorIds)
+    return new Map(users.map((u) => [u.id, toReviewerFirstName(u.name)]))
+  }
 }
 
-function toPublicReview(r: Review): PublicReview {
+function toPublicReview(r: Review, reviewerFirstName: string | null): PublicReview {
   // The repo only returns published rows, so publishedAt is non-null. Assert the
   // invariant loudly rather than inventing a fallback date that would silently corrupt output.
   if (r.publishedAt === null) {
@@ -83,5 +104,6 @@ function toPublicReview(r: Review): PublicReview {
     subRatings: { ...r.subRatings },
     comment: r.comment,
     publishedAt: r.publishedAt.toISOString(),
+    reviewerFirstName,
   }
 }

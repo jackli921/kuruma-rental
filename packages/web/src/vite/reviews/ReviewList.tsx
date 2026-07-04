@@ -45,7 +45,10 @@ export function ReviewList({ reviews, hasMore, onLoadMore, isLoadingMore }: Revi
                   })}
                 </span>
               </div>
-              <p className="mt-1 text-sm font-medium text-muted-foreground">{t('reviewer')}</p>
+              <p className="mt-1 text-sm font-medium text-muted-foreground">
+                {/* #1450: the server-derived first name, or the anonymous label when absent. */}
+                {r.reviewerFirstName ?? t('reviewer')}
+              </p>
               {r.comment ? <p className="mt-2 whitespace-pre-line">{r.comment}</p> : null}
               {Object.keys(r.subRatings).length > 0 ? (
                 <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
