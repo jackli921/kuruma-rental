@@ -39,7 +39,35 @@ type Ok<T> = { readonly ok: true } & T
 
 export type SubmitResult = Ok<{ review: Review }> | Fail
 export type EditResult = Ok<{ review: Review }> | Fail
-export type GetReviewsResult = Ok<{ reviews: Review[] }> | Fail
+
+/** The participant-facing projection of a review (#1086 follow-up). The double-blind read
+ *  returns the caller's own rows plus revealed counterparty rows — but the raw entity also
+ *  carries internal moderation state (moderatedBy is a platform admin's userId; moderationStatus
+ *  and moderatedAt are operator/audit-only) plus authorUserId, operatorId and the reveal
+ *  deadline. Allowlist exactly the fields the client reads so none of that crosses the wire. */
+export interface ParticipantReview {
+  readonly id: Review['id']
+  readonly bookingId: Review['bookingId']
+  readonly authorRole: Review['authorRole']
+  readonly subject: Review['subject']
+  readonly overall: Review['overall']
+  readonly comment: Review['comment']
+  readonly publishedAt: Review['publishedAt']
+}
+
+function toParticipantReview(r: Review): ParticipantReview {
+  return {
+    id: r.id,
+    bookingId: r.bookingId,
+    authorRole: r.authorRole,
+    subject: r.subject,
+    overall: r.overall,
+    comment: r.comment,
+    publishedAt: r.publishedAt,
+  }
+}
+
+export type GetReviewsResult = Ok<{ reviews: ParticipantReview[] }> | Fail
 export type ReportResult = Ok<{ report: ReviewReport }> | Fail
 export interface SweepSummary {
   readonly scanned: number
@@ -280,7 +308,7 @@ export class ReviewService {
       if (r.moderationStatus !== 'VISIBLE') return false
       return r.publishedAt !== null || (role === 'OPERATOR' && r.authorRole === 'OPERATOR')
     })
-    return { ok: true, reviews: visible }
+    return { ok: true, reviews: visible.map(toParticipantReview) }
   }
 
   /** Flag a review for moderator attention (#1086). Only a publicly-visible review
