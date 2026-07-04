@@ -71,6 +71,11 @@ export const reviews = pgTable(
     revealDeadlineAt: timestamp('revealDeadlineAt', { withTimezone: true }).notNull(),
     submittedAt: timestamp('submittedAt', { withTimezone: true }).notNull().defaultNow(),
     // The reveal flag: NULL until published (both submitted OR window elapsed).
+    // KEYSET INVARIANT (#1449): stamped ONLY from a JS Date (ms precision) via
+    // ReviewRepository.publishMany — never a DB clock. The public-list "load more" cursor
+    // round-trips this through toISOString() (ms), so switching to .defaultNow()/
+    // clock_timestamp() (microsecond precision) would silently skip boundary rows within a
+    // same-instant reveal batch. Keep the write path JS-Date-only. See services/review-cursor.ts.
     publishedAt: timestamp('publishedAt', { withTimezone: true }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),

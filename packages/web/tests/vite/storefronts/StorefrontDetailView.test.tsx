@@ -1,4 +1,4 @@
-import { operatorReviewsQueryOptions } from '@/vite/reviews'
+import { type PublicReviewDto, operatorReviewsInfiniteQueryOptions } from '@/vite/reviews'
 import { StorefrontDetailView } from '@/vite/storefronts/StorefrontDetailView'
 import type {
   AvailableVehicleData,
@@ -138,6 +138,19 @@ function renderDetail(
   )
 }
 
+// Seed the infinite-query cache the shape useInfiniteQuery expects (pages + pageParams);
+// a plain array is the wrong shape now that the view pages reviews via a cursor (#1449).
+function seedReviews(
+  qc: QueryClient,
+  reviews: PublicReviewDto[],
+  nextCursor: string | null = null,
+) {
+  qc.setQueryData(operatorReviewsInfiniteQueryOptions('op-best').queryKey, {
+    pages: [{ reviews, nextCursor }],
+    pageParams: [null],
+  })
+}
+
 describe('StorefrontDetailView', () => {
   // Reviews ships OFF for the beta MVP; rating badges only render where the flag is on.
   beforeEach(() => vi.stubEnv('VITE_FEATURE_REVIEWS', 'true'))
@@ -219,9 +232,7 @@ describe('StorefrontDetailView', () => {
   })
 
   it('renders the reviews section (empty state) when the REVIEWS flag is on', () => {
-    renderDetail(makeDetail([]), {
-      seedFn: (qc) => qc.setQueryData(operatorReviewsQueryOptions('op-best').queryKey, []),
-    })
+    renderDetail(makeDetail([]), { seedFn: (qc) => seedReviews(qc, []) })
     expect(screen.getByRole('heading', { name: 'Reviews' })).toBeInTheDocument()
     expect(screen.getByText('No reviews yet')).toBeInTheDocument()
   })
@@ -233,17 +244,28 @@ describe('StorefrontDetailView', () => {
   })
 
   it('wires pre-seeded reviews from the query cache into ReviewList', () => {
-    const review = {
+    const review: PublicReviewDto = {
       id: 'r1',
       overall: 5,
       subRatings: {},
       comment: 'Fantastic trip',
       publishedAt: '2026-06-01T00:00:00.000Z',
     }
-    renderDetail(makeDetail([]), {
-      seedFn: (qc) => qc.setQueryData(operatorReviewsQueryOptions('op-best').queryKey, [review]),
-    })
+    renderDetail(makeDetail([]), { seedFn: (qc) => seedReviews(qc, [review]) })
     expect(screen.getByText('Fantastic trip')).toBeInTheDocument()
+  })
+
+  it('shows the "load more" button when the first review page has a nextCursor (#1449)', () => {
+    const review: PublicReviewDto = {
+      id: 'r1',
+      overall: 4,
+      subRatings: {},
+      comment: 'Good ride',
+      publishedAt: '2026-06-01T00:00:00.000Z',
+    }
+    // A non-null nextCursor means react-query reports hasNextPage → the button renders.
+    renderDetail(makeDetail([]), { seedFn: (qc) => seedReviews(qc, [review], 'NEXT_PAGE_TOKEN') })
+    expect(screen.getByRole('button', { name: 'Show more reviews' })).toBeInTheDocument()
   })
 
   // #464: class-combo deals render in their own section, each linking into the

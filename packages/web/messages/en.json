@@ -1916,7 +1916,9 @@
       "empty": "No reviews yet",
       "reviewer": "Verified renter",
       "overallAria": "{n} out of 5 stars",
-      "dimensionValue": "{n}/5"
+      "dimensionValue": "{n}/5",
+      "loadMore": "Show more reviews",
+      "loadingMore": "Loading…"
     }
   },
   "currency": {

@@ -6,7 +6,7 @@ import {
   type ReviewAuthorRole,
   type ReviewSubject,
 } from '@kuruma/shared/enums'
-import { queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
 
 // #1083: the two subjects a renter rates after a trip, in form order. The operator
@@ -182,19 +182,38 @@ const publicReviewDtoSchema = z.object({
  *  subRatings is the dimension→stars map ({} when no sub-dimensions rated). */
 export type PublicReviewDto = z.infer<typeof publicReviewDtoSchema>
 
-/** GET /reviews/for/operators/:id — public, anonymous (no credentials needed). */
-export async function fetchOperatorReviews(operatorId: string): Promise<PublicReviewDto[]> {
-  const res = await fetch(
-    `${getApiBaseUrl()}/reviews/for/operators/${encodeURIComponent(operatorId)}`,
-  )
-  const { reviews } = await unwrap(res, z.object({ reviews: z.array(publicReviewDtoSchema) }))
-  return reviews
+// One page of reviews + the opaque keyset cursor for the next (#1449). `nextCursor` is
+// required (null on the last page) so a dropped field fails at the seam, not as a silent
+// "no more pages" that would truncate the list.
+const operatorReviewPageSchema = z.object({
+  reviews: z.array(publicReviewDtoSchema),
+  nextCursor: z.string().nullable(),
+})
+
+/** A page of the public operator review list. */
+export type OperatorReviewPage = z.infer<typeof operatorReviewPageSchema>
+
+/** GET /reviews/for/operators/:id[?after=cursor] — public, anonymous (no credentials).
+ *  `after` is the opaque token from a previous page's nextCursor; omit for the first page. */
+export async function fetchOperatorReviews(
+  operatorId: string,
+  after?: string | null,
+): Promise<OperatorReviewPage> {
+  const base = `${getApiBaseUrl()}/reviews/for/operators/${encodeURIComponent(operatorId)}`
+  const url = after ? `${base}?after=${encodeURIComponent(after)}` : base
+  const res = await fetch(url)
+  return unwrap(res, operatorReviewPageSchema)
 }
 
-export function operatorReviewsQueryOptions(operatorId: string) {
-  return queryOptions({
+/** Infinite ("load more") query over the operator review list (#1449). The page param IS
+ *  the cursor: null for the first page, then each page's nextCursor until it comes back
+ *  null (hasNextPage=false). Same cache key prefix as the aggregate/badge reads. */
+export function operatorReviewsInfiniteQueryOptions(operatorId: string) {
+  return infiniteQueryOptions({
     queryKey: ['reviews', 'list', 'operators', operatorId] as const,
-    queryFn: () => fetchOperatorReviews(operatorId),
+    queryFn: ({ pageParam }) => fetchOperatorReviews(operatorId, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
   })
 }
 

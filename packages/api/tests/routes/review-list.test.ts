@@ -1,15 +1,25 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../../src/index'
 import { InMemoryReviewRepository } from '../../src/repositories/in-memory/review'
-import type { NewReview } from '../../src/repositories/types'
+import type { NewReview, ReviewListCursor } from '../../src/repositories/types'
 import { createReviewListRoutes } from '../../src/routes/review-list'
-import type { PublicReview, ReviewListService } from '../../src/services/review-list'
+import { encodeReviewCursor } from '../../src/services/review-cursor'
+import type { PublicReview, ReviewListService, ReviewPage } from '../../src/services/review-list'
 import { setupAuthEnv } from '../helpers/auth'
 
-function appWith(reviews: PublicReview[]) {
+type Captured = { id: string; after?: ReviewListCursor }
+
+function appWith(
+  page: Partial<ReviewPage> & { reviews: PublicReview[] },
+  onCall?: (c: Captured) => void,
+) {
+  const respond = async (id: string, after?: ReviewListCursor): Promise<ReviewPage> => {
+    onCall?.({ id, after })
+    return { reviews: page.reviews, nextCursor: page.nextCursor ?? null }
+  }
   const service = {
-    forOperator: async () => reviews,
-    forVehicle: async () => reviews,
+    forOperator: (id: string, after?: ReviewListCursor) => respond(id, after),
+    forVehicle: (id: string, after?: ReviewListCursor) => respond(id, after),
   } as unknown as ReviewListService
   return createReviewListRoutes(service)
 }
@@ -46,30 +56,72 @@ function published(overrides: Partial<NewReview> = {}): NewReview {
 }
 
 describe('GET /reviews/for/operators/:id', () => {
-  it('returns the published reviews for the operator', async () => {
-    const res = await appWith([sample]).request('/reviews/for/operators/op1')
+  it('returns the published reviews plus a nextCursor', async () => {
+    const res = await appWith({ reviews: [sample] }).request('/reviews/for/operators/op1')
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ success: true, data: { reviews: [sample] } })
+    expect(await res.json()).toEqual({
+      success: true,
+      data: { reviews: [sample], nextCursor: null },
+    })
   })
 
   it('returns an empty list (200) when the operator has none', async () => {
-    const res = await appWith([]).request('/reviews/for/operators/op1')
+    const res = await appWith({ reviews: [] }).request('/reviews/for/operators/op1')
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ success: true, data: { reviews: [] } })
+    expect(await res.json()).toEqual({ success: true, data: { reviews: [], nextCursor: null } })
+  })
+
+  it('surfaces a non-null nextCursor from the service verbatim', async () => {
+    const res = await appWith({ reviews: [sample], nextCursor: 'NEXT_TOKEN' }).request(
+      '/reviews/for/operators/op1',
+    )
+    expect((await res.json()).data.nextCursor).toBe('NEXT_TOKEN')
+  })
+
+  it('decodes a valid ?after cursor and forwards it to the service', async () => {
+    const onCall = vi.fn()
+    const cursor = { publishedAt: new Date('2026-06-01T00:00:00.000Z'), id: 'cur1' }
+    const token = encodeReviewCursor(cursor)
+    const res = await appWith({ reviews: [] }, onCall).request(
+      `/reviews/for/operators/op1?after=${encodeURIComponent(token)}`,
+    )
+    expect(res.status).toBe(200)
+    expect(onCall).toHaveBeenCalledWith({ id: 'op1', after: cursor })
+  })
+
+  it('rejects a malformed ?after cursor with 400 and never calls the service', async () => {
+    const onCall = vi.fn()
+    const res = await appWith({ reviews: [sample] }, onCall).request(
+      '/reviews/for/operators/op1?after=%40%40not-base64',
+    )
+    expect(res.status).toBe(400)
+    expect(onCall).not.toHaveBeenCalled()
   })
 })
 
 describe('GET /reviews/for/vehicles/:id', () => {
-  it('returns the published reviews for the vehicle', async () => {
-    const res = await appWith([sample]).request('/reviews/for/vehicles/v1')
+  it('returns the published reviews plus a nextCursor', async () => {
+    const res = await appWith({ reviews: [sample] }).request('/reviews/for/vehicles/v1')
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ success: true, data: { reviews: [sample] } })
+    expect(await res.json()).toEqual({
+      success: true,
+      data: { reviews: [sample], nextCursor: null },
+    })
   })
 
-  it('returns an empty list (200) when the vehicle has none', async () => {
-    const res = await appWith([]).request('/reviews/for/vehicles/v1')
+  it('forwards a valid ?after cursor to forVehicle', async () => {
+    const onCall = vi.fn()
+    const cursor = { publishedAt: new Date('2026-05-05T00:00:00.000Z'), id: 'v-cur' }
+    const res = await appWith({ reviews: [] }, onCall).request(
+      `/reviews/for/vehicles/v1?after=${encodeURIComponent(encodeReviewCursor(cursor))}`,
+    )
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ success: true, data: { reviews: [] } })
+    expect(onCall).toHaveBeenCalledWith({ id: 'v1', after: cursor })
+  })
+
+  it('rejects a malformed ?after cursor with 400', async () => {
+    const res = await appWith({ reviews: [] }).request('/reviews/for/vehicles/v1?after=%40bad')
+    expect(res.status).toBe(400)
   })
 })
 
