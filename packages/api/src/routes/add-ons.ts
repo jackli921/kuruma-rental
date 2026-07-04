@@ -119,6 +119,8 @@ export function createAddOnRoutes(
         idResult.id,
         stripUndefined(parsed.data),
         locale.locale,
+        // #1456: bind a bypass-admin edit to the operator it picked (?operatorId=).
+        c.req.query('operatorId'),
       )
       if (!result.ok) return failResult(c, result)
       return ok(c, result.option)
@@ -133,7 +135,13 @@ export function createAddOnRoutes(
       const locale = parseLocale(c)
       if (!locale.ok) return locale.response
 
-      const result = await service.archive(toCallerContext(user), idResult.id, locale.locale)
+      const result = await service.archive(
+        toCallerContext(user),
+        idResult.id,
+        locale.locale,
+        // #1456: bind a bypass-admin archive to the operator it picked (?operatorId=).
+        c.req.query('operatorId'),
+      )
       if (!result.ok) return failResult(c, result)
       return ok(c, result.option)
     })

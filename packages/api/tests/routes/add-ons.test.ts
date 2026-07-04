@@ -284,4 +284,54 @@ describe('Add-on routes — platform-admin scoping (bypass-precedence)', () => {
     expect(res.status).toBe(201)
     expect((await res.json()).data.operatorId).toBe(OP_A)
   })
+
+  // #1456: PATCH/DELETE bind a bypass admin's write to the operator it picked via
+  // ?operatorId= — parity with fees (#1442) and locations. No pick -> 422; wrong
+  // pick -> 404 (no existence oracle); right pick -> the write applies.
+  const PATCH = (app: Hono, id: string, qs = '') =>
+    app.request(`/add-ons/${id}${qs}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priceJpy: 3000 }),
+    })
+  const DELETE = (app: Hono, id: string, qs = '') =>
+    app.request(`/add-ons/${id}${qs}`, { method: 'DELETE' })
+
+  it('422 when a PLATFORM_ADMIN edits an add-on without a picked operator', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect((await PATCH(mountFor(repo, 'PLATFORM_ADMIN'), a.id)).status).toBe(422)
+  })
+
+  it('404 when a PLATFORM_ADMIN edits an add-on whose picked operator does not own it', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect(
+      (await PATCH(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_B}`)).status,
+    ).toBe(404)
+  })
+
+  it('200 when a PLATFORM_ADMIN edits an add-on bound to its owning operator', async () => {
+    const { repo, a } = await seedTwoOperators()
+    const res = await PATCH(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_A}`)
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.priceJpy).toBe(3000)
+  })
+
+  it('422 when a PLATFORM_ADMIN archives an add-on without a picked operator', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect((await DELETE(mountFor(repo, 'PLATFORM_ADMIN'), a.id)).status).toBe(422)
+  })
+
+  it('404 when a PLATFORM_ADMIN archives an add-on whose picked operator does not own it', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect(
+      (await DELETE(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_B}`)).status,
+    ).toBe(404)
+  })
+
+  it('200 when a PLATFORM_ADMIN archives an add-on bound to its owning operator', async () => {
+    const { repo, a } = await seedTwoOperators()
+    const res = await DELETE(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_A}`)
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.status).toBe('ARCHIVED')
+  })
 })
