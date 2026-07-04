@@ -445,6 +445,44 @@ describe('OperatorApplicationService.approve', () => {
       expect(err).toBeInstanceOf(ConflictError)
       expect(err instanceof Error ? err.message : '').toMatch(/already has an operator/)
     })
+
+    it('C1 — refuses re-mint when the email holds a pending invite at another operator', async () => {
+      const { service, repos } = setupApprove()
+      const { id } = await repos.applications.create(base)
+      const approved = await service.approve(id, 'admin-1')
+
+      // The original owner link is lost, so this operator has no live invite left...
+      const own = [...repos.inviteStore.values()].find(
+        (i) => i.operatorId === approved.operatorId && i.status === 'PENDING',
+      )
+      await repos.invites.revoke(own!.id, approved.operatorId)
+      // ...but the same email now holds a live pending invite at a DIFFERENT operator.
+      const other = await repos.operators.create({
+        name: 'Other Co',
+        slug: 'other-co',
+        preAuthHandoffUrl: null,
+      })
+      await repos.invites.create({
+        email: base.contactEmail,
+        operatorId: other.id,
+        role: 'OPERATOR_OWNER',
+        tokenHash: 'deadbeef'.repeat(8),
+        status: 'PENDING',
+        expiresAt: new Date(Date.now() + 86_400_000),
+        invitedByUserId: 'some-admin',
+        acceptedByUserId: null,
+      })
+
+      // findPendingByEmail is cross-operator but revoke is operator-scoped: without the
+      // C1 check the scoped revoke no-ops and a second live invite is minted (#1277).
+      const err = await service.remintInvite(id, 'admin-2').catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(ConflictError)
+      expect(err instanceof Error ? err.message : '').toMatch(/invited/)
+      // The other operator's invite is untouched and NO duplicate was minted.
+      const pending = [...repos.inviteStore.values()].filter((i) => i.status === 'PENDING')
+      expect(pending).toHaveLength(1)
+      expect(pending[0]?.operatorId).toBe(other.id)
+    })
   })
 })
 
