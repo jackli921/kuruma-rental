@@ -1916,7 +1916,9 @@
       "empty": "暂无评价",
       "reviewer": "已验证的租客",
       "overallAria": "5 星中的 {n} 星",
-      "dimensionValue": "{n}/5"
+      "dimensionValue": "{n}/5",
+      "loadMore": "查看更多评价",
+      "loadingMore": "加载中…"
     }
   },
   "currency": {

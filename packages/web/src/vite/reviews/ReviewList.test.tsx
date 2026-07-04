@@ -1,6 +1,6 @@
 import { ReviewList } from '@/vite/reviews/ReviewList'
 import type { PublicReviewDto } from '@/vite/reviews/api'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
@@ -15,10 +15,16 @@ const sample: PublicReviewDto[] = [
   },
 ]
 
-function renderList(reviews: PublicReviewDto[]) {
+type PaginationProps = {
+  hasMore?: boolean
+  onLoadMore?: () => void
+  isLoadingMore?: boolean
+}
+
+function renderList(reviews: PublicReviewDto[], pagination: PaginationProps = {}) {
   return render(
     <IntlProvider locale="en" messages={en} timeZone="Asia/Tokyo">
-      <ReviewList reviews={reviews} />
+      <ReviewList reviews={reviews} {...pagination} />
     </IntlProvider>,
   )
 }
@@ -46,5 +52,31 @@ describe('ReviewList', () => {
     vi.stubEnv('VITE_FEATURE_REVIEWS', 'true')
     renderList([])
     expect(screen.getByText('No reviews yet')).toBeInTheDocument()
+  })
+
+  // #1449 "load more" affordance.
+  it('renders no load-more button when hasMore is false', () => {
+    vi.stubEnv('VITE_FEATURE_REVIEWS', 'true')
+    renderList(sample, { hasMore: false, onLoadMore: vi.fn() })
+    expect(screen.queryByRole('button', { name: 'Show more reviews' })).not.toBeInTheDocument()
+  })
+
+  it('renders a load-more button when hasMore, and calls onLoadMore on click', () => {
+    vi.stubEnv('VITE_FEATURE_REVIEWS', 'true')
+    const onLoadMore = vi.fn()
+    renderList(sample, { hasMore: true, onLoadMore })
+    const button = screen.getByRole('button', { name: 'Show more reviews' })
+    fireEvent.click(button)
+    expect(onLoadMore).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables the button and shows a loading label while fetching the next page', () => {
+    vi.stubEnv('VITE_FEATURE_REVIEWS', 'true')
+    const onLoadMore = vi.fn()
+    renderList(sample, { hasMore: true, onLoadMore, isLoadingMore: true })
+    const button = screen.getByRole('button', { name: 'Loading…' })
+    expect(button).toBeDisabled()
+    fireEvent.click(button)
+    expect(onLoadMore).not.toHaveBeenCalled()
   })
 })
