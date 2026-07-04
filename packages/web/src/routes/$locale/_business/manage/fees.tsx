@@ -1,11 +1,9 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { RouteRetryError } from '@/vite/RouteRetryError'
-import { isOperatorSession } from '@/vite/guards'
 import { operatorClassesQueryOptions } from '@/vite/operator-classes/api'
 import { useOperatorScope } from '@/vite/operator-context'
 import { OperatorFeesView } from '@/vite/operator-fees/OperatorFeesView'
 import { feeSchedulesQueryOptions } from '@/vite/operator-fees/api'
-import { useSession } from '@/vite/session'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
@@ -31,22 +29,20 @@ export const Route = createFileRoute('/$locale/_business/manage/fees')({
   component: OperatorFeesRoute,
 })
 
-// Exported so a route-level test can pin the P1b read-only override (the
-// `feesScope` junction below); the file route mounts it as the component.
+// Exported so a route-level test can pin that the picker scope is forwarded
+// unchanged (#1442 — no read-only override); the file route mounts it as the
+// component.
 export function OperatorFeesRoute() {
   const t = useTranslations('business.fees')
   const scope = useOperatorScope()
-  const { data: session } = useSession()
   const { data: fees } = useSuspenseQuery(feeSchedulesQueryOptions(scope.pickedOperatorId))
   const { data: classes } = useSuspenseQuery(
     operatorClassesQueryOptions({}, scope.pickedOperatorId),
   )
 
-  // Picker-admins stay read-only on fees in this slice. The class lookup is now
-  // scoped for display, but the fee create body still does not stamp the picked
-  // operatorId. A real operator session writes under its own tenant as before.
-  const feesScope = { ...scope, canWrite: isOperatorSession(session ?? null) }
-
+  // #1442: writes are picker-aware now. `scope.canWrite` is `canWriteAsOperator`
+  // (a real operator, OR a picker admin who has chosen an operator), and the
+  // create/update/archive calls bind to `scope.pickedOperatorId` end-to-end.
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
@@ -54,7 +50,7 @@ export function OperatorFeesRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        <OperatorFeesView fees={fees} classes={classes} scope={feesScope} />
+        <OperatorFeesView fees={fees} classes={classes} scope={scope} />
       </div>
     </main>
   )

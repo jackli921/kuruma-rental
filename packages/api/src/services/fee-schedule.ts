@@ -8,7 +8,12 @@ import {
 import type { CallerContext } from '../middleware/auth'
 import { FEE_SCHEDULES_CLASS_FK, PG_ERROR, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type { FeeSchedule, FeeScheduleFilters, FeeScheduleRepository } from '../repositories/types'
-import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
+import {
+  type CrossOperatorRead,
+  applyCrossOperatorReadScope,
+  assertFleetWriteWithinOperator,
+  fleetWriteDenialResult,
+} from '../tenancy'
 
 export type FeeScheduleResult =
   | { ok: true; feeSchedule: FeeSchedule }
@@ -105,9 +110,16 @@ export class FeeScheduleService {
     ctx: CallerContext,
     id: string,
     data: FeeScheduleUpdate,
+    actingOperatorId?: string,
   ): Promise<FeeScheduleResult> {
     const existing = await this.repo.findById(ctx, id)
     if (!existing) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
+
+    // #1442: a bypass admin reads every operator's fees by raw id, so bind this
+    // write to the operator it picked — no pick -> 422, wrong pick -> 404. An
+    // operator session is already tenant-clamped, so it passes through.
+    const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, NOT_FOUND_MESSAGE)
 
     const mergedFeeType = data.feeType ?? existing.feeType
     const mergedUnit = data.unit ?? existing.unit
@@ -140,9 +152,17 @@ export class FeeScheduleService {
     }
   }
 
-  async archive(ctx: CallerContext, id: string): Promise<FeeScheduleResult> {
+  async archive(
+    ctx: CallerContext,
+    id: string,
+    actingOperatorId?: string,
+  ): Promise<FeeScheduleResult> {
     const existing = await this.repo.findById(ctx, id)
     if (!existing) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
+
+    // #1442: bind the archive to the picked operator (see update()).
+    const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, NOT_FOUND_MESSAGE)
 
     const archived = await this.repo.archive(ctx, id)
     if (!archived) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }

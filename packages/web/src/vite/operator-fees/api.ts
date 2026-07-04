@@ -1,6 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
-import { buildScopeParam } from '@/vite/operator-context'
+import { type WithOperatorId, buildScopeParam } from '@/vite/operator-context'
 import { FEE_SCHEDULE_STATUSES, FEE_TYPES, FEE_UNITS } from '@kuruma/shared/enums'
 import type { FeeScheduleData } from '@kuruma/shared/types/fee-schedule'
 import type {
@@ -79,25 +79,41 @@ async function writeJson(
   return unwrap(res, feeScheduleSchema)
 }
 
+// #1442: a picker admin stamps the picked operatorId into the create BODY (the API
+// requires it for a bypass caller); an operator session omits it (server ignores it).
 export async function createFeeSchedule(
-  input: CreateFeeScheduleInput,
+  input: WithOperatorId<CreateFeeScheduleInput>,
   csrfToken: string,
 ): Promise<FeeScheduleData> {
   return writeJson('/fee-schedules', 'POST', input, csrfToken)
+}
+
+// #1442: PATCH/DELETE bind to the picked operator via `?operatorId=` (the API 422s a
+// bypass caller with no pick, 404s a wrong pick). An operator session omits it and is
+// tenant-clamped server-side. Mirrors #1361's updateBookingStatus.
+function operatorQuery(pickedOperatorId?: string): string {
+  return pickedOperatorId ? `?operatorId=${encodeURIComponent(pickedOperatorId)}` : ''
 }
 
 export async function updateFeeSchedule(
   id: string,
   input: UpdateFeeScheduleInput,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<FeeScheduleData> {
-  return writeJson(`/fee-schedules/${encodeURIComponent(id)}`, 'PATCH', input, csrfToken)
+  const path = `/fee-schedules/${encodeURIComponent(id)}${operatorQuery(pickedOperatorId)}`
+  return writeJson(path, 'PATCH', input, csrfToken)
 }
 
 // Soft-archive (DELETE flips status to ARCHIVED). The CSRF header still rides
 // along because a cookie-authed DELETE is a mutation the guard protects.
-export async function archiveFeeSchedule(id: string, csrfToken: string): Promise<FeeScheduleData> {
-  const res = await fetch(`${getApiBaseUrl()}/fee-schedules/${encodeURIComponent(id)}`, {
+export async function archiveFeeSchedule(
+  id: string,
+  csrfToken: string,
+  pickedOperatorId?: string,
+): Promise<FeeScheduleData> {
+  const path = `/fee-schedules/${encodeURIComponent(id)}${operatorQuery(pickedOperatorId)}`
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: { 'X-CSRF-Token': csrfToken },
