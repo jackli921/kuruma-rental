@@ -28,7 +28,7 @@ Defined in `packages/api/src/middleware/auth.ts`:
 
 | Route | Enforced at | Gate | Rationale |
 |-------|-------------|------|-----------|
-| `POST /bookings` | route + service | any authed user (books for self) | Instant-book. Only `STAFF_ROLES` may set `renterId` / `source=MANUAL` (on-behalf); every non-manual caller is forced to `renterId = self` + `source=DIRECT` by `resolveBookingActor`, so it cannot impersonate another renter nor skip advance-booking-hours via `MANUAL`. Operators are excluded from on-behalf: `UserRepository` is not tenant-scoped, so letting an operator resolve an arbitrary `renterId` reopens the #396 cross-tenant user-enumeration vector. A `RENTER` must accept the liability disclaimer (#613). #1417/#1439: the vehicle/pickup anchor is read with the caller's own `ctx`, so a tenant operator can only reference its OWN fleet (a foreign row returns the same not-found as an unknown id — see the no-oracle principle); non-operators read the cross-operator marketplace unchanged. |
+| `POST /bookings` | route (PARTNER 403) + service | any authed user **except PARTNER** (books for self) | Instant-book. Only `STAFF_ROLES` may set `renterId` / `source=MANUAL` (on-behalf); every non-manual caller is forced to `renterId = self` + `source=DIRECT` by `resolveBookingActor`, so it cannot impersonate another renter nor skip advance-booking-hours via `MANUAL`. Operators are excluded from on-behalf: `UserRepository` is not tenant-scoped, so letting an operator resolve an arbitrary `renterId` reopens the #396 cross-tenant user-enumeration vector. A `RENTER` must accept the liability disclaimer (#613). #1417/#1439: the vehicle/pickup anchor is read with the caller's own `ctx`, so a tenant operator can only reference its OWN fleet (a foreign row returns the same not-found as an unknown id — see the no-oracle principle); non-operators read the cross-operator marketplace unchanged. #1440: a `PARTNER` is rejected 403 at the route — a channel books through its integration, not this manual-create endpoint; the previous pass-through was only *accidentally* safe (its synthetic `partner:api-key` renterId FK-fails), so the exclusion is now explicit (see PARTNER section). |
 | `PATCH /:id/status` | route + service | `MANAGEMENT_READ_ROLES`, then operator-bound | Lifecycle advance (`CONFIRMED → ACTIVE → COMPLETED`) is a physical pickup/return event — operational, so platform support is admitted alongside operators. Row-scoping alone would let a renter self-advance via the raw API and skew dashboards / settlement (#643). #1260: a bypass admin (`bookingReadScope = all`) reads every tenant's bookings, so the service binds the write to the operator it picked via `?operatorId=` — unbound → 422 `OPERATOR_REQUIRED`, non-owning → 404 (no oracle). Tenant operators are clamped by read scope and ignore it. |
 | `POST /:id/cancel` | route (PARTNER 403) + service | renter (own) + operator + bypass-admin operator-bound; PARTNER excluded | Tiered cancellation (72h / 48h / 24h / same-day) is a renter-facing feature, so there is **no management route gate**; the service authorizes renter-own and operator-tenant. #1260: because there is no management gate, a bypass admin could otherwise cancel ANY tenant's booking by raw id (a refund-moving cross-tenant write), so it must bind to the operator it picked via `?operatorId=` — same 422/404 contract as `/status`. Renters (renter scope) and operators (tenant scope) are already clamped by `findById`, so they need no `operatorId`. #1367: a PARTNER's `partner` read scope resolves any `source=TRIP_COM` booking across operators, which the operator-binding guard cannot clamp (a channel is not one operator), so the PARTNER is rejected 403 at the route — cancelling is *managing the order*, which a channel does not do (see PARTNER section). |
 | `POST /:id/substitute` | route | `isOperatorRole` | Choosing which car serves a booking is a **fleet-ownership** decision, named to the operator in the marketplace proposal (§321 / §345). There is no admin substitute UI and the audit `actorId` assumes an operator, so platform staff are deliberately excluded. |
@@ -69,7 +69,12 @@ This shows up in three places, and they must stay consistent:
 - **Lifecycle** (`/status`, `/cancel`, #1260): a bypass admin acting as a
   non-owning operator gets 404 with the caller's own not-found message, not a 403.
 - **Substitute / assign**: a foreign vehicle returns the same 404 as an unknown
-  vehicle.
+  vehicle. Both are `isOperatorRole`-gated (#1440), so no bypass `all` reader
+  reaches them — they need no service-level operator bind the way `/status` and
+  `/cancel` do (those admit the `all` reader and bind via
+  `assertBookingWriteWithinOperator`). If a future change admits platform staff to
+  either route, add the #1260 bind then — the route gate alone would no longer
+  clamp them.
 
 Do not "improve" any of these into a 403 — the ambiguity *is* the security
 property. Prefer scoping the read (so the foreign row is never returned) over
@@ -77,10 +82,21 @@ reading unscoped and bolting on a role-keyed denial.
 
 ## PARTNER (Trip.com)
 
-`PARTNER` can `POST /bookings` (it is a booking source) but is excluded from
-`/status`, `/cancel`, `/substitute`, `/substitution-candidates`, and `/events`: a
-3rd-party caller books, it does not manage the order or read internal lifecycle
-data. `/status` and the substitute routes enforce this via their role gates;
-`/cancel` has no management gate (it serves renter self-cancel), so it rejects a
-PARTNER with an explicit 403 (#1367) — otherwise a PARTNER's cross-operator
-`partner` read scope would let it cancel any `TRIP_COM`-sourced booking.
+`PARTNER` is a 3rd-party booking channel: it does not manage orders or read
+internal lifecycle data, so it is excluded from `POST /bookings`, `/status`,
+`/cancel`, `/substitute`, `/substitution-candidates`, and `/events`. `/status`,
+`/substitute`, `/substitution-candidates`, and `/events` enforce this through
+their `MANAGEMENT_READ_ROLES` / `isOperatorRole` gates. Two routes have **no
+management gate** (they serve renter self-service), so each rejects a PARTNER with
+an explicit 403:
+
+- `POST /bookings` (#1440) — renters self-book, so the route admits any authed
+  user. A PARTNER's create was only *accidentally* safe: `resolveBookingActor`
+  forces its synthetic `partner:api-key` id as `renterId` (no user row → renter FK
+  fails) and the operator bind passes partners through (`bookingReadScope =
+  partner`, never `all`). The route 403 makes the exclusion designed rather than an
+  FK accident. A partner-initiated create is a future channel integration, not this
+  endpoint.
+- `POST /:id/cancel` (#1367) — otherwise a PARTNER's cross-operator `partner` read
+  scope would let it cancel any `TRIP_COM`-sourced booking (a channel is not one
+  operator, so the operator-binding guard cannot clamp it).

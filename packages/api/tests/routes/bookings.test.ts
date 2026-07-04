@@ -799,6 +799,31 @@ describe('Booking Routes', () => {
       expect(body.data.bookingCode.length).toBeGreaterThan(0)
     })
 
+    // #1440 (MED-2): POST /bookings has no MANAGEMENT_READ_ROLES gate (renters
+    // self-serve), so a PARTNER (Trip.com) reaches the service. Its create is only
+    // *accidentally* safe in prod — resolveBookingActor forces the synthetic
+    // 'partner:api-key' userId as renterId (no user row -> renter FK fails), and the
+    // inventory bind passes partners through unclamped (bookingReadScope = 'partner',
+    // never 'all'). This harness seeds USER2 as a real user, so WITHOUT an explicit
+    // gate the create would succeed (201) — proving the safety is not designed. Gate
+    // it: a partner books through its channel integration, not manual-create.
+    it('forbids a PARTNER from creating a booking (403) (#1440)', async () => {
+      const partnerApp = new Hono()
+      partnerApp.use('*', testAuthMiddleware(USER2, 'PARTNER'))
+      partnerApp.route('/', createBookingRoutes(service, inertConsentGate))
+
+      const res = await partnerApp.request('/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validBookingInput()),
+      })
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('Partners cannot create bookings')
+    })
+
     // #464 slice 2d.4: parallel CLASS_COMBO submits on the same (operator,
     // class, location) triple must serialize through the advisory lock so the
     // class can be sold at most once per available car. Five concurrent POSTs
