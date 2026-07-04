@@ -74,6 +74,13 @@ interface AddOnFormProps {
   templateName?: string
   /** EDIT: which identity the edited row uses. A custom row edits its name (D5). */
   editIdentity?: AddOnIdentityMode
+  /**
+   * #1437: whether the shared template catalog is on. When OFF, CREATE hides the
+   * picker + the template/custom toggle and forces the self-author path. Defaults
+   * to true (the registry serverDefault). EDIT is unaffected — a picked row keeps
+   * showing its read-only template name regardless.
+   */
+  sharedCatalogEnabled?: boolean
   defaultValues?: Partial<AddOnFormValues>
 }
 
@@ -85,6 +92,7 @@ export function AddOnForm({
   templates,
   templateName,
   editIdentity,
+  sharedCatalogEnabled = true,
   defaultValues,
 }: AddOnFormProps) {
   const t = useTranslations('business.addOns')
@@ -100,7 +108,14 @@ export function AddOnForm({
   } = useForm<AddOnFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      identityMode: mode === 'edit' ? (editIdentity ?? 'template') : 'template',
+      // CREATE defaults to the picker when the catalog is on, else the self-author path
+      // (the only option when off). EDIT keeps the row's fixed identity.
+      identityMode:
+        mode === 'edit'
+          ? (editIdentity ?? 'template')
+          : sharedCatalogEnabled
+            ? 'template'
+            : 'custom',
       templateId: '',
       nameEn: '',
       nameJa: '',
@@ -112,8 +127,10 @@ export function AddOnForm({
   })
 
   // In CREATE mode the operator toggles the path; in EDIT it is fixed by the row.
+  // The toggle + picker only exist when the shared catalog is on (#1437).
   const identityMode = watch('identityMode')
-  const showPicker = mode === 'create' && identityMode === 'template'
+  const showToggle = mode === 'create' && sharedCatalogEnabled
+  const showPicker = mode === 'create' && identityMode === 'template' && sharedCatalogEnabled
   const showCustomName = identityMode === 'custom'
   const showReadOnlyTemplate = mode === 'edit' && identityMode === 'template'
 
@@ -124,7 +141,7 @@ export function AddOnForm({
       })}
       className="space-y-4"
     >
-      {mode === 'create' && (
+      {showToggle && (
         <fieldset className="space-y-1">
           <legend className="text-sm font-medium">{t('form.identityLegend')}</legend>
           <div className="flex gap-4">

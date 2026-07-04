@@ -232,6 +232,61 @@ describe('listPublishedForSubject', () => {
     const result = await repo.listPublishedForSubject('OPERATOR', 'op1', 20)
     expect(result.map((r) => r.id)).toEqual(expectedOrder)
   })
+
+  // #1449 keyset "load more": an `after` cursor returns the rows strictly OLDER than it,
+  // in the SAME (publishedAt desc, id desc) order — so paging never repeats or skips a row.
+  it('with an after cursor, returns only rows strictly after it in the same order', async () => {
+    const repo = new InMemoryReviewRepository()
+    for (let i = 0; i < 5; i++) {
+      await repo.insert(
+        renterReview({
+          bookingId: `bk_cursor_${i}`,
+          operatorId: 'op1',
+          subject: 'OPERATOR',
+          publishedAt: new Date(`2026-06-0${i + 1}T00:00:00Z`),
+          moderationStatus: 'VISIBLE',
+          authorUserId: `user_${i}`,
+        }),
+      )
+    }
+    // The unpaginated order is the source of truth; derive the cursor from it so the
+    // assertion survives any id the store assigns (mutation-resistant, not id-hardcoded).
+    const full = await repo.listPublishedForSubject('OPERATOR', 'op1', 20)
+    expect(full).toHaveLength(5)
+    const second = full[1]
+    if (!second?.publishedAt) throw new Error('fixture: expected a published second row')
+    const after = await repo.listPublishedForSubject('OPERATOR', 'op1', 20, {
+      publishedAt: second.publishedAt,
+      id: second.id,
+    })
+    expect(after.map((r) => r.id)).toEqual(full.slice(2).map((r) => r.id))
+  })
+
+  it('the after cursor tiebreaks WITHIN an identical publishedAt batch', async () => {
+    const repo = new InMemoryReviewRepository()
+    const sameDate = new Date('2026-06-01T00:00:00Z')
+    for (let i = 0; i < 3; i++) {
+      await repo.insert(
+        renterReview({
+          bookingId: `bk_tiecursor_${i}`,
+          operatorId: 'op1',
+          subject: 'OPERATOR',
+          publishedAt: sameDate,
+          moderationStatus: 'VISIBLE',
+          authorUserId: `user_${i}`,
+        }),
+      )
+    }
+    const full = await repo.listPublishedForSubject('OPERATOR', 'op1', 20)
+    expect(full).toHaveLength(3)
+    const first = full[0]
+    if (!first) throw new Error('fixture: expected a first row')
+    const afterFirst = await repo.listPublishedForSubject('OPERATOR', 'op1', 20, {
+      publishedAt: sameDate,
+      id: first.id,
+    })
+    expect(afterFirst.map((r) => r.id)).toEqual(full.slice(1).map((r) => r.id))
+  })
 })
 
 // #1085 slice 5 aggregates. The InMemory predicate is the source of truth tests can

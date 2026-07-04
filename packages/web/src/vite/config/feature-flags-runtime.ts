@@ -1,4 +1,5 @@
 import {
+  FEATURE_FLAGS,
   type FeatureFlagKey,
   type FeatureFlagOverrides,
   isFeatureFlagKey,
@@ -17,7 +18,9 @@ import { isEnvTrue } from './env-flag'
 // module deliberately does NOT import `./features` — a consumer that partially mocks
 // that module in tests can't break the barrel that also re-exports this one. The env
 // names are pinned to the registry by the parity test (feature-flags-parity.test.ts).
-const BUILD_TIME_READERS: Record<FeatureFlagKey, () => boolean> = {
+// Partial: a serverOnly flag (e.g. SHARED_CATALOG) has NO build-time reader - its
+// default lives in the registry (serverDefault) and resolveFeatureFlag floors to it.
+const BUILD_TIME_READERS: Partial<Record<FeatureFlagKey, () => boolean>> = {
   CANCELLATION: () => isEnvTrue(import.meta.env.VITE_FEATURE_CANCELLATION),
   OPERATOR_MANUAL_BOOKING: () => isEnvTrue(import.meta.env.VITE_FEATURE_OPERATOR_MANUAL_BOOKING),
   OPERATOR_TEAM: () => isEnvTrue(import.meta.env.VITE_FEATURE_OPERATOR_TEAM),
@@ -33,7 +36,9 @@ const BUILD_TIME_READERS: Record<FeatureFlagKey, () => boolean> = {
 }
 
 export function isBuildTimeEnabled(key: FeatureFlagKey): boolean {
-  return BUILD_TIME_READERS[key]()
+  // A serverOnly flag has no reader here; it is never a build-time default, so false.
+  const reader = BUILD_TIME_READERS[key]
+  return reader ? reader() : false
 }
 
 /**
@@ -44,7 +49,14 @@ export function isBuildTimeEnabled(key: FeatureFlagKey): boolean {
  * drift from what the hook renders (#1322).
  */
 export function resolveFeatureFlag(overrides: FeatureFlagOverrides, key: FeatureFlagKey): boolean {
-  return overrides[key] ?? isBuildTimeEnabled(key)
+  const entry = FEATURE_FLAGS[key]
+  // serverOnly keys (e.g. SHARED_CATALOG) floor to the registry serverDefault, NOT the
+  // build-time reader: the sparse map carries no row in the default state, and an envless
+  // reader is false, so falling to it would hide a default-ON flag from itself. Flooring
+  // to serverDefault makes every fail-safe path (empty initialData, non-ok fetch, parse
+  // error) resolve to the flag's real default. Non-serverOnly keys keep build-time fallback.
+  const fallback = entry.serverOnly ? (entry.serverDefault ?? false) : isBuildTimeEnabled(key)
+  return overrides[key] ?? fallback
 }
 
 interface OverridesEnvelope {

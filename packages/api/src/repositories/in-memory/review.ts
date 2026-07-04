@@ -11,6 +11,7 @@ import type {
   NewReviewReport,
   ReportedReviewPage,
   ReviewEdit,
+  ReviewListCursor,
   ReviewRepository,
 } from '../types'
 
@@ -197,6 +198,7 @@ export class InMemoryReviewRepository implements ReviewRepository {
     subject: 'OPERATOR' | 'VEHICLE',
     subjectId: string,
     limit: number,
+    after?: ReviewListCursor,
   ): Promise<Review[]> {
     const keyOf = (r: Review) => (subject === 'OPERATOR' ? r.operatorId : r.subjectVehicleId)
     return [...this.store.values()]
@@ -205,7 +207,10 @@ export class InMemoryReviewRepository implements ReviewRepository {
           r.subject === subject &&
           r.publishedAt !== null &&
           r.moderationStatus === 'VISIBLE' &&
-          keyOf(r) === subjectId,
+          keyOf(r) === subjectId &&
+          // Keyset: strictly older than the cursor in (publishedAt desc, id desc) order.
+          // id compared with JS `<` (code units) == Drizzle's `COLLATE "C"` for ASCII uuids.
+          (after === undefined || isBeforeCursor(r.publishedAt, r.id, after)),
       )
       .sort((a, b) => {
         // Newest-first, with an id tiebreak: the reveal sweep stamps a whole batch with
@@ -238,4 +243,15 @@ export class InMemoryReviewRepository implements ReviewRepository {
     }
     return out
   }
+}
+
+/** True when (publishedAt, id) sorts strictly AFTER the cursor under the list's
+ *  (publishedAt desc, id desc) order — i.e. the row belongs on a later "load more" page.
+ *  Mirrors the Drizzle keyset predicate: publishedAt older, or same instant with a
+ *  code-point-smaller id (JS `<` == `COLLATE "C"` for ASCII uuids). */
+function isBeforeCursor(publishedAt: Date, id: string, cursor: ReviewListCursor): boolean {
+  const rowMs = publishedAt.getTime()
+  const cursorMs = cursor.publishedAt.getTime()
+  if (rowMs !== cursorMs) return rowMs < cursorMs
+  return id < cursor.id
 }

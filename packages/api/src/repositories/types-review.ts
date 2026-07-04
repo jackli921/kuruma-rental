@@ -14,6 +14,15 @@ export type ReviewEdit = Pick<Review, 'overall' | 'subRatings' | 'comment'>
 /** A report to persist. id + createdAt are store-assigned (DB default / in-memory). */
 export type NewReviewReport = Omit<ReviewReport, 'id' | 'createdAt'>
 
+/** Keyset cursor for the public review list (#1449). Points at the last row of the
+ *  previous page; the next page is every row strictly OLDER in (publishedAt desc, id desc)
+ *  order. A composite (publishedAt, id) key — publishedAt alone is not unique because the
+ *  reveal sweep stamps a whole batch with one timestamp, so id is the stable tiebreak. */
+export interface ReviewListCursor {
+  readonly publishedAt: Date
+  readonly id: string
+}
+
 /** A reported review for the admin moderation queue: the review plus how many distinct
  *  users flagged it and their reasons (newest-reported first from the repo). */
 export interface ReportedReview {
@@ -113,13 +122,18 @@ export interface ReviewRepository {
   // when the page was full (a further page may exist).
   listReported(options: ListReportedOptions): Promise<ReportedReviewPage>
   // Public display read (review-display slice). The newest published + VISIBLE
-  // reviews whose subject key matches, capped at `limit`, ordered publishedAt DESC.
-  // subject='OPERATOR' scopes on the denormalized operatorId; 'VEHICLE' on
+  // reviews whose subject key matches, capped at `limit`, ordered publishedAt DESC then
+  // id DESC. subject='OPERATOR' scopes on the denormalized operatorId; 'VEHICLE' on
   // subjectVehicleId. RENTER is never listable (privacy) — the service enforces that,
   // so this port only accepts the two public subjects.
+  // `after` (#1449) is the keyset cursor: return only rows strictly older than it in the
+  // same order, so "load more" never repeats or skips a row. The id tiebreak is compared
+  // under C/byte order in BOTH impls (Drizzle `COLLATE "C"`, InMemory JS `<`) so a
+  // same-publishedAt batch pages identically in tests and prod (uuids are ASCII → equal).
   listPublishedForSubject(
     subject: 'OPERATOR' | 'VEHICLE',
     subjectId: string,
     limit: number,
+    after?: ReviewListCursor,
   ): Promise<Review[]>
 }

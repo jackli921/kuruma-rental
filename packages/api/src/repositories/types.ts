@@ -767,6 +767,7 @@ export type {
   ReportedReview,
   ReportedReviewPage,
   ReviewEdit,
+  ReviewListCursor,
   ReviewRepository,
 } from './types-review'
 

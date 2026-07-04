@@ -24,6 +24,7 @@ import type {
   NewReviewReport,
   ReportedReviewPage,
   ReviewEdit,
+  ReviewListCursor,
   ReviewRepository,
 } from '../types'
 import { type Db, reviewColumns, toReview } from './shared'
@@ -218,8 +219,23 @@ export class DrizzleReviewRepository implements ReviewRepository {
     subject: 'OPERATOR' | 'VEHICLE',
     subjectId: string,
     limit: number,
+    after?: ReviewListCursor,
   ): Promise<Review[]> {
     const key = subject === 'OPERATOR' ? reviews.operatorId : reviews.subjectVehicleId
+    // Keyset cursor (#1449): rows strictly older than `after` in the list's
+    // (publishedAt desc, id desc) order. The id half compares under `COLLATE "C"` — byte
+    // order, matching InMemory's JS `<` for ASCII uuids — so a same-publishedAt batch
+    // pages identically in the in-memory tests and in prod, whatever the DB's default
+    // collation. Consistent with the orderBy below by construction.
+    const keyset = after
+      ? or(
+          lt(reviews.publishedAt, after.publishedAt),
+          and(
+            eq(reviews.publishedAt, after.publishedAt),
+            sql`${reviews.id} COLLATE "C" < ${after.id}`,
+          ),
+        )
+      : undefined
     const rows = await this.db
       .select(reviewColumns)
       .from(reviews)
@@ -229,11 +245,13 @@ export class DrizzleReviewRepository implements ReviewRepository {
           eq(key, subjectId),
           isNotNull(reviews.publishedAt),
           eq(reviews.moderationStatus, 'VISIBLE'),
+          keyset,
         ),
       )
-      // desc(id) tiebreak: the reveal sweep stamps a batch with one identical publishedAt,
-      // so date alone is an unstable order. Mirrors the InMemory sort.
-      .orderBy(desc(reviews.publishedAt), desc(reviews.id))
+      // desc(id COLLATE "C") tiebreak: the reveal sweep stamps a batch with one identical
+      // publishedAt, so date alone is an unstable order. Byte order matches the InMemory
+      // sort (JS `<`) so tests and prod agree on the page boundary.
+      .orderBy(desc(reviews.publishedAt), sql`${reviews.id} COLLATE "C" DESC`)
       .limit(limit)
     return rows.map(toReview)
   }

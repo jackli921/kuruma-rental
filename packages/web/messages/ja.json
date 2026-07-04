@@ -1921,7 +1921,9 @@
       "empty": "まだレビューはありません",
       "reviewer": "認証済みの利用者",
       "overallAria": "5つ星中{n}つ星",
-      "dimensionValue": "{n}/5"
+      "dimensionValue": "{n}/5",
+      "loadMore": "もっと見る",
+      "loadingMore": "読み込み中…"
     }
   },
   "currency": {

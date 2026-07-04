@@ -1,5 +1,5 @@
 import { reviews } from '@kuruma/shared/db/schema'
-import { inArray } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { DrizzleReviewRepository } from '../../src/repositories/drizzle/review'
 import { type SeededBooking, createSeededBooking } from './booking-factory'
@@ -82,6 +82,71 @@ describe('DrizzleReviewRepository.listPublishedForSubject (real pg)', () => {
       await db.delete(reviews).where(inArray(reviews.bookingId, [c.booking.id, d.booking.id]))
       await c.cleanup()
       await d.cleanup()
+    }
+  })
+})
+
+// #1449 keyset "load more". The architect flagged (M2) that ids are `text` uuids, so
+// Postgres orders them by the DB's collation while the InMemory repo sorts with JS `<`
+// (code units). For a same-publishedAt batch — the only place the tiebreak decides the
+// page boundary — those can disagree under a non-C collation, which a keyset cursor
+// cannot tolerate. The Drizzle repo pins the id compare to `COLLATE "C"` (byte order ==
+// JS `<` for ASCII uuids); these tests lock that parity in real Postgres.
+describe('DrizzleReviewRepository.listPublishedForSubject keyset tiebreak (real pg, #1449)', () => {
+  // A publishedAt shared by every seeded row, so ONLY the id tiebreak orders them.
+  const TIE = new Date('2026-06-15T00:00:00Z')
+
+  it('orders a same-publishedAt batch by id DESC in byte order (COLLATE "C" == JS `<`)', async () => {
+    const c = await createSeededBooking({ prefix: 'review-list-tie-3' })
+    try {
+      // a, b, c share the default operator; all three published at the same instant.
+      const inserted = await Promise.all([
+        insertOperatorReview(a, { publishedAt: TIE }),
+        insertOperatorReview(b, { publishedAt: TIE }),
+        insertOperatorReview(c, { publishedAt: TIE }),
+      ])
+      const ourIds = new Set(inserted.map((r) => r.id))
+      const result = await repo.listPublishedForSubject('OPERATOR', a.operatorId, 50)
+      // Scope to our rows (a concurrent file may share the operator); relative order among
+      // ours is exactly the tiebreak. Postgres MUST match the InMemory JS sort.
+      const ours = result.map((r) => r.id).filter((id) => ourIds.has(id))
+      const expected = [...ourIds].sort((x, y) => (x < y ? 1 : x > y ? -1 : 0))
+      expect(ours).toEqual(expected)
+    } finally {
+      await db.delete(reviews).where(eq(reviews.bookingId, c.booking.id))
+      await c.cleanup()
+    }
+  })
+
+  it('an `after` cursor drops the cursor row and returns the rest of the tie in order', async () => {
+    const c = await createSeededBooking({ prefix: 'review-list-tie-4' })
+    try {
+      const inserted = await Promise.all([
+        insertOperatorReview(a, { publishedAt: TIE }),
+        insertOperatorReview(b, { publishedAt: TIE }),
+        insertOperatorReview(c, { publishedAt: TIE }),
+      ])
+      const ourIds = new Set(inserted.map((r) => r.id))
+      const ordered = (await repo.listPublishedForSubject('OPERATOR', a.operatorId, 50))
+        .map((r) => r.id)
+        .filter((id) => ourIds.has(id))
+      const [first, ...rest] = ordered
+      if (!first) throw new Error('fixture: expected our seeded rows to be listed')
+      // Big limit + filter (not LIMIT paging) so a concurrent file's rows can't interleave
+      // the assertion — this exercises the real-pg keyset WHERE with COLLATE "C".
+      const afterFirst = (
+        await repo.listPublishedForSubject('OPERATOR', a.operatorId, 50, {
+          publishedAt: TIE,
+          id: first,
+        })
+      )
+        .map((r) => r.id)
+        .filter((id) => ourIds.has(id))
+      expect(afterFirst).toEqual(rest)
+      expect(afterFirst).not.toContain(first)
+    } finally {
+      await db.delete(reviews).where(eq(reviews.bookingId, c.booking.id))
+      await c.cleanup()
     }
   })
 })

@@ -14,7 +14,23 @@
 // migrates the flag off the build-time isXEnabled() reader (#1322); the admin page
 // badges a not-yet-migrated flag as "build-time only" so its toggle isn't mistaken
 // for a no-op.
-export const FEATURE_FLAGS = {
+// A registry entry. `env` is the build-time VITE_FEATURE_* var a web flag reads;
+// a `serverOnly` flag has NONE (it is enforced by the API and defaults from code,
+// not the bundle) and instead carries a `serverDefault` fail-safe floor. Typing
+// the registry as Record<Key, FeatureFlagEntry> (below) keeps indexed `.env`
+// access uniform even though serverOnly entries omit it.
+export type FeatureFlagEntry = {
+  env?: string
+  label: string
+  runtimeControlled: boolean
+  // Server-enforced flag with no web build-time env (#1437 SHARED_CATALOG). The
+  // web floors it to `serverDefault` rather than a build-time reader; the API
+  // reads `serverDefault` as the default when no admin override exists.
+  serverOnly?: boolean
+  serverDefault?: boolean
+}
+
+const REGISTRY = {
   CANCELLATION: {
     env: 'VITE_FEATURE_CANCELLATION',
     label: 'Self-service cancellation',
@@ -74,9 +90,26 @@ export const FEATURE_FLAGS = {
     label: 'Calendar quick-view',
     runtimeControlled: false,
   },
-} as const
+  // #1437: platform kill-switch for the shared add-on template catalog. Default ON
+  // in CODE (serverDefault) - the feature_flags table is override-only, so no seed
+  // row exists. serverOnly because the API enforces it (picker endpoint + create
+  // path), which no existing web-only flag does. runtimeControlled: the web reads it
+  // to hide the operator picker + admin template library live.
+  SHARED_CATALOG: {
+    label: 'Shared add-on template catalog',
+    runtimeControlled: true,
+    serverOnly: true,
+    serverDefault: true,
+  },
+} satisfies Record<string, FeatureFlagEntry>
 
-export type FeatureFlagKey = keyof typeof FEATURE_FLAGS
+// Typed as Record<Key, FeatureFlagEntry> (not the `as const` literal) so indexed
+// `.env` access is uniformly `string | undefined` across all entries - a serverOnly
+// entry omits `env`, which would otherwise make `FEATURE_FLAGS[key].env` a union
+// error. Keys stay literal via `keyof typeof REGISTRY`.
+export const FEATURE_FLAGS: Record<keyof typeof REGISTRY, FeatureFlagEntry> = REGISTRY
+
+export type FeatureFlagKey = keyof typeof REGISTRY
 export const FEATURE_FLAG_KEYS = Object.keys(FEATURE_FLAGS) as FeatureFlagKey[]
 
 /** A sparse override map: only keys the platform admin has explicitly set. */
