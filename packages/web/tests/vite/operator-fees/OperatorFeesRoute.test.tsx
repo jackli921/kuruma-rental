@@ -5,14 +5,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
-// P1b junction under test: fees.tsx forces a picker-admin to read-only via
-// `feesScope = { ...scope, canWrite: isOperatorSession(session) }`. We drive a
-// GENERIC scope that already grants `canWrite: true` (as the picker would for a
-// chosen tenant) and prove the route's session-derived override still strips the
-// Add affordance for a PLATFORM_ADMIN, while a real operator session keeps it.
+// #1442 junction under test: fees.tsx no longer forces a picker-admin to
+// read-only. It forwards `scope.canWrite` (= `canWriteAsOperator`) straight
+// through to the view, so a picker admin who has chosen a tenant writes. We drive
+// the scope's `canWrite` directly and prove the route respects it without any
+// session-role override — reintroducing the old override would fail these.
 const useOperatorScopeMock = vi.fn<() => OperatorScope>()
 const useSessionMock = vi.fn<() => { data: Session | null }>()
 
@@ -72,29 +72,37 @@ function renderRoute() {
   return render(<OperatorFeesRoute />, { wrapper })
 }
 
-describe('OperatorFeesRoute P1b read-only override', () => {
-  beforeEach(() => {
-    useOperatorScopeMock.mockReturnValue(writableScope)
-  })
-
+describe('OperatorFeesRoute forwards the picker scope (no read-only override)', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
   })
 
-  it('hides the Add affordance for a PLATFORM_ADMIN even when the scope grants canWrite (override forces read-only)', () => {
+  it('shows the Add affordance for a PLATFORM_ADMIN when the picked-operator scope grants canWrite', () => {
+    // #1442: the route no longer strips writes from a platform admin. A picker
+    // admin who has chosen a tenant carries canWrite=true and gets the affordance.
+    useOperatorScopeMock.mockReturnValue({ ...writableScope, pickedOperatorId: 'op_9' })
     useSessionMock.mockReturnValue({ data: platformAdminSession() })
 
     renderRoute()
 
     expect(screen.getByText(en.title)).toBeInTheDocument()
-    // The generic scope said canWrite=true; the session-derived override flips it
-    // to false because a platform admin is not an operator session. If the route
-    // passed `scope` straight through, this Add button would render and fail here.
+    expect(screen.getByRole('button', { name: en.addFee })).toBeInTheDocument()
+  })
+
+  it('hides the Add affordance when the scope denies canWrite (all-mode cross-operator reader)', () => {
+    // A platform admin with NO picked operator is a read-only cross-tenant reader:
+    // canWrite=false, so the write affordances stay hidden.
+    useOperatorScopeMock.mockReturnValue({ ...writableScope, canWrite: false })
+    useSessionMock.mockReturnValue({ data: platformAdminSession() })
+
+    renderRoute()
+
     expect(screen.queryByRole('button', { name: en.addFee })).not.toBeInTheDocument()
   })
 
   it('shows the Add affordance for a real operator session (operatorId present)', () => {
+    useOperatorScopeMock.mockReturnValue(writableScope)
     useSessionMock.mockReturnValue({ data: operatorOwnerSession() })
 
     renderRoute()

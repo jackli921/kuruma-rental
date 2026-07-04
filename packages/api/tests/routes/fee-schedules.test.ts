@@ -207,6 +207,52 @@ describe('Fee-schedule routes — platform-admin scoping (bypass-precedence)', (
     expect(res.status).toBe(201)
     expect((await res.json()).data.operatorId).toBe(OP_A)
   })
+
+  // #1442: PATCH/DELETE bind to the picked operator (?operatorId=), same as create.
+  const patchAmount = (app: Hono, id: string, query = '') =>
+    app.request(`/fee-schedules/${id}${query}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amountJpy: 9000 }),
+    })
+
+  it('422 when a PLATFORM_ADMIN PATCHes a fee without ?operatorId', async () => {
+    const { repo, a } = await seedTwoOperators()
+    const res = await patchAmount(mountFor(repo, 'PLATFORM_ADMIN'), a.id)
+    expect(res.status).toBe(422)
+    expect((await res.json()).code).toBe('OPERATOR_REQUIRED')
+  })
+
+  it('404 when the PATCH ?operatorId does not own the fee', async () => {
+    const { repo, a } = await seedTwoOperators()
+    const res = await patchAmount(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_B}`)
+    expect(res.status).toBe(404)
+  })
+
+  it('updates when the PATCH ?operatorId owns the fee', async () => {
+    const { repo, a } = await seedTwoOperators()
+    const res = await patchAmount(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_A}`)
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.amountJpy).toBe(9000)
+  })
+
+  it('422 when a PLATFORM_ADMIN DELETEs a fee without ?operatorId', async () => {
+    const { repo, a } = await seedTwoOperators()
+    const res = await mountFor(repo, 'PLATFORM_ADMIN').request(`/fee-schedules/${a.id}`, {
+      method: 'DELETE',
+    })
+    expect(res.status).toBe(422)
+  })
+
+  it('archives when the DELETE ?operatorId owns the fee', async () => {
+    const { repo, a } = await seedTwoOperators()
+    const res = await mountFor(repo, 'PLATFORM_ADMIN').request(
+      `/fee-schedules/${a.id}?operatorId=${OP_A}`,
+      { method: 'DELETE' },
+    )
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.status).toBe('ARCHIVED')
+  })
 })
 
 describe('Fee-schedule routes — invalid vehicleClassId (composite FK -> 400)', () => {
