@@ -1,5 +1,5 @@
-import { reviews } from '@kuruma/shared/db/schema'
-import { inArray } from 'drizzle-orm'
+import { operators, reviews } from '@kuruma/shared/db/schema'
+import { eq, inArray } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { DrizzleReviewRepository } from '../../src/repositories/drizzle/review'
 import { type SeededBooking, createSeededBooking } from './booking-factory'
@@ -15,11 +15,12 @@ import { db } from './setup'
 // The reviews reseal (#1201) makes `(bookingId, subject)` UNIQUE: at most one review
 // per booking per subject. So any scenario that needs two same-subject rows (two
 // VEHICLE reviews to sum, or a counted OPERATOR row plus a dropped one) must spread
-// them across TWO bookings. Both bookings default to the same operator; the second
-// exists purely to give same-subject rows a distinct bookingId.
+// them across TWO bookings. Both bookings share this file's dedicated operator (see
+// beforeAll); the second exists purely to give same-subject rows a distinct bookingId.
 
 let seeded: SeededBooking
 let secondSeeded: SeededBooking
+let dedicatedOperatorId: string
 let bookingId: string
 let secondBookingId: string
 let operatorId: string
@@ -29,17 +30,34 @@ let vehicleId: string
 let classId: string
 
 beforeAll(async () => {
-  seeded = await createSeededBooking({ prefix: 'review-agg' })
+  // A dedicated operator for THIS file so the aggregateByOperator exact-count assertion is
+  // isolated from concurrent integration files (#1461). aggregateByOperator scans EVERY
+  // published+visible OPERATOR review for the operator platform-wide (it is NOT instance-
+  // scoped), so seeding on the shared default operator let review-list.test.ts's published
+  // OPERATOR reviews race this file's `{sum:5,count:1}` count. The vehicle/class aggregates
+  // never flaked — their keys are freshly seeded per test; this gives the operator key the
+  // same per-file uniqueness.
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  dedicatedOperatorId = crypto.randomUUID()
+  await db.insert(operators).values({
+    id: dedicatedOperatorId,
+    slug: `review-agg-op-${uniq}`,
+    name: `Review Agg Op ${uniq}`,
+  })
+  seeded = await createSeededBooking({ prefix: 'review-agg', operatorId: dedicatedOperatorId })
   bookingId = seeded.booking.id
   operatorId = seeded.operatorId
   renterId = seeded.renterId
   vehicleId = seeded.ids.vehicleId
   classId = seeded.ids.classId
-  // A SECOND booking on the same operator. The `(bookingId, subject)` seal admits
-  // only one review per subject per booking, so a scenario's second same-subject
-  // row lands here. Its own renter authors it — realistic, and no cross-check ties
-  // a review's author or subjectVehicleId to the booking it cites.
-  secondSeeded = await createSeededBooking({ prefix: 'review-agg-2' })
+  // A SECOND booking on the same (dedicated) operator. The `(bookingId, subject)` seal admits
+  // only one review per subject per booking, so a scenario's second same-subject row lands
+  // here. Its own renter authors it — realistic, and no cross-check ties a review's author or
+  // subjectVehicleId to the booking it cites.
+  secondSeeded = await createSeededBooking({
+    prefix: 'review-agg-2',
+    operatorId: dedicatedOperatorId,
+  })
   secondBookingId = secondSeeded.booking.id
   secondRenterId = secondSeeded.renterId
 })
@@ -54,6 +72,8 @@ afterAll(async () => {
   await db.delete(reviews).where(inArray(reviews.bookingId, bookingIds()))
   await seeded.cleanup()
   await secondSeeded.cleanup()
+  // Both bookings' rows (+ the reviews above) are gone, so nothing references the operator now.
+  await db.delete(operators).where(eq(operators.id, dedicatedOperatorId))
 })
 
 const REVEAL_DEADLINE = new Date('2027-01-21T09:00:00Z')
