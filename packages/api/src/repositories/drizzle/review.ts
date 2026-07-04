@@ -149,16 +149,22 @@ export class DrizzleReviewRepository implements ReviewRepository {
     // (the one-per-reporter unique seal), so the join to reviews doesn't fan out the count.
     const lastReportedAt = max(reviewReports.createdAt)
     // Keyset in HAVING (the sort key is an aggregate): strictly past the previous page's
-    // (lastReportedAt, reviewId) boundary in the DESC ordering.
-    const keyset = cursor
-      ? or(
-          lt(lastReportedAt, cursor.lastReportedAt),
-          and(
-            eq(lastReportedAt, cursor.lastReportedAt),
-            lt(reviewReports.reviewId, cursor.reviewId),
-          ),
-        )
+    // (lastReportedAt, reviewId) boundary in the DESC ordering. The boundary instant is
+    // bound as an explicitly-cast timestamptz STRING, never a raw Date: the left side is an
+    // aggregate expression, not a Column, so drizzle has no column mapper to encode a Date
+    // param here — postgres-js rejects the raw Date ("must be of type string"), and neon-http
+    // would lean on undocumented Date coercion. `${iso}::timestamptz` binds a string both
+    // drivers serialize identically. (`reviewId` is already text, so it needs no cast.)
+    const cursorTs = cursor
+      ? sql`${cursor.lastReportedAt.toISOString()}::timestamptz`
       : undefined
+    const keyset =
+      cursor && cursorTs
+        ? or(
+            lt(lastReportedAt, cursorTs),
+            and(eq(lastReportedAt, cursorTs), lt(reviewReports.reviewId, cursor.reviewId)),
+          )
+        : undefined
     const grouped = await this.db
       .select({
         reviewId: reviewReports.reviewId,
