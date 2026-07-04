@@ -1,10 +1,11 @@
 import { SECOND_OPERATOR_ID } from '@kuruma/shared/db/constants'
-import { reviews } from '@kuruma/shared/db/schema'
+import { reviewReports, reviews } from '@kuruma/shared/db/schema'
 import { eq } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import {
   PG_ERROR,
   REVIEWS_SUBJECT_CONSTRAINT,
+  REVIEW_REPORT_UNIQUE_CONSTRAINT,
   pgConstraintName,
   pgErrorCode,
 } from '../../src/pg-errors'
@@ -67,6 +68,23 @@ async function insertReview(
   return db
     .insert(reviews)
     .values(reviewRow(overrides))
+    .then(
+      () => null,
+      (e) => e,
+    )
+}
+
+/** Insert a review and return its id — the report cases need a live FK referent. */
+async function seedReview(overrides: Partial<typeof reviews.$inferInsert> = {}): Promise<string> {
+  const row = reviewRow(overrides)
+  await db.insert(reviews).values(row)
+  return row.id as string
+}
+
+async function insertReport(reviewId: string, reporterUserId: string): Promise<unknown> {
+  return db
+    .insert(reviewReports)
+    .values({ id: crypto.randomUUID(), reviewId, reporterUserId, reason: 'inappropriate' })
     .then(
       () => null,
       (e) => e,
@@ -170,5 +188,37 @@ describe('reviews table constraints (#1067, real pg)', () => {
     expect(err, 'overall must be 1-5').not.toBeNull()
     expect(pgErrorCode(err)).toBe(PG_ERROR.CHECK_VIOLATION)
     expect(pgConstraintName(err)).toBe('reviews_overall_range_chk')
+  })
+})
+
+// #1086 slice 6: the "one report per (review, reporter)" seal lives in Postgres as
+// a unique index. The service reads its constraint NAME off the 23505 to map to 409
+// ALREADY_REPORTED — so a driver whose error omits that name (the #1362 Neon-vs-postgres-js
+// divergence) would silently 500 instead. This asserts the real-pg name, belt to the
+// statically-verified suspenders. Inserts DIRECTLY via db (not the repo) so the seal is
+// what trips, and reports cascade-delete with their review in the shared afterEach.
+describe('review_reports table constraints (#1086, real pg)', () => {
+  it('accepts a first report of a review by a reporter', async () => {
+    const reviewId = await seedReview()
+    const reporter = await seedRenter('review-report-ok')
+    expect(await insertReport(reviewId, reporter)).toBeNull()
+  })
+
+  it('rejects a duplicate report by the same reporter (review_reports_one_per_reporter)', async () => {
+    const reviewId = await seedReview()
+    const reporter = await seedRenter('review-report-dup')
+    expect(await insertReport(reviewId, reporter)).toBeNull()
+    const err = await insertReport(reviewId, reporter)
+    expect(err, 'a user may report a given review at most once').not.toBeNull()
+    expect(pgErrorCode(err)).toBe(PG_ERROR.UNIQUE_VIOLATION)
+    expect(pgConstraintName(err)).toBe(REVIEW_REPORT_UNIQUE_CONSTRAINT)
+  })
+
+  it('allows two different reporters to report the same review (seal is per reporter, not per review)', async () => {
+    const reviewId = await seedReview()
+    const reporterA = await seedRenter('review-report-a')
+    const reporterB = await seedRenter('review-report-b')
+    expect(await insertReport(reviewId, reporterA)).toBeNull()
+    expect(await insertReport(reviewId, reporterB)).toBeNull()
   })
 })

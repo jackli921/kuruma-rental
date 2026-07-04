@@ -1,3 +1,5 @@
+import { useFeatureFlag } from '@/vite/config'
+import type { FeatureFlagKey } from '@kuruma/shared/feature-flags/registry'
 import { Link } from '@tanstack/react-router'
 import {
   AlertTriangle,
@@ -10,6 +12,7 @@ import {
   Flag,
   LayoutDashboard,
   Library,
+  MessageSquareWarning,
   ShieldCheck,
   Users,
 } from 'lucide-react'
@@ -28,8 +31,16 @@ export const SIDEBAR_ITEMS = [
   { to: '/$locale/admin/customers', icon: Users, labelKey: 'nav.customers' },
   { to: '/$locale/admin/governance', icon: ShieldCheck, labelKey: 'nav.governance' },
   { to: '/$locale/admin/templates', icon: Library, labelKey: 'nav.templates' },
+  { to: '/$locale/admin/reviews', icon: MessageSquareWarning, labelKey: 'nav.reviews' },
   { to: '/$locale/admin/feature-flags', icon: Flag, labelKey: 'nav.featureFlags' },
 ] as const
+
+// Sidebar items hidden unless a runtime feature flag is on (keyed by `to`); an
+// item absent here is always shown. Review moderation only matters once reviews
+// are enabled (#1086) — dark-launched, so the link stays hidden by default.
+const FLAG_GATED_ITEMS: Partial<Record<(typeof SIDEBAR_ITEMS)[number]['to'], FeatureFlagKey>> = {
+  '/$locale/admin/reviews': 'REVIEWS',
+}
 
 // Single static className; active state is the `aria-current="page"` attribute
 // (auto-set by TanStack on the active <Link>) + the `aria-[current=page]:*`
@@ -43,6 +54,12 @@ const LINK_CLASSNAME =
 export function AdminSidebar() {
   const t = useTranslations('admin')
   const locale = useLocale()
+  // One lookup per gated flag; the map fail-closes (an unknown flag → hidden).
+  const flags: Partial<Record<FeatureFlagKey, boolean>> = { REVIEWS: useFeatureFlag('REVIEWS') }
+  const visibleItems = SIDEBAR_ITEMS.filter((item) => {
+    const flag = FLAG_GATED_ITEMS[item.to]
+    return flag === undefined || flags[flag] === true
+  })
 
   return (
     <aside
@@ -66,7 +83,7 @@ export function AdminSidebar() {
           <ArrowLeft className="size-5" />
           {t('nav.backToSite')}
         </Link>
-        {SIDEBAR_ITEMS.map(({ to, icon: Icon, labelKey }) => (
+        {visibleItems.map(({ to, icon: Icon, labelKey }) => (
           <Link
             key={to}
             to={to}

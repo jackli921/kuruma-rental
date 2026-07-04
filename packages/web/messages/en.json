@@ -1394,7 +1394,8 @@
       "templates": "Template library",
       "featureFlags": "Feature flags",
       "backToSite": "Back to site",
-      "applications": "Applications"
+      "applications": "Applications",
+      "reviews": "Review moderation"
     },
     "applications": {
       "title": "Operator applications",
@@ -1748,6 +1749,28 @@
       },
       "loadError": "Couldn't load customers.",
       "retry": "Retry"
+    },
+    "reviewModeration": {
+      "title": "Review moderation",
+      "description": "Reported reviews awaiting a moderation decision. Hiding a review removes it from public view and from the other party.",
+      "empty": "No reported reviews.",
+      "stars": "{n} / 5",
+      "reports": "{count, plural, one {# report} other {# reports}}",
+      "subject": {
+        "OPERATOR": "Review of the operator",
+        "VEHICLE": "Review of the vehicle",
+        "RENTER": "Review of the renter"
+      },
+      "by": {
+        "RENTER": "By a renter",
+        "OPERATOR": "By the operator"
+      },
+      "hide": "Hide review",
+      "hiding": "Hiding…",
+      "hidden": "Hidden",
+      "hideError": "Could not hide the review. Please try again.",
+      "loadError": "Could not load reported reviews.",
+      "retry": "Try again"
     }
   },
   "documents": {

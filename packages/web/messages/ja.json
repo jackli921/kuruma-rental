@@ -1394,7 +1394,8 @@
       "templates": "テンプレートライブラリ",
       "featureFlags": "機能フラグ",
       "backToSite": "サイトに戻る",
-      "applications": "申請"
+      "applications": "申請",
+      "reviews": "レビューのモデレーション"
     },
     "applications": {
       "title": "事業者申請",
@@ -1747,6 +1748,28 @@
         "CANCELLED": "キャンセル"
       },
       "loadError": "顧客を読み込めませんでした。",
+      "retry": "再試行"
+    },
+    "reviewModeration": {
+      "title": "レビューのモデレーション",
+      "description": "モデレーション判断待ちの通報されたレビューです。レビューを非表示にすると、一般公開と相手側の両方から見えなくなります。",
+      "empty": "通報されたレビューはありません。",
+      "stars": "{n} / 5",
+      "reports": "{count, plural, other {#件の通報}}",
+      "subject": {
+        "OPERATOR": "オペレーターへのレビュー",
+        "VEHICLE": "車両へのレビュー",
+        "RENTER": "利用者へのレビュー"
+      },
+      "by": {
+        "RENTER": "利用者による",
+        "OPERATOR": "オペレーターによる"
+      },
+      "hide": "レビューを非表示",
+      "hiding": "非表示にしています…",
+      "hidden": "非表示",
+      "hideError": "レビューを非表示にできませんでした。もう一度お試しください。",
+      "loadError": "通報されたレビューを読み込めませんでした。",
       "retry": "再試行"
     }
   },

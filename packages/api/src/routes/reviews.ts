@@ -1,4 +1,8 @@
-import { editReviewSchema, submitReviewSchema } from '@kuruma/shared/validators/review'
+import {
+  editReviewSchema,
+  reportReviewSchema,
+  submitReviewSchema,
+} from '@kuruma/shared/validators/review'
 import { Hono } from 'hono'
 import { requireAuth, requireUser, toCallerContext } from '../middleware/auth'
 import type { ReviewService } from '../services/review'
@@ -19,6 +23,9 @@ export function createReviewRoutes(service: ReviewService) {
   // `/reviews/*` would also gate sibling routers mounted on the same root,
   // which the #1085 public aggregate reads at `/reviews/aggregates/*` rely on.
   app.use('/reviews/:id', requireAuth())
+  // The report sub-path is a distinct segment, so `/reviews/:id` above (an exact
+  // match) does not cover it — gate it explicitly (#1086).
+  app.use('/reviews/:id/report', requireAuth())
   app.use('/bookings/:bookingId/reviews', requireAuth())
 
   return app
@@ -51,5 +58,17 @@ export function createReviewRoutes(service: ReviewService) {
       const result = await service.getForBooking(ctx, idResult.id, new Date())
       if (!result.ok) return failResult(c, result)
       return ok(c, { reviews: result.reviews })
+    })
+    .post('/reviews/:id/report', async (c) => {
+      const ctx = toCallerContext(requireUser(c))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const body = await parseBody(c, reportReviewSchema)
+      if (!body.ok) return body.response
+
+      const result = await service.reportReview(ctx, idResult.id, body.data)
+      if (!result.ok) return failResult(c, result)
+      return ok(c, { report: result.report }, 201)
     })
 }

@@ -33,4 +33,5 @@ export {
 export { regions, regionTypeEnum, regionStatusEnum } from './regions'
 export * from './consent'
 export * from './review'
+export * from './review-report'
 export * from './feature-flags'

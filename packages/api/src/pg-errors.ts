@@ -100,6 +100,11 @@ export const PAYMENT_REFUND_STRIPE_REFUND_CONSTRAINT = 'payment_refunds_stripeRe
  */
 export const REVIEWS_SUBJECT_CONSTRAINT = 'reviews_subject_per_booking_unique'
 
+/** review_reports: one report per (reviewId, reporterUserId). A 23505 on this name means
+ *  this user already reported the review — the service maps it to 409 ALREADY_REPORTED so
+ *  a single user can't inflate the moderation queue (#1086, slice 6). */
+export const REVIEW_REPORT_UNIQUE_CONSTRAINT = 'review_reports_one_per_reporter'
+
 /**
  * Partial unique index on provider_invites (operatorId, email) WHERE status=
  * 'PENDING' (#904 slice 2). At most one live invite per operator+email; REVOKED/

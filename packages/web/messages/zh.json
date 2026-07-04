@@ -1394,7 +1394,8 @@
       "templates": "模板库",
       "featureFlags": "功能开关",
       "backToSite": "返回网站",
-      "applications": "申请"
+      "applications": "申请",
+      "reviews": "评价审核"
     },
     "applications": {
       "title": "运营商申请",
@@ -1747,6 +1748,28 @@
         "CANCELLED": "已取消"
       },
       "loadError": "无法加载客户。",
+      "retry": "重试"
+    },
+    "reviewModeration": {
+      "title": "评价审核",
+      "description": "等待审核处理的被举报评价。隐藏评价后，公众和对方均无法看到该评价。",
+      "empty": "暂无被举报的评价。",
+      "stars": "{n} / 5",
+      "reports": "{count, plural, other {# 条举报}}",
+      "subject": {
+        "OPERATOR": "对运营商的评价",
+        "VEHICLE": "对车辆的评价",
+        "RENTER": "对租客的评价"
+      },
+      "by": {
+        "RENTER": "来自租客",
+        "OPERATOR": "来自运营商"
+      },
+      "hide": "隐藏评价",
+      "hiding": "正在隐藏…",
+      "hidden": "已隐藏",
+      "hideError": "无法隐藏评价，请重试。",
+      "loadError": "无法加载被举报的评价。",
       "retry": "重试"
     }
   },

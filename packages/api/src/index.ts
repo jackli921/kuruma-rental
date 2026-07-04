@@ -35,6 +35,7 @@ import { createAdminOperatorApplicationRoutes } from './routes/admin-operator-ap
 import { createAdminOperatorRoutes } from './routes/admin-operators'
 import { createAdminOverviewRoutes } from './routes/admin-overview'
 import { createAdminRevenueRoutes } from './routes/admin-revenue'
+import { createAdminReviewRoutes } from './routes/admin-reviews'
 import { createAdminTemplateRoutes } from './routes/admin-templates'
 import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
@@ -578,6 +579,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createVehicleBlockRoutes(vehicleBlockService))
     .route('/', createBookingRoutes(bookingService, consentGate))
     .route('/', createReviewRoutes(reviewService))
+    .route('/', createAdminReviewRoutes(reviewService))
     .route('/', createReviewAggregateRoutes(reviewAggregateService, publicCatalogLimiter))
     .route('/', createReviewListRoutes(reviewListService, publicCatalogLimiter))
     .route('/', createPaymentRoutes(paymentService))
