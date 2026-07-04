@@ -12,11 +12,18 @@
  */
 
 import type { InsuranceStatus } from '../enums'
+import type { LocalizedText } from '../i18n/localized-text'
 
 export interface InsuranceOptionData {
   id: string
   operatorId: string
   name: string
+  /**
+   * SELF-AUTHORED name bundle (#1437 slice 3). Additive in slice 3a: the read
+   * still returns the resolved label in `name`; slice 3b renames `name` ->
+   * `resolvedName`. Null for legacy rows (rendered from the `name` mirror).
+   */
+  nameI18n: LocalizedText | null
   description: string | null
   dailyPriceJpy: number
   /** null = full cover (no deductible). */

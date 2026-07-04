@@ -21,12 +21,16 @@ const ctxFor = (operatorId: string): CallerContext => ({
   bypassScope: false,
 })
 
+// Faithful repo-level fixture (#1437): the entity carries both the `name` mirror
+// and the self-authored `nameI18n` bundle (en = the mirror), so a Drizzle write
+// that drops the jsonb column is observable on read-back.
 const optionInput = (
   operatorId: string,
   name: string,
 ): Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'> => ({
   operatorId,
   name,
+  nameI18n: { en: name },
   description: null,
   dailyPriceJpy: 1500,
   deductibleJpy: 150000,
@@ -171,7 +175,7 @@ describe('cross-operator insurance-option WRITE denial (service seal, #404)', ()
   })
 
   it('operator B cannot update operator A option (404, row untouched)', async () => {
-    const res = await service.update(ctxFor(opBId), optionA.id, { name: 'hijacked' })
+    const res = await service.update(ctxFor(opBId), optionA.id, { nameI18n: { en: 'hijacked' } })
     expect(res).toMatchObject({ ok: false, status: 404, error: 'Insurance option not found' })
     expect(await repo.findById(SYSTEM_CONTEXT, optionA.id)).toMatchObject({ name: 'Premium' })
   })
@@ -185,6 +189,42 @@ describe('cross-operator insurance-option WRITE denial (service seal, #404)', ()
   it('operator A can update its own option', async () => {
     const res = await service.update(ctxFor(opAId), optionA.id, { dailyPriceJpy: 2000 })
     expect(res).toMatchObject({ ok: true, option: { dailyPriceJpy: 2000 } })
+  })
+
+  // [#1437 R-2] The Drizzle create MUST enumerate nameI18n in .values(); a dropped
+  // column persists null in Postgres while the in-memory repo keeps it (spreads
+  // ...data), so this round-trip is the ONLY layer that catches the regression.
+  it('[#1437] service create round-trips nameI18n through Postgres and mirrors name = en', async () => {
+    const res = await service.create(ctxFor(opAId), {
+      operatorId: opAId,
+      nameI18n: { en: 'Gold', ja: 'ゴールド', zh: '黄金' },
+      description: null,
+      dailyPriceJpy: 1500,
+      deductibleJpy: null,
+    })
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    // Read back with a FRESH SELECT (not the create return) to prove Postgres stored it.
+    const readBack = await repo.findById(SYSTEM_CONTEXT, res.option.id)
+    expect(readBack?.nameI18n).toEqual({ en: 'Gold', ja: 'ゴールド', zh: '黄金' })
+    expect(readBack?.name).toBe('Gold')
+  })
+
+  // A legacy row (nameI18n null) must survive the round-trip so the resolver can
+  // fall back to the `name` mirror — the additive column can't break existing data.
+  it('[#1437] a null nameI18n round-trips as null (legacy floor preserved)', async () => {
+    const created = await repo.create({
+      operatorId: opAId,
+      name: 'LegacyCover',
+      nameI18n: null,
+      description: null,
+      dailyPriceJpy: 900,
+      deductibleJpy: null,
+      status: 'ACTIVE',
+    })
+    const readBack = await repo.findById(SYSTEM_CONTEXT, created.id)
+    expect(readBack?.nameI18n).toBeNull()
+    expect(readBack?.name).toBe('LegacyCover')
   })
 
   it('[#1271] a direct repo update cannot migrate the row to another operator', async () => {

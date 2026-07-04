@@ -71,6 +71,7 @@ function makeInsurance(
   return insuranceRepo.create({
     operatorId: 'op_a',
     name: 'CDW',
+    nameI18n: null,
     description: null,
     dailyPriceJpy: 1500,
     deductibleJpy: null,

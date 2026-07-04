@@ -26,6 +26,10 @@ const option = {
   id: 'ins_1',
   operatorId: 'op_1',
   name: 'Full cover',
+  // #1437 slice 3: the read carries the self-authored bundle (nameI18n) alongside
+  // the resolved `name` mirror. A faithful row so the schema's localizedTextSchema
+  // actually parses (an omitted bundle would 500 the read as a ParseError).
+  nameI18n: { en: 'Full cover' },
   description: null,
   dailyPriceJpy: 2000,
   deductibleJpy: null,
@@ -81,7 +85,7 @@ describe('createInsuranceOption', () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: option }, 201))
 
     const input = {
-      name: 'Full cover',
+      nameI18n: { en: 'Full cover' },
       description: null,
       dailyPriceJpy: 2000,
       deductibleJpy: null,
@@ -101,9 +105,9 @@ describe('createInsuranceOption', () => {
     fetchMock.mockResolvedValue(
       jsonResponse({ success: false, error: 'A plan with this name already exists' }, 409),
     )
-    await expect(createInsuranceOption({ name: 'dupe', dailyPriceJpy: 1 }, 'csrf')).rejects.toThrow(
-      'already exists',
-    )
+    await expect(
+      createInsuranceOption({ nameI18n: { en: 'dupe' }, dailyPriceJpy: 1 }, 'csrf'),
+    ).rejects.toThrow('already exists')
   })
 })
 
@@ -125,7 +129,7 @@ describe('updateInsuranceOption', () => {
 
   it('encodes the id into the path', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: option }))
-    await updateInsuranceOption('a/b', { name: 'x' }, 'csrf')
+    await updateInsuranceOption('a/b', { nameI18n: { en: 'x' } }, 'csrf')
     const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/insurance-options/a%2Fb')
   })

@@ -5,9 +5,13 @@ import {
   updateInsuranceOptionSchema,
 } from '../../src/validators/insurance-option'
 
+// #1437 slice 3: insurance is PURELY self-authored — the operator supplies an
+// {en, ja?, zh?} bundle (en required, ja/zh optional), NOT a single-language string.
+const NAME_I18N = { en: 'Standard Cover', ja: '標準補償', zh: '标准保障' }
+
 function validInput() {
   return {
-    name: 'Standard Cover',
+    nameI18n: NAME_I18N,
     dailyPriceJpy: 1500,
   }
 }
@@ -17,19 +21,60 @@ describe('createInsuranceOptionSchema', () => {
     const result = createInsuranceOptionSchema.safeParse(validInput())
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.name).toBe('Standard Cover')
+      expect(result.data.nameI18n).toEqual(NAME_I18N)
       expect(result.data.dailyPriceJpy).toBe(1500)
     }
   })
 
-  it('trims and rejects an empty name', () => {
-    const result = createInsuranceOptionSchema.safeParse({ ...validInput(), name: '   ' })
+  it('accepts an en-only bundle (ja/zh optional)', () => {
+    const result = createInsuranceOptionSchema.safeParse({
+      nameI18n: { en: 'Basic Cover' },
+      dailyPriceJpy: 1500,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.nameI18n).toEqual({ en: 'Basic Cover' })
+    }
+  })
+
+  it('rejects a bundle missing the en floor', () => {
+    const result = createInsuranceOptionSchema.safeParse({
+      nameI18n: { ja: '標準補償' },
+      dailyPriceJpy: 1500,
+    })
     expect(result.success).toBe(false)
   })
 
-  it('rejects name over 200 chars', () => {
-    const result = createInsuranceOptionSchema.safeParse({ ...validInput(), name: 'a'.repeat(201) })
+  it('rejects an empty en value', () => {
+    const result = createInsuranceOptionSchema.safeParse({
+      nameI18n: { en: '' },
+      dailyPriceJpy: 1500,
+    })
     expect(result.success).toBe(false)
+  })
+
+  it('rejects an empty ja slot when present', () => {
+    const result = createInsuranceOptionSchema.safeParse({
+      nameI18n: { en: 'Standard Cover', ja: '' },
+      dailyPriceJpy: 1500,
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects an unknown locale key (strict bundle)', () => {
+    const result = createInsuranceOptionSchema.safeParse({
+      nameI18n: { en: 'Standard Cover', fr: 'Couverture' },
+      dailyPriceJpy: 1500,
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('drops the retired free-text name field', () => {
+    const result = createInsuranceOptionSchema.safeParse({ ...validInput(), name: 'Legacy Name' })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect((result.data as Record<string, unknown>).name).toBeUndefined()
+    }
   })
 
   it('accepts an optional description', () => {
@@ -66,7 +111,7 @@ describe('createInsuranceOptionSchema', () => {
   })
 
   it('requires dailyPriceJpy', () => {
-    const result = createInsuranceOptionSchema.safeParse({ name: 'No price' })
+    const result = createInsuranceOptionSchema.safeParse({ nameI18n: NAME_I18N })
     expect(result.success).toBe(false)
   })
 
@@ -113,7 +158,11 @@ describe('platformAdminCreateInsuranceOptionSchema', () => {
       operatorId: 'op_best_car_rental',
     })
     expect(result.success).toBe(true)
-    if (result.success) expect(result.data.operatorId).toBe('op_best_car_rental')
+    if (result.success) {
+      expect(result.data.operatorId).toBe('op_best_car_rental')
+      // The nameI18n bundle survives the operatorId extension.
+      expect(result.data.nameI18n).toEqual(NAME_I18N)
+    }
   })
 
   it('rejects an empty operatorId', () => {
@@ -126,15 +175,20 @@ describe('platformAdminCreateInsuranceOptionSchema', () => {
 })
 
 describe('updateInsuranceOptionSchema', () => {
-  it('accepts a partial update', () => {
-    const result = updateInsuranceOptionSchema.safeParse({ name: 'Premium Cover' })
+  it('accepts a partial nameI18n update', () => {
+    const result = updateInsuranceOptionSchema.safeParse({ nameI18n: { en: 'Premium Cover' } })
     expect(result.success).toBe(true)
-    if (result.success) expect(result.data.name).toBe('Premium Cover')
+    if (result.success) expect(result.data.nameI18n).toEqual({ en: 'Premium Cover' })
   })
 
   it('accepts an empty object', () => {
     const result = updateInsuranceOptionSchema.safeParse({})
     expect(result.success).toBe(true)
+  })
+
+  it('still rejects a nameI18n missing the en floor on update', () => {
+    const result = updateInsuranceOptionSchema.safeParse({ nameI18n: { ja: 'プレミアム' } })
+    expect(result.success).toBe(false)
   })
 
   it('still rejects a negative dailyPriceJpy on update', () => {

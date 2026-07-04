@@ -52,6 +52,15 @@ export const insuranceOptions = pgTable(
     // NOT LocalizedText — an operator may author one locale only; deferred MT
     // fills the remaining keys in place). Nullable: most rows keep the template's.
     descriptionOverride: jsonb('descriptionOverride').$type<LocalizedTextOverride>(),
+    // SELF-AUTHORED name (#1437 slice 3): the operator's own {en, ja?, zh?} bundle.
+    // Insurance is PURELY self-authored — there is no operator-facing picker — so this
+    // is the primary identity for every new row; the dormant templateId scaffolding
+    // (#1319/0097) is never written by the app. Full LocalizedText (en required) so a
+    // self-authored row always has a floor. Null for legacy rows, which fall back to
+    // the `name` mirror. No not-both-identities CHECK (unlike add_on_options): with no
+    // picker path, a both-set row can't arise from the app, and a stray one is harmless
+    // (there is no template name resolver — the name always resolves from nameI18n/name).
+    nameI18n: jsonb('nameI18n').$type<LocalizedText>(),
     dailyPriceJpy: integer('dailyPriceJpy').notNull(),
     // null = no deductible (full cover).
     deductibleJpy: integer('deductibleJpy'),
