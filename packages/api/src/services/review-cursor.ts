@@ -8,6 +8,11 @@ import type { ReviewListCursor } from '../repositories/types'
  *
  * Payload is `${publishedAt ISO}${SEP}${id}` — pure ASCII, so btoa is safe; ISO timestamps
  * and uuids never contain the separator, so a first-`SEP` split is unambiguous.
+ *
+ * Precision invariant: publishedAt is ms-precise (a JS Date written via publishMany), so the
+ * toISOString() round-trip is lossless and the keyset boundary is exact. If publishedAt ever
+ * gains sub-ms precision (a DB clock), this ms truncation would drop the boundary row of a
+ * same-instant batch — the reviews.publishedAt column carries the matching write-path note.
  */
 const SEP = '|'
 
