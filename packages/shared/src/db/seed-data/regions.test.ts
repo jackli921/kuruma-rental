@@ -12,6 +12,16 @@ describe('DEMO_REGIONS structural invariants (#1276)', () => {
     expect(DEMO_REGIONS.filter((r) => r.type === 'PREFECTURE')).toHaveLength(47)
   })
 
+  it('numbers prefectures with the unique JIS 1..47 sortOrder set (national dropdown order)', () => {
+    // The repo sorts the flat taxonomy by (sortOrder, nameEn); a dup or gap in the
+    // prefecture codes silently scrambles the dropdown. Pin the whole set so the
+    // Kansai core (26-29) and the nationwide rows never collide again.
+    const prefSortOrders = DEMO_REGIONS.filter((r) => r.type === 'PREFECTURE')
+      .map((r) => r.sortOrder ?? -1)
+      .sort((a, b) => a - b)
+    expect(prefSortOrders).toEqual(Array.from({ length: 47 }, (_, i) => i + 1))
+  })
+
   it('gives every node a unique, non-empty slug', () => {
     const slugs = DEMO_REGIONS.map((r) => r.slug)
     for (const slug of slugs) expect(slug.length).toBeGreaterThan(0)

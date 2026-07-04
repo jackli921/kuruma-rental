@@ -110,10 +110,10 @@ describe('seed-data demo locations (slice 8 §3.2)', () => {
 })
 
 // #394 — hierarchical region taxonomy (prefecture -> city -> area, adjacency
-// list). Platform-global reference data: no operatorId. Demo seed scope is
-// Kansai only — every region node must contain a seeded location, so we seed the
-// four prefectures that own the 9 demo locations and nothing else (§3 seed-scope).
-describe('seed-data demo regions (#394)', () => {
+// list). Platform-global reference data: no operatorId. #1276 widened the scope
+// from Kansai-only to nationwide (all 47 prefectures + capitals + designated
+// cities); the Kansai core still anchors the 9 demo locations at AREA leaves.
+describe('seed-data demo regions (#394, #1276)', () => {
   const regionsById = new Map(DEMO_REGIONS.map((r) => [r.id, r]))
   const parentIds = new Set(
     DEMO_REGIONS.map((r) => r.parentId).filter((p): p is string => p !== null),
@@ -143,11 +143,13 @@ describe('seed-data demo regions (#394)', () => {
     }
   })
 
-  it('roots are exactly the four Kansai prefectures (demo seed scope §3)', () => {
+  it('roots are exactly the 47 prefectures (#1276 nationwide scope), incl. the Kansai core', () => {
     const roots = DEMO_REGIONS.filter((r) => r.parentId === null)
-      .map((r) => r.nameEn)
-      .sort()
-    expect(roots).toEqual(['Hyogo', 'Kyoto', 'Nara', 'Osaka'])
+    expect(roots).toHaveLength(47)
+    expect(roots.every((r) => r.type === 'PREFECTURE')).toBe(true)
+    const rootNames = new Set(roots.map((r) => r.nameEn))
+    for (const kansai of ['Osaka', 'Kyoto', 'Hyogo', 'Nara'])
+      expect(rootNames.has(kansai)).toBe(true)
   })
 
   it('gives every region a non-empty trilingual name (nameEn/nameJa/nameZh)', () => {
@@ -171,19 +173,28 @@ describe('seed-data demo regions (#394)', () => {
   // #651 Slice 1 — region coordinates + taxonomy + slugs.
   const isLeaf = (id: string) => !parentIds.has(id)
 
-  it('types every region by tree position (root=PREFECTURE, leaf=AREA, else CITY)', () => {
+  it('types every region by taxonomy position: PREFECTURE(root) > CITY > AREA(leaf) (#1276)', () => {
+    // #1276 makes a CITY a valid terminal, so "leaf === AREA" no longer holds (an
+    // assignable city with no area children is a leaf). Assert the taxonomy by each
+    // node's parent type instead: only AREA is guaranteed to be the deepest node.
     for (const r of DEMO_REGIONS) {
-      const expected = r.parentId === null ? 'PREFECTURE' : isLeaf(r.id) ? 'AREA' : 'CITY'
-      expect(r.type).toBe(expected)
+      const parent = r.parentId !== null ? regionsById.get(r.parentId) : null
+      if (r.type === 'PREFECTURE') expect(r.parentId).toBeNull()
+      else if (r.type === 'CITY') expect(parent?.type).toBe('PREFECTURE')
+      else {
+        expect(r.type).toBe('AREA')
+        expect(parent?.type).toBe('CITY')
+        expect(isLeaf(r.id)).toBe(true)
+      }
     }
   })
 
-  it('marks a region assignable iff it is an AREA (leaf) node', () => {
-    for (const r of DEMO_REGIONS) expect(r.assignable).toBe(r.type === 'AREA')
+  it('marks CITY and AREA nodes assignable, prefectures navigation-only (#1276)', () => {
+    for (const r of DEMO_REGIONS) expect(r.assignable).toBe(r.type !== 'PREFECTURE')
   })
 
-  it('gives every assignable (area) region valid WGS84 coordinates', () => {
-    for (const r of DEMO_REGIONS.filter((r) => r.assignable)) {
+  it('gives every AREA valid NE-quadrant WGS84 coords; CITY nodes stay null-coord (#1276)', () => {
+    for (const r of DEMO_REGIONS.filter((r) => r.type === 'AREA')) {
       const lat = r.latitude as number
       const lng = r.longitude as number
       // Finite numbers (rejects null / NaN / Infinity)...
@@ -194,9 +205,15 @@ describe('seed-data demo regions (#394)', () => {
       expect(lat).toBeLessThanOrEqual(90)
       expect(lng).toBeGreaterThanOrEqual(-180)
       expect(lng).toBeLessThanOrEqual(180)
-      // ...and not the (0,0) Atlantic-Ocean default (Kansai is firmly NE quadrant).
+      // ...and not the (0,0) Atlantic-Ocean default (Japan is firmly NE quadrant).
       expect(lat).toBeGreaterThan(0)
       expect(lng).toBeGreaterThan(0)
+    }
+    // Cities are explicit-select-only: null coords keep them out of nearest-area
+    // auto-derivation, so "near me" stays on the fine-grained AREA nodes (#1276 §1).
+    for (const r of DEMO_REGIONS.filter((r) => r.type === 'CITY')) {
+      expect(r.latitude).toBeNull()
+      expect(r.longitude).toBeNull()
     }
   })
 
