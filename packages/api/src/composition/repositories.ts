@@ -21,10 +21,12 @@ import {
   DrizzleFeeScheduleRepository,
   DrizzleFleetOverviewRepository,
   DrizzleInsuranceOptionRepository,
+  DrizzleInsuranceTemplateRepository,
   DrizzleLocationRepository,
   DrizzleMaintenanceLogRepository,
   DrizzleMessageRepository,
   DrizzleNotificationLogRepository,
+  DrizzleOperatorApplicationRepository,
   DrizzleOperatorMembershipRepository,
   DrizzleOperatorRepository,
   DrizzleOverviewRepository,
@@ -44,6 +46,7 @@ import {
   DrizzleVehicleClassRepository,
   DrizzleVehicleDetailRepository,
   DrizzleVehicleRepository,
+  createDrizzleOperatorApproval,
   createDrizzleOperatorGrant,
   createDrizzleTransaction,
 } from '../repositories/drizzle'
@@ -63,6 +66,7 @@ import {
   InMemoryFeeScheduleRepository,
   InMemoryFleetOverviewRepository,
   InMemoryInsuranceOptionRepository,
+  InMemoryInsuranceTemplateRepository,
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
   InMemoryMessageRepository,
@@ -89,6 +93,7 @@ import {
 } from '../repositories/in-memory'
 import { InMemoryVehicleDetailRepository } from '../repositories/in-memory-vehicle-detail'
 import { InMemoryConsentRepository } from '../repositories/in-memory/consent'
+import { InMemoryOperatorApplicationRepository } from '../repositories/in-memory/operator-application'
 import { InMemoryPhotoStorage } from '../repositories/in-memory/photo-storage'
 import { R2DocumentStorage } from '../repositories/r2-document-storage'
 import { type R2BucketLike, R2PhotoStorage } from '../repositories/r2-photo-storage'
@@ -108,10 +113,12 @@ import type {
   FeeScheduleRepository,
   FleetOverviewRepository,
   InsuranceOptionRepository,
+  InsuranceTemplateRepository,
   LocationRepository,
   MaintenanceLogRepository,
   MessageRepository,
   NotificationLogRepository,
+  OperatorApplicationRepository,
   OperatorMembershipRepository,
   OperatorRepository,
   OverviewRepository,
@@ -125,6 +132,7 @@ import type {
   RenterDocumentRepository,
   ReviewRepository,
   RunInTransaction,
+  RunOperatorApproval,
   RunOperatorGrant,
   StatsRepository,
   StorefrontRepository,
@@ -190,6 +198,7 @@ export type Repos = {
   insuranceOptionRepo: InsuranceOptionRepository
   addOnRepo: AddOnRepository
   addOnTemplateRepo: AddOnTemplateRepository
+  insuranceTemplateRepo: InsuranceTemplateRepository
   feeScheduleRepo: FeeScheduleRepository
   classRatePlanRepo: ClassRatePlanRepository
   notificationLogRepo: NotificationLogRepository
@@ -207,8 +216,10 @@ export type Repos = {
   consentRepo: ConsentRepository
   reviewRepo: ReviewRepository
   featureFlagRepo: FeatureFlagRepository
+  operatorApplicationRepo: OperatorApplicationRepository
   runInTransaction: RunInTransaction
   runOperatorGrant: RunOperatorGrant
+  runOperatorApproval: RunOperatorApproval
   // Public R2 bucket base for vehicle photos (#879). Threaded to VehicleService
   // as the anchor for the #967 cross-tenant photo-spoof guard. '' in dev/test
   // (no bucket) ⇒ the guard is inert, matching the no-op encode/decode there.
@@ -242,6 +253,8 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     overrides.addOnRepo ?? new InMemoryAddOnRepository(undefined, addOnTemplateStore)
   const addOnTemplateRepo =
     overrides.addOnTemplateRepo ?? new InMemoryAddOnTemplateRepository(addOnTemplateStore)
+  const insuranceTemplateRepo =
+    overrides.insuranceTemplateRepo ?? new InMemoryInsuranceTemplateRepository()
   const feeScheduleRepo = overrides.feeScheduleRepo ?? new InMemoryFeeScheduleRepository()
   const classRatePlanRepo = overrides.classRatePlanRepo ?? new InMemoryClassRatePlanRepository()
   // #1206: declared ahead of runInTransaction so the bundle closure captures it
@@ -307,8 +320,18 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const consentRepo = overrides.consentRepo ?? new InMemoryConsentRepository()
   const reviewRepo = overrides.reviewRepo ?? new InMemoryReviewRepository()
   const featureFlagRepo = overrides.featureFlagRepo ?? new InMemoryFeatureFlagRepository()
+  const operatorApplicationRepo =
+    overrides.operatorApplicationRepo ?? new InMemoryOperatorApplicationRepository()
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
+  const runOperatorApproval: RunOperatorApproval = (fn) =>
+    fn({
+      users: userRepo,
+      memberships: operatorMembershipRepo,
+      invites: providerInviteRepo,
+      operators: operatorRepo,
+      applications: operatorApplicationRepo,
+    })
   return {
     vehicleClassRepo,
     vehicleRepo,
@@ -332,6 +355,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     insuranceOptionRepo,
     addOnRepo,
     addOnTemplateRepo,
+    insuranceTemplateRepo,
     feeScheduleRepo,
     classRatePlanRepo,
     notificationLogRepo,
@@ -349,8 +373,10 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     consentRepo,
     reviewRepo,
     featureFlagRepo,
+    operatorApplicationRepo,
     runInTransaction,
     runOperatorGrant,
+    runOperatorApproval,
     photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
     googleAuthRuntime: overrides.googleAuthRuntime,
   }
@@ -440,6 +466,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     insuranceOptionRepo: new DrizzleInsuranceOptionRepository(db),
     addOnRepo: new DrizzleAddOnRepository(db),
     addOnTemplateRepo: new DrizzleAddOnTemplateRepository(db),
+    insuranceTemplateRepo: new DrizzleInsuranceTemplateRepository(db),
     feeScheduleRepo: new DrizzleFeeScheduleRepository(db),
     classRatePlanRepo: new DrizzleClassRatePlanRepository(db),
     notificationLogRepo: new DrizzleNotificationLogRepository(db),
@@ -457,10 +484,12 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     consentRepo: new DrizzleConsentRepository(db),
     reviewRepo: new DrizzleReviewRepository(db),
     featureFlagRepo: new DrizzleFeatureFlagRepository(db),
+    operatorApplicationRepo: new DrizzleOperatorApplicationRepository(db),
     runInTransaction: createDrizzleTransaction(tx, decodePhotos, encodePhotos),
     // Real interactive tx (#493): membership INSERT first so the partial-unique-
     // active index aborts the whole grant on a concurrent double-accept.
     runOperatorGrant: createDrizzleOperatorGrant(tx),
+    runOperatorApproval: createDrizzleOperatorApproval(tx),
     photosPublicUrl,
     googleAuthRuntime,
   }
@@ -486,6 +515,7 @@ export function buildInMemoryRepos(): Repos {
   const addOnTemplateStore = seedDemoAddOnTemplates()
   const addOnRepo = new InMemoryAddOnRepository(undefined, addOnTemplateStore)
   const addOnTemplateRepo = new InMemoryAddOnTemplateRepository(addOnTemplateStore)
+  const insuranceTemplateRepo = new InMemoryInsuranceTemplateRepository()
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const operatorRepo = new InMemoryOperatorRepository()
@@ -529,8 +559,17 @@ export function buildInMemoryRepos(): Repos {
       // #1206: the deactivated-operator booking guard reads this in-tx.
       operatorRepo,
     })
+  const operatorApplicationRepo = new InMemoryOperatorApplicationRepository()
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
+  const runOperatorApproval: RunOperatorApproval = (fn) =>
+    fn({
+      users: userRepo,
+      memberships: operatorMembershipRepo,
+      invites: providerInviteRepo,
+      operators: operatorRepo,
+      applications: operatorApplicationRepo,
+    })
   return {
     vehicleClassRepo,
     vehicleRepo,
@@ -564,6 +603,7 @@ export function buildInMemoryRepos(): Repos {
     insuranceOptionRepo,
     addOnRepo,
     addOnTemplateRepo,
+    insuranceTemplateRepo,
     feeScheduleRepo,
     classRatePlanRepo,
     notificationLogRepo: new InMemoryNotificationLogRepository(),
@@ -581,8 +621,10 @@ export function buildInMemoryRepos(): Repos {
     consentRepo: new InMemoryConsentRepository(),
     reviewRepo: new InMemoryReviewRepository(),
     featureFlagRepo: new InMemoryFeatureFlagRepository(),
+    operatorApplicationRepo,
     runInTransaction,
     runOperatorGrant,
+    runOperatorApproval,
     photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
     googleAuthRuntime: undefined,
   }

@@ -550,6 +550,9 @@ describe('updateBookingStatus', () => {
 
     const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
     expect(new URL(url, 'http://x').pathname).toBe('/api/bookings/bk-1/status')
+    // #1361: a tenant operator (no pick) must NOT append operatorId — an always-append
+    // mutation would send `operatorId=undefined`, which pathname-only checks miss.
+    expect(new URL(url, 'http://x').searchParams.has('operatorId')).toBe(false)
     expect(init.method).toBe('PATCH')
     expect(init.credentials).toBe('include')
     expect(init.headers).toEqual({ 'Content-Type': 'application/json', 'X-CSRF-Token': 'csrf-1' })
@@ -572,6 +575,18 @@ describe('updateBookingStatus', () => {
       'Invalid status transition',
     )
   })
+
+  it('appends ?operatorId= when a picker admin acts as an operator (#1361)', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: bookingRaw({ status: 'ACTIVE' }) }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await updateBookingStatus('bk-1', 'ACTIVE', 'csrf-1', 'op_7')
+
+    const [url] = fetchMock.mock.calls[0]! as [string, RequestInit]
+    expect(new URL(url, 'http://x').searchParams.get('operatorId')).toBe('op_7')
+  })
 })
 
 describe('cancelBooking', () => {
@@ -589,11 +604,25 @@ describe('cancelBooking', () => {
 
     const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
     expect(new URL(url, 'http://x').pathname).toBe('/api/bookings/bk-1/cancel')
+    // #1361: no pick -> no operatorId (see updateBookingStatus note above).
+    expect(new URL(url, 'http://x').searchParams.has('operatorId')).toBe(false)
     expect(init.method).toBe('POST')
     expect(init.credentials).toBe('include')
     expect(init.headers).toEqual({ 'X-CSRF-Token': 'csrf-2' })
     expect(init.body).toBeUndefined()
     expect(result).toMatchObject({ id: 'bk-1', status: 'CANCELLED' })
+  })
+
+  it('appends ?operatorId= when a picker admin acts as an operator (#1361)', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: bookingRaw({ status: 'CANCELLED' }) }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await cancelBooking('bk-1', 'csrf-2', 'op_7')
+
+    const [url] = fetchMock.mock.calls[0]! as [string, RequestInit]
+    expect(new URL(url, 'http://x').searchParams.get('operatorId')).toBe('op_7')
   })
 })
 
@@ -814,10 +843,17 @@ describe('searchCustomers', () => {
 })
 
 describe('customerSearchQueryOptions', () => {
-  it('keys by the query and is enabled only at >=2 non-space chars', () => {
+  it('keys by the query (+ picked operator) and is enabled only at >=2 non-space chars', () => {
     const opts = customerSearchQueryOptions('tan')
-    expect(opts.queryKey).toEqual(['operator-bookings', 'customer-search', 'tan'])
+    expect(opts.queryKey).toEqual(['operator-bookings', 'customer-search', 'tan', null])
     expect(opts.enabled).toBe(true)
+    // #1260: the picked operator joins the key so switching operators refetches.
+    expect(customerSearchQueryOptions('tan', 'op-7').queryKey).toEqual([
+      'operator-bookings',
+      'customer-search',
+      'tan',
+      'op-7',
+    ])
     expect(customerSearchQueryOptions(' a ').enabled).toBe(false)
     expect(customerSearchQueryOptions('').enabled).toBe(false)
   })

@@ -2,7 +2,7 @@ import { DEFAULT_LOCALE, type Locale, SUPPORTED_LOCALES } from '@kuruma/shared/i
 import type { Context } from 'hono'
 import { z } from 'zod'
 import type { CallerContext } from '../middleware/auth'
-import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
+import { type CrossOperatorRead, type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
 
 // --- Response helpers ---
 
@@ -24,16 +24,53 @@ export function fail(
   return c.json({ success: false, error, ...extras }, status as 400)
 }
 
+/** The failure half every service `Result` shares once narrowed on `!result.ok`:
+ *  an HTTP `status` + a human `error`, plus the optional machine-readable
+ *  discriminants a route must forward so a client can branch — a `code`, and the
+ *  `activeBookingsCount` an archive conflict surfaces (#412). */
+export interface FailureResult {
+  status: number
+  error: string | Record<string, unknown>
+  code?: string
+  activeBookingsCount?: number
+}
+
+/**
+ * Translate a narrowed service failure into a `fail()` envelope, forwarding the
+ * known optional discriminants when present (never as truthiness — `activeBookingsCount: 0`
+ * is a real value). Prefer over hand-spreading extras, so a route can't silently
+ * swallow a `code` a service later adds (#1376):
+ *
+ *   if (!result.ok) return failResult(c, result)
+ *
+ * A discriminant beyond `code`/`activeBookingsCount` (e.g. bookings' `details`) keeps
+ * a bespoke `fail(c, ...)` until it is shared by 2+ routes.
+ */
+export function failResult(c: Context, result: FailureResult): Response {
+  const extras: Record<string, unknown> = {}
+  if (result.code !== undefined) extras.code = result.code
+  if (result.activeBookingsCount !== undefined) {
+    extras.activeBookingsCount = result.activeBookingsCount
+  }
+  return fail(c, result.error, result.status, extras)
+}
+
 // --- Object helpers ---
 
-/** Remove entries with `undefined` values. Isolates the single type assertion
- *  needed for exactOptionalPropertyTypes compliance so call sites stay clean. */
-export function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+/** Remove entries with `undefined` values. The return type strips `undefined` from
+ *  every property (`Exclude<T[K], undefined>`) — matching the runtime, which drops
+ *  those keys — so the result is directly assignable to the exactOptionalPropertyTypes
+ *  `*Update` types WITHOUT a call-site `as` cast (#1376). The one assertion this needs
+ *  lives here, isolated. Still a subtype of `Partial<T>`, so any `Partial<T>` caller is
+ *  unaffected. */
+export function stripUndefined<T extends Record<string, unknown>>(
+  obj: T,
+): { [K in keyof T]?: Exclude<T[K], undefined> } {
   const result: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(obj)) {
     if (v !== undefined) result[k] = v
   }
-  return result as Partial<T>
+  return result as { [K in keyof T]?: Exclude<T[K], undefined> }
 }
 
 // --- Pagination helpers ---
@@ -339,4 +376,36 @@ export function parseDateRange(
   }
 
   return { ok: true, from, to }
+}
+
+/**
+ * Parse the cross-operator read-scope struct that every scoped list read forwards
+ * to its service. Centralized (audit M3 follow-up #1373) so a typo'd query key
+ * can't silently widen or break tenant scoping: `includeAll` is set ONLY on the
+ * exact string "true". The service (`applyCrossOperatorReadScope`) still adjudicates
+ * the struct — a bypass caller naming neither `operatorId` nor `includeAll` is
+ * rejected there — and operator callers auto-scope regardless of any `operatorId`.
+ */
+export function parseCrossOperatorRead(c: Context): CrossOperatorRead {
+  return {
+    operatorId: c.req.query('operatorId'),
+    includeAll: c.req.query('includeAll') === 'true',
+  }
+}
+
+/** The two archivable-list filters shared by the operator config-catalog reads. */
+export type ArchivableFilters = { status?: 'ACTIVE' | 'ARCHIVED'; includeArchived?: boolean }
+
+/**
+ * Parse the `status` (ACTIVE/ARCHIVED only) + `includeArchived` filters shared by
+ * the config-catalog list reads. Unknown `status` values and any `includeArchived`
+ * other than the exact string "true" are ignored, so callers can spread the result
+ * into their route-typed filters object.
+ */
+export function parseArchivableFilters(c: Context): ArchivableFilters {
+  const filters: ArchivableFilters = {}
+  const status = c.req.query('status')
+  if (status === 'ACTIVE' || status === 'ARCHIVED') filters.status = status
+  if (c.req.query('includeArchived') === 'true') filters.includeArchived = true
+  return filters
 }

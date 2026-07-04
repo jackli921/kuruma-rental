@@ -7,9 +7,17 @@ import { Hono } from 'hono'
 import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
 import { LOCATIONS_REGION_FK, PG_ERROR, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type { LocationFilters } from '../services/filters'
-import type { LocationService, LocationUpdateData } from '../services/location'
+import type { LocationService } from '../services/location'
 import type { ResolveWriteOperatorId } from '../tenancy'
-import { fail, ok, parseBody, parseId, parseScopedCreate, stripUndefined } from './helpers'
+import {
+  fail,
+  failResult,
+  ok,
+  parseBody,
+  parseId,
+  parseScopedCreate,
+  stripUndefined,
+} from './helpers'
 
 export function createLocationRoutes(
   service: LocationService,
@@ -84,7 +92,7 @@ export function createLocationRoutes(
           regionId: d.regionId,
           status: 'ACTIVE',
         })
-        if (!result.ok) return fail(c, result.error, result.status)
+        if (!result.ok) return failResult(c, result)
         return ok(c, result.location, 201)
       } catch (err) {
         // Two client-supplied FKs now: operatorId -> operators and regionId ->
@@ -114,9 +122,11 @@ export function createLocationRoutes(
         const result = await service.update(
           toCallerContext(user),
           idResult.id,
-          stripUndefined(parsed.data) as LocationUpdateData,
+          stripUndefined(parsed.data),
+          // #1456: bind a bypass-admin edit to the operator it picked (?operatorId=).
+          c.req.query('operatorId'),
         )
-        if (!result.ok) return fail(c, result.error, result.status)
+        if (!result.ok) return failResult(c, result)
         return ok(c, result.location)
       } catch (err) {
         // regionId is the only client-supplied FK on update (#394) — operatorId
@@ -134,17 +144,16 @@ export function createLocationRoutes(
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
 
-      const result = await service.archive(toCallerContext(user), idResult.id)
-      if (!result.ok) {
-        // Surface the active-bookings discriminator so the portal can prompt the
-        // owner to reassign/cancel first instead of showing a generic 409 (#412).
-        const extras: Record<string, unknown> = {}
-        if (result.code) extras.code = result.code
-        if (result.activeBookingsCount !== undefined) {
-          extras.activeBookingsCount = result.activeBookingsCount
-        }
-        return fail(c, result.error, result.status, extras)
-      }
+      // #1456: bind a bypass-admin archive to the operator it picked (?operatorId=).
+      const result = await service.archive(
+        toCallerContext(user),
+        idResult.id,
+        c.req.query('operatorId'),
+      )
+      // The active-bookings discriminator (code + activeBookingsCount) rides through
+      // failResult so the portal can prompt the owner to reassign/cancel first
+      // instead of showing a generic 409 (#412).
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.location)
     })
 }

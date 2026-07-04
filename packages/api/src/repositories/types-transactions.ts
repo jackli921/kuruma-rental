@@ -7,6 +7,7 @@ import type {
   InsuranceOptionRepository,
   LocationRepository,
   MaintenanceLogRepository,
+  OperatorApplicationRepository,
   OperatorMembershipRepository,
   OperatorRepository,
   ProviderInviteRepository,
@@ -69,3 +70,18 @@ export interface OperatorGrantRepos {
 // InMemory passes the plain repos (single-threaded, no real tx). Mirrors
 // RunInTransaction (the booking bundle) but scoped to the grant's three tables.
 export type RunOperatorGrant = <T>(fn: (repos: OperatorGrantRepos) => Promise<T>) => Promise<T>
+
+// #1277: atomic operator-approval tx. C1 read guard (email -> membership/invite) +
+// operator INSERT + invite INSERT + application claim+link, all-or-nothing. Also
+// backs the invite-remint tx (#1370): membership guard + revoke the stale PENDING
+// invite + INSERT a fresh one, hence `invites.revoke` in the Pick below.
+export interface OperatorApprovalRepos {
+  users: Pick<UserRepository, 'findByEmail'>
+  memberships: Pick<OperatorMembershipRepository, 'findActiveByUserId'>
+  invites: Pick<ProviderInviteRepository, 'create' | 'findPendingByEmail' | 'revoke'>
+  operators: Pick<OperatorRepository, 'create' | 'existsBySlug'>
+  applications: Pick<OperatorApplicationRepository, 'markApprovedIfPending'>
+}
+export type RunOperatorApproval = <T>(
+  fn: (repos: OperatorApprovalRepos) => Promise<T>,
+) => Promise<T>

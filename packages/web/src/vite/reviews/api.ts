@@ -6,7 +6,7 @@ import {
   type ReviewAuthorRole,
   type ReviewSubject,
 } from '@kuruma/shared/enums'
-import { queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
 
 // #1083: the two subjects a renter rates after a trip, in form order. The operator
@@ -164,6 +164,91 @@ const aggregateResponseSchema = z.object({
  *  cache-hit win. Returns a stable readonly tuple safe to use as a query key. */
 function normalizeAggregateIds(ids: readonly string[]): readonly string[] {
   return Array.from(new Set(ids)).sort()
+}
+
+// --- #1067 review-display slice: public per-operator review list ---------------
+
+// Schema is the single source of truth; the type is derived so the two can't drift.
+const publicReviewDtoSchema = z.object({
+  id: z.string(),
+  overall: z.number(),
+  subRatings: z.record(z.string(), z.number()),
+  comment: z.string().nullable(),
+  publishedAt: z.string(),
+  // #1450: the reviewer's first name only (server-derived; the full name never crosses the
+  // wire), or null for the anonymous fallback. Required so a dropped field fails at the seam.
+  reviewerFirstName: z.string().nullable(),
+})
+
+/** Public review wire shape from GET /reviews/for/operators/:id.
+ *  Curated: no bookingId or authorUserId exposed to the render tier.
+ *  subRatings is the dimension→stars map ({} when no sub-dimensions rated). */
+export type PublicReviewDto = z.infer<typeof publicReviewDtoSchema>
+
+// One page of reviews + the opaque keyset cursor for the next (#1449). `nextCursor` is
+// required (null on the last page) so a dropped field fails at the seam, not as a silent
+// "no more pages" that would truncate the list. Subject-agnostic: the operator (#1449) and
+// vehicle (#1448) lists share this exact wire shape — only the URL segment + cache key differ.
+const reviewPageSchema = z.object({
+  reviews: z.array(publicReviewDtoSchema),
+  nextCursor: z.string().nullable(),
+})
+
+/** A page of a public review list (operator or vehicle subject). */
+export type ReviewPage = z.infer<typeof reviewPageSchema>
+
+/** GET /reviews/for/operators/:id[?after=cursor] — public, anonymous (no credentials).
+ *  `after` is the opaque token from a previous page's nextCursor; omit for the first page. */
+export async function fetchOperatorReviews(
+  operatorId: string,
+  after?: string | null,
+): Promise<ReviewPage> {
+  return fetchSubjectReviews('operators', operatorId, after)
+}
+
+/** GET /reviews/for/vehicles/:id[?after=cursor] — public, anonymous (#1448). Mirrors the
+ *  operator reader against the VEHICLE subject path the API already serves. */
+export async function fetchVehicleReviews(
+  vehicleId: string,
+  after?: string | null,
+): Promise<ReviewPage> {
+  return fetchSubjectReviews('vehicles', vehicleId, after)
+}
+
+/** Shared fetch for the public per-subject review list. The subject is a fixed URL
+ *  segment (`operators` | `vehicles`), never user input, so it needs no encoding. */
+async function fetchSubjectReviews(
+  subject: 'operators' | 'vehicles',
+  id: string,
+  after?: string | null,
+): Promise<ReviewPage> {
+  const base = `${getApiBaseUrl()}/reviews/for/${subject}/${encodeURIComponent(id)}`
+  const url = after ? `${base}?after=${encodeURIComponent(after)}` : base
+  const res = await fetch(url)
+  return unwrap(res, reviewPageSchema)
+}
+
+/** Infinite ("load more") query over the operator review list (#1449). The page param IS
+ *  the cursor: null for the first page, then each page's nextCursor until it comes back
+ *  null (hasNextPage=false). Same cache key prefix as the aggregate/badge reads. */
+export function operatorReviewsInfiniteQueryOptions(operatorId: string) {
+  return infiniteQueryOptions({
+    queryKey: ['reviews', 'list', 'operators', operatorId] as const,
+    queryFn: ({ pageParam }) => fetchOperatorReviews(operatorId, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
+}
+
+/** Infinite ("load more") query over a vehicle's review list (#1448). Keyed under the
+ *  `vehicles` subject so it can never collide with the same-shaped operator list. */
+export function vehicleReviewsInfiniteQueryOptions(vehicleId: string) {
+  return infiniteQueryOptions({
+    queryKey: ['reviews', 'list', 'vehicles', vehicleId] as const,
+    queryFn: ({ pageParam }) => fetchVehicleReviews(vehicleId, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
 }
 
 /** GET /reviews/aggregates/:kind?ids=… (public; no cookie needed). Empty `ids`

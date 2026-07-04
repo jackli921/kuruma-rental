@@ -2,17 +2,16 @@ import type { AddOnSnapshot, InsuranceSnapshot } from '@kuruma/shared/db/schema'
 import { isRoadLegal, jstDateString } from '@kuruma/shared/lib/compliance'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
-import { isOperatorRole } from '../auth/roles'
 import { generateBookingCode } from '../lib/booking-code'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import { BOOKING_CODE_CONSTRAINT, PG_ERROR, pgConstraintName, pgErrorCode } from '../pg-errors'
-import type {
-  BookingRepository,
-  RunInTransaction,
-  TransactionRepos,
-  UserRepository,
-} from '../repositories/types'
+import type { BookingRepository, RunInTransaction, TransactionRepos } from '../repositories/types'
 import type { Location, Vehicle } from '../stores'
+import {
+  assertBookingWriteWithinOperator,
+  bookingReadScope,
+  fleetWriteDenialResult,
+} from '../tenancy'
 import { resolveBookingActor } from './booking-actor'
 import { rejectIfOperatorDeactivated } from './booking-creation-operator-guard'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
@@ -46,7 +45,6 @@ export class BookingCreationService {
   constructor(
     private readonly bookingRepo: BookingRepository,
     private readonly runInTransaction: RunInTransaction,
-    private readonly userRepo?: UserRepository,
     // Single post-commit seam (#393, TODO #300): ensureThread + notifications,
     // each caught-and-logged. Replaces the inline ensureThread calls.
     // Optional is a TEST-ONLY seam: prod always wires it (createApp/index.ts);
@@ -63,6 +61,9 @@ export class BookingCreationService {
     ctx: CallerContext,
     rawInput: CreateBookingRequest,
     now: Date = new Date(),
+    // #1260: the operator a bypass admin acts as (?operatorId=), binding both the
+    // customer scope (below) and the inventory (submitInTx). Operators ignore it.
+    actingOperatorId?: string,
   ): Promise<CreateBookingResult> {
     // #1108 (audit M4): resolve the actor (renter / source / walk-in) from the
     // caller's role HERE — the route forwards raw input and no longer rewrites it.
@@ -81,44 +82,19 @@ export class BookingCreationService {
         }
       : { ...rawRest, renterId: actor.renterId, source: actor.source }
 
-    // Resolve the booking's renter (#314, #589). Three cases:
-    //  - WALK-IN (1c): the operator registers a brand-new customer inline.
-    //    createWalkInRenter ALWAYS makes a fresh renter (never deduped by phone),
-    //    so a booking can't be attached to — nor the existence probed of — another
-    //    tenant's customer (#396/#475). The walk-in IS the authorization, so it
-    //    skips the scope check. renterId stays null here: submitInTx creates the
-    //    renter INSIDE the booking tx (#875), so a failed booking (409 double-book /
-    //    exhausted code-retries) rolls it back — no orphan customer — and the
-    //    idempotent replay below short-circuits before ever minting one.
-    //  - EXISTING renter (1b): operator authz is scope-FIRST — membership IS the
-    //    authorization + existence check; any out-of-scope id returns a uniform
-    //    403 WITHOUT touching the user table (no enumeration oracle). Staff/bypass
-    //    keep the exists+role probe (FK failures => friendly 400, not 500).
+    // Resolve the booking's renter (#314, #589):
+    //  - WALK-IN (1c): a fresh customer minted INSIDE the tx (#875) — the walk-in
+    //    IS the authorization, so it skips the customer scope check (its inventory
+    //    is still bound in submitInTx). renterId stays null; submitInTx mints it,
+    //    so a failed booking rolls it back and an idempotent replay never mints one.
+    //  - EXISTING renter (1b): scope-first membership (assertRenterWithinScope).
     //  - SELF: renterId === ctx.userId (renter self-serve).
     let renterId: string | null = null
     if (!input.walkInCustomer) {
       renterId = input.renterId
       if (renterId !== ctx.userId) {
-        if (isOperatorRole(ctx.role)) {
-          const scoped = ctx.operatorId
-            ? await this.bookingRepo.listRenterIdsForOperator(ctx.operatorId)
-            : []
-          if (!scoped.includes(renterId)) {
-            return {
-              ok: false,
-              status: 403,
-              error: 'Cannot book for a renter outside your customers',
-            }
-          }
-        } else if (this.userRepo) {
-          const [renter] = await this.userRepo.findByIds([renterId])
-          if (!renter) {
-            return { ok: false, status: 400, error: 'Renter not found' }
-          }
-          if ((renter.role ?? 'RENTER') !== 'RENTER') {
-            return { ok: false, status: 400, error: 'Target user is not a renter' }
-          }
-        }
+        const denial = await this.assertRenterWithinScope(ctx, renterId, actingOperatorId)
+        if (denial) return denial
       }
     }
 
@@ -151,7 +127,7 @@ export class BookingCreationService {
     for (let attempt = 0; attempt < MAX_BOOKING_CODE_ATTEMPTS; attempt++) {
       try {
         const result = await this.runInTransaction((repos) =>
-          this.submitInTx(ctx, input, renterId, now, repos),
+          this.submitInTx(ctx, input, renterId, now, repos, actingOperatorId),
         )
         if (!result.ok) return result // domain validation failure — never retried
         // Post-commit side effects (#335 thread + #393 notifications) — never in
@@ -189,6 +165,44 @@ export class BookingCreationService {
     throw lastErr
   }
 
+  // #1260: bind "book on behalf of an EXISTING renter" to an operator's customer
+  // set — membership (a prior booking with it) IS the authorization + existence
+  // check, so an out-of-scope id is a uniform 403 with no user-table probe
+  // (#396/#475). A tenant operator uses its own tenant (a stray actingOperatorId is
+  // ignored); a bypass admin (`all`, PLATFORM_ADMIN via the picker) must name the
+  // operator it acts as (422) and may attach only its customers. Keyed on
+  // bookingReadScope so only the true bypass tier is `all` (renters/partners never
+  // reach here — resolveBookingActor forces their renterId to self); `none` (an
+  // operator missing its operatorId) falls through to the empty-set 403 (fail closed).
+  private async assertRenterWithinScope(
+    ctx: CallerContext,
+    renterId: string,
+    actingOperatorId: string | undefined,
+  ): Promise<Extract<CreateBookingResult, { ok: false }> | null> {
+    const scope = bookingReadScope(ctx)
+    const customerOperatorId =
+      scope.kind === 'operator'
+        ? scope.operatorId
+        : scope.kind === 'all'
+          ? actingOperatorId
+          : undefined
+    if (scope.kind === 'all' && !customerOperatorId) {
+      return {
+        ok: false,
+        status: 422,
+        error: 'operatorId is required: specify the operator to act as',
+        code: 'OPERATOR_REQUIRED',
+      }
+    }
+    const customers = customerOperatorId
+      ? await this.bookingRepo.listRenterIdsForOperator(customerOperatorId)
+      : []
+    if (!customers.includes(renterId)) {
+      return { ok: false, status: 403, error: 'Cannot book for a renter outside your customers' }
+    }
+    return null
+  }
+
   // Single seam for `effectiveEndAt`: both submit paths derive it from the DROPOFF
   // turnaround and MUST equal the DB trigger compute_effective_end_at() (migration
   // 0069, maint review 2026-06-24 #11) — else API response and persisted row drift
@@ -215,12 +229,11 @@ export class BookingCreationService {
     return { ok: true, dropoff, effectiveEndAt }
   }
 
-  // The atomic decision-and-record (FC/IS: the decision; ensureThread is the
-  // imperative shell). Resolution reads run as SYSTEM_CONTEXT — these are
-  // internal pricing/snapshot reads, and insurance/fee reads reject RENTER
-  // callers by design; the booking's tenant is derived from the vehicle, not
-  // the caller. The booking + event WRITES use the caller's ctx (renter-own /
-  // operator scope is enforced at the repo).
+  // The atomic decision-and-record (FC/IS: the decision; ensureThread is the imperative
+  // shell). The ANCHOR read (vehicle/pickup) is ctx-scoped (#1417) — it derives the tenant
+  // AND clamps operators; downstream pricing/snapshot/insurance/fee reads stay SYSTEM_CONTEXT,
+  // cross-checked against that operatorId (insurance/fee also reject RENTER callers). WRITES
+  // use the caller's ctx (scope enforced at the repo).
   private async submitInTx(
     ctx: CallerContext,
     input: CreateBookingInput,
@@ -230,14 +243,26 @@ export class BookingCreationService {
     renterId: string | null,
     now: Date,
     repos: TransactionRepos,
+    // #1260: the operator a bypass admin is acting as; the booking's inventory is
+    // bound to it below. Undefined for tenant operators (already tenant-clamped).
+    actingOperatorId: string | undefined,
   ): Promise<CreateBookingResult> {
     if (input.fulfillmentMode === 'CLASS_COMBO') {
-      return this.submitComboInTx(ctx, input, renterId, now, repos)
+      return this.submitComboInTx(ctx, input, renterId, now, repos, actingOperatorId)
     }
-    const vehicle = await repos.vehicleRepo.findById(SYSTEM_CONTEXT, input.requestedVehicleId)
+    // #1417: read the ANCHOR vehicle with the caller's own ctx, so operatorReadScope clamps
+    // a tenant operator to its own fleet — a foreign car returns undefined -> the plain
+    // 'Vehicle not found' below (no oracle). Marketplace tiers still resolve `all`, unchanged.
+    const vehicle = await repos.vehicleRepo.findById(ctx, input.requestedVehicleId)
     if (!vehicle) {
       return { ok: false, status: 400, error: 'Vehicle not found' }
     }
+    const operatorId = vehicle.operatorId
+    // #1260: only the bypass `all` tier reads cross-operator inventory above, so bind just its
+    // pick-an-operator claim, BEFORE the vehicle-state gates (a mismatched admin pick must not
+    // probe them). Operators/renters/partners already pass — clamped or marketplace.
+    const denial = assertBookingWriteWithinOperator(ctx, operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, 'Vehicle not found')
     if (vehicle.status !== 'AVAILABLE') {
       return { ok: false, status: 400, error: 'Vehicle is not available' }
     }
@@ -257,7 +282,6 @@ export class BookingCreationService {
         code: 'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
       }
     }
-    const operatorId = vehicle.operatorId
     const operatorBlock = await rejectIfOperatorDeactivated(repos, operatorId)
     if (operatorBlock) return operatorBlock
     const classId = vehicle.classId
@@ -447,15 +471,23 @@ export class BookingCreationService {
     renterId: string | null,
     now: Date,
     repos: TransactionRepos,
+    // #1260: the operator a bypass admin is acting as (bind the combo's inventory).
+    actingOperatorId: string | undefined,
   ): Promise<CreateBookingResult> {
     // The pickup location anchors the booking's operator + the (op, class, loc)
     // triple every other read keys off (a forged classId from another tenant
     // gets rejected at the class-belongs-to-operator gate below).
-    const pickup = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.pickupLocationId)
+    // #1417: read the ANCHOR pickup with the caller's own ctx (mirrors SPECIFIC's vehicle
+    // read) — a tenant operator's foreign pickup returns undefined -> the plain 'not
+    // available' below (no oracle). Marketplace tiers still resolve `all`, unchanged.
+    const pickup = await repos.locationRepo.findById(ctx, input.pickupLocationId)
     if (!pickup) {
       return { ok: false, status: 400, error: 'Pickup location is not available' }
     }
     const operatorId = pickup.operatorId
+    // #1260: bind only the bypass `all` tier's pick-an-operator claim (mirrors SPECIFIC).
+    const denial = assertBookingWriteWithinOperator(ctx, operatorId, actingOperatorId)
+    if (denial) return fleetWriteDenialResult(denial, 'Pickup location is not available')
     const operatorBlock = await rejectIfOperatorDeactivated(repos, operatorId)
     if (operatorBlock) return operatorBlock
     const classId = input.classId

@@ -11,10 +11,20 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
-import type { FeeScheduleService, FeeScheduleUpdate } from '../services/fee-schedule'
+import type { FeeScheduleService } from '../services/fee-schedule'
 import type { FeeScheduleFilters } from '../services/filters'
 import type { ResolveWriteOperatorId } from '../tenancy'
-import { fail, ok, parseBody, parseId, parseScopedCreate, stripUndefined } from './helpers'
+import {
+  fail,
+  failResult,
+  ok,
+  parseArchivableFilters,
+  parseBody,
+  parseCrossOperatorRead,
+  parseId,
+  parseScopedCreate,
+  stripUndefined,
+} from './helpers'
 
 export function createFeeScheduleRoutes(
   service: FeeScheduleService,
@@ -34,11 +44,8 @@ export function createFeeScheduleRoutes(
       if (!MANAGEMENT_READ_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
       const ctx = toCallerContext(user)
-      const filters: FeeScheduleFilters = {}
+      const filters: FeeScheduleFilters = { ...parseArchivableFilters(c) }
 
-      const status = c.req.query('status')
-      if (status === 'ACTIVE' || status === 'ARCHIVED') filters.status = status
-      if (c.req.query('includeArchived') === 'true') filters.includeArchived = true
       const feeType = c.req.query('feeType')
       if (
         feeType === 'OVERTIME_HOURLY' ||
@@ -49,15 +56,7 @@ export function createFeeScheduleRoutes(
       const vehicleClassId = c.req.query('vehicleClassId')
       if (vehicleClassId) filters.vehicleClassId = vehicleClassId
 
-      // Cross-operator read scope is enforced in the service (audit M3): a bypass
-      // caller that names neither operatorId nor includeAll is rejected there, so a
-      // forgotten guard here can't leak every operator's private config. Operator
-      // callers auto-scope; any operatorId they pass is ignored at the repo.
-      const read = {
-        operatorId: c.req.query('operatorId'),
-        includeAll: c.req.query('includeAll') === 'true',
-      }
-      return ok(c, await service.findAll(ctx, read, filters))
+      return ok(c, await service.findAll(ctx, parseCrossOperatorRead(c), filters))
     })
     .get('/fee-schedules/:id', async (c) => {
       const user = requireUser(c)
@@ -92,8 +91,7 @@ export function createFeeScheduleRoutes(
         amountJpy: d.amountJpy,
         status: 'ACTIVE',
       })
-      if (!result.ok)
-        return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.feeSchedule, 201)
     })
     .patch('/fee-schedules/:id', async (c) => {
@@ -109,10 +107,10 @@ export function createFeeScheduleRoutes(
       const result = await service.update(
         toCallerContext(user),
         idResult.id,
-        stripUndefined(parsed.data) as FeeScheduleUpdate,
+        stripUndefined(parsed.data),
+        c.req.query('operatorId'),
       )
-      if (!result.ok)
-        return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.feeSchedule)
     })
     .delete('/fee-schedules/:id', async (c) => {
@@ -122,9 +120,12 @@ export function createFeeScheduleRoutes(
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
 
-      const result = await service.archive(toCallerContext(user), idResult.id)
-      if (!result.ok)
-        return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)
+      const result = await service.archive(
+        toCallerContext(user),
+        idResult.id,
+        c.req.query('operatorId'),
+      )
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.feeSchedule)
     })
 }

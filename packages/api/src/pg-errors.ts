@@ -100,6 +100,11 @@ export const PAYMENT_REFUND_STRIPE_REFUND_CONSTRAINT = 'payment_refunds_stripeRe
  */
 export const REVIEWS_SUBJECT_CONSTRAINT = 'reviews_subject_per_booking_unique'
 
+/** review_reports: one report per (reviewId, reporterUserId). A 23505 on this name means
+ *  this user already reported the review — the service maps it to 409 ALREADY_REPORTED so
+ *  a single user can't inflate the moderation queue (#1086, slice 6). */
+export const REVIEW_REPORT_UNIQUE_CONSTRAINT = 'review_reports_one_per_reporter'
+
 /**
  * Partial unique index on provider_invites (operatorId, email) WHERE status=
  * 'PENDING' (#904 slice 2). At most one live invite per operator+email; REVOKED/
@@ -108,6 +113,23 @@ export const REVIEWS_SUBJECT_CONSTRAINT = 'reviews_subject_per_booking_unique'
  * kept apart from the (astronomically unlikely) tokenHash collision.
  */
 export const PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT = 'provider_invites_pending_email_unique'
+
+/**
+ * Partial unique index on operator_applications(contactEmail) WHERE status in
+ * ('PENDING','APPROVED') (#1277). At most one LIVE application per email; a
+ * REJECTED row frees the slot so a rejected applicant can re-apply. A 23505 on
+ * this name means a duplicate live application → translated to a 409.
+ */
+export const OPERATOR_APPLICATION_EMAIL_CONSTRAINT = 'operator_applications_live_email_unique'
+
+/**
+ * Column-level UNIQUE on operators.slug (`operators_slug_unique`). A 23505 on this
+ * name inside the approval tx (#1277) is a concurrent slug race between two
+ * similarly-named businesses approved at once — a RETRYABLE provisioning failure,
+ * NOT a "review conflict". The service branches on it so the loser gets an accurate
+ * message / retry, never a misleading "application already reviewed".
+ */
+export const OPERATORS_SLUG_CONSTRAINT = 'operators_slug_unique'
 
 /** Extract the Postgres error code from an unknown thrown value, or null.
  *
@@ -121,18 +143,23 @@ export function pgErrorCode(err: unknown): string | null {
 }
 
 /** Extract the violated constraint name from a thrown PG error, or null.
- * Like the code, postgres-js exposes `constraint_name`; drizzle wraps the
- * PostgresError under `err.cause`, so we check both paths. */
+ * Driver parity (#1362): production runs the Neon drivers
+ * (`@neondatabase/serverless` HTTP + WebSocket), which — like node-postgres —
+ * expose the name on `.constraint`. The integration test client + the in-memory
+ * repos use postgres-js, which exposes `.constraint_name`. Reading only the
+ * latter left this dead in prod (silent double-charge misclassification), so we
+ * accept every driver's convention. Drizzle wraps the PG error under `err.cause`,
+ * so we check that path too. */
 export function pgConstraintName(err: unknown): string | null {
   return extractConstraint(err) ?? extractConstraint(getCause(err))
 }
 
 function extractConstraint(val: unknown): string | null {
-  if (val && typeof val === 'object' && 'constraint_name' in val) {
-    const name = (val as { constraint_name: unknown }).constraint_name
-    return typeof name === 'string' ? name : null
-  }
-  return null
+  if (!val || typeof val !== 'object') return null
+  const rec = val as Record<string, unknown>
+  // Neon / node-postgres → `constraint`; postgres-js / in-memory → `constraint_name`.
+  const name = rec.constraint ?? rec.constraint_name ?? rec.constraintName
+  return typeof name === 'string' ? name : null
 }
 
 function extractCode(val: unknown): string | null {

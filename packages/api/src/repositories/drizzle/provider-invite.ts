@@ -71,6 +71,20 @@ export class DrizzleProviderInviteRepository implements ProviderInviteRepository
     return row ? toProviderInvite(row) : undefined
   }
 
+  // #1277 C1 guard: find any live (PENDING) invite for an email, across ALL
+  // operators. A cross-operator check blocks re-inviting an email already
+  // awaiting acceptance under a different tenant.
+  async findPendingByEmail(email: string): Promise<ProviderInvite | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(providerInvites)
+      // Lowercase the input to match how emails are stored (mirrors
+      // DrizzleUserRepository.findByEmail) so this C1 guard can't be case-bypassed.
+      .where(and(eq(providerInvites.email, email.toLowerCase()), eq(providerInvites.status, 'PENDING')))
+      .limit(1)
+    return row ? toProviderInvite(row) : undefined
+  }
+
   // Consume the invite at acceptance (#521 §6). Runs tx-bound inside the grant
   // transaction; the membership INSERT (first in that tx) is the primary race
   // fence. The WHERE status='PENDING' is the second fence (#904 slice 2): a

@@ -293,6 +293,11 @@
             "empty": "暂无待分配的浮动预订",
             "overflowLabel": "至少 {limit} 项待分配（仅显示前 {limit} 项）"
           }
+        },
+        "board": {
+          "label": "车队排期板，{range}",
+          "bookingBar": "{vehicle}。预订：{renter}，{status}，{range}",
+          "blockBar": "{vehicle}。{kind}封锁：{title}，{range}"
         }
       },
       "detail": {
@@ -775,6 +780,13 @@
         "price": "每次预订 {price}"
       },
       "form": {
+        "identityLegend": "选择添加方式",
+        "identityTemplate": "从目录中选择",
+        "identityCustom": "自行创建",
+        "nameEn": "名称（英文）",
+        "nameJa": "名称（日文）",
+        "nameZh": "名称（中文）",
+        "customNameNudge": "日文或中文留空时，游客将看到英文。填写两者可覆盖更多租客。",
         "template": "附加项目",
         "templatePlaceholder": "选择附加项目",
         "description": "描述",
@@ -877,6 +889,7 @@
       "deactivating": "停用中...",
       "staffNotice": "只有所有者才能邀请员工。",
       "noOperatorContext": "此页面管理单个运营商的团队。请使用管理门户来管理运营商。",
+      "pickOperatorPrompt": "请从上方的选择器中选择一个运营商，以查看并管理其团队。",
       "unknownName": "未命名",
       "roleOwner": "所有者",
       "roleStaff": "员工",
@@ -905,6 +918,49 @@
       "label": "运营商",
       "all": "所有运营商",
       "badge": "运营商：{name}"
+    },
+    "register": {
+      "title": "在Kuruma上登记您的业务",
+      "subtitle": "告诉我们您的租车业务情况。我们会审核每一份申请。",
+      "form": {
+        "businessName": "企业名称",
+        "contactName": "联系人姓名",
+        "contactEmail": "电子邮箱",
+        "contactPhone": "联系电话",
+        "serviceArea": "服务区域（城市/都道府县）",
+        "fleetSize": "预估车队规模",
+        "website": "网站（选填）",
+        "licenseNumber": "营业执照号码（选填）",
+        "businessType": "业务类型（选填）",
+        "message": "其他说明（选填）",
+        "consent": "我同意接受有关申请的联系",
+        "submit": "提交申请",
+        "submitting": "提交中...",
+        "individual": "个人",
+        "company": "公司",
+        "fleetSizePlaceholder": "请选择车队规模",
+        "businessTypePlaceholder": "请选择",
+        "errors": {
+          "businessName": "请输入企业名称。",
+          "contactName": "请输入联系人姓名。",
+          "contactEmail": "请输入有效的电子邮箱地址。",
+          "contactPhone": "请输入有效的电话号码。",
+          "serviceArea": "请输入服务区域。",
+          "estimatedFleetSize": "请选择车队规模。",
+          "website": "请输入以 http:// 或 https:// 开头的有效网址。",
+          "businessLicenseNumber": "请缩短营业执照编号。",
+          "message": "请缩短留言内容。",
+          "consent": "提交申请前必须同意。"
+        }
+      },
+      "errors": {
+        "generic": "无法提交您的申请，请重试。",
+        "duplicate": "该邮箱已存在申请或账户。"
+      },
+      "success": {
+        "title": "申请已收到",
+        "body": "感谢您 - 我们将发邮件至 {email} 与您联系。"
+      }
     }
   },
   "messaging": {
@@ -961,6 +1017,8 @@
       "subtitle": "您的预订已确认。取车时请出示预订码。",
       "bookingCode": "预订码",
       "vehicleClass": "车型",
+      "vehicle": "车辆",
+      "assignmentNote": "取车前将为您指定具体车辆。",
       "pickupDate": "取车",
       "returnDate": "还车",
       "status": "状态",
@@ -1232,7 +1290,8 @@
     "cta": {
       "heading": "准备探索日本了吗？",
       "description": "浏览车队，几分钟内预订。取车前72小时免费取消。",
-      "button": "找到您的车"
+      "button": "找到您的车",
+      "operatorCta": "登记您的业务"
     },
     "footer": {
       "copyright": "库鲁马租车 版权所有。",
@@ -1319,8 +1378,10 @@
     "detail": {
       "backToSearch": "返回搜索",
       "availableVehicles": "可用车辆",
+      "classDeals": "车型套餐",
       "noVehicles": "所选时间内该门店没有可用车辆。",
       "book": "预订此车",
+      "bookClass": "预订此车型",
       "notFound": "未找到门店",
       "notFoundDescription": "该门店不存在或已不可用。"
     }
@@ -1335,8 +1396,93 @@
       "governance": "同意治理",
       "customers": "客户",
       "operators": "运营商",
+      "templates": "模板库",
       "featureFlags": "功能开关",
-      "backToSite": "返回网站"
+      "backToSite": "返回网站",
+      "applications": "申请",
+      "reviews": "评价审核"
+    },
+    "applications": {
+      "title": "运营商申请",
+      "subtitle": "审核并处理新运营商的入驻申请。",
+      "empty": "暂无待审核的申请。",
+      "contactLabel": "联系人",
+      "emailLabel": "电子邮箱",
+      "phoneLabel": "电话",
+      "serviceAreaLabel": "服务区域",
+      "fleetSizeLabel": "预计车队规模",
+      "businessTypeLabel": "经营类型",
+      "fleetSize": {
+        "1-5": "1-5 辆",
+        "6-20": "6-20 辆",
+        "21-50": "21-50 辆",
+        "50+": "50+ 辆"
+      },
+      "businessType": {
+        "INDIVIDUAL": "个人",
+        "COMPANY": "公司"
+      },
+      "websiteLabel": "网站",
+      "messageLabel": "留言",
+      "submittedLabel": "提交日期",
+      "reasonLabel": "拒绝原因",
+      "reject": "拒绝",
+      "error": "无法记录拒绝操作，请重试。",
+      "approve": "批准",
+      "approving": "批准中…",
+      "inviteReadyLabel": "邀请链接",
+      "inviteReadyHint": "将此一次性链接发送给运营商以完成入驻。",
+      "copy": "复制",
+      "copied": "已复制",
+      "approved": "已批准",
+      "regenerate": "重新生成链接",
+      "regenerating": "重新生成中…",
+      "regenerateFailed": "无法重新生成邀请链接。请重试。",
+      "regenerateUnavailable": "此邀请无法再重新生成。负责人可能已完成入驻。",
+      "alreadyReviewed": "该申请已被审核，或该邮箱已归属某运营商。",
+      "approveFailed": "无法批准该申请，请重试。",
+      "loadError": "无法加载申请队列。",
+      "retry": "重试"
+    },
+    "templateLibrary": {
+      "title": "模板库",
+      "subtitle": "管理所有运营商可选用的平台级附加服务和保险模板。",
+      "tab": {
+        "addOns": "附加服务 ({count})",
+        "insurance": "保险 ({count})"
+      },
+      "colName": "名称",
+      "colKey": "键",
+      "colStatus": "状态",
+      "colTranslations": "翻译",
+      "colActions": "操作",
+      "active": "启用",
+      "archived": "已归档",
+      "empty": "此目录中暂无模板。",
+      "loadError": "无法加载模板库。",
+      "retry": "重试",
+      "action": {
+        "edit": "编辑",
+        "editNamed": "编辑{name}",
+        "create": "新建模板"
+      },
+      "edit": {
+        "title": "编辑模板",
+        "description": "先翻译各语言，再设置状态。将回填生成的模板切换为启用即可发布。",
+        "nameSection": "名称",
+        "descriptionSection": "说明",
+        "statusLabel": "状态",
+        "nameEnRequired": "英文名称为必填项。",
+        "save": "保存",
+        "saving": "保存中…",
+        "cancel": "取消"
+      },
+      "create": {
+        "title": "新建模板",
+        "description": "向目录添加模板。英文名称为必填项，键将据此生成。",
+        "submit": "创建",
+        "submitting": "创建中…"
+      }
     },
     "featureFlags": {
       "title": "功能开关",
@@ -1608,6 +1754,33 @@
       },
       "loadError": "无法加载客户。",
       "retry": "重试"
+    },
+    "reviewModeration": {
+      "title": "评价审核",
+      "description": "等待审核处理的被举报评价。隐藏评价后，公众和对方均无法看到该评价。",
+      "empty": "暂无被举报的评价。",
+      "stars": "{n} / 5",
+      "reports": "{count, plural, other {# 条举报}}",
+      "subject": {
+        "OPERATOR": "对运营商的评价",
+        "VEHICLE": "对车辆的评价",
+        "RENTER": "对租客的评价"
+      },
+      "by": {
+        "RENTER": "来自租客",
+        "OPERATOR": "来自运营商"
+      },
+      "hide": "隐藏评价",
+      "hiding": "正在隐藏…",
+      "hidden": "已隐藏",
+      "hideError": "无法隐藏评价，请重试。",
+      "loadError": "无法加载被举报的评价。",
+      "retry": "重试",
+      "filterLabel": "筛选评价",
+      "filterUnactioned": "待处理",
+      "filterResolved": "已处理",
+      "loadMore": "加载更多",
+      "loadingMore": "加载中…"
     }
   },
   "documents": {
@@ -1630,6 +1803,7 @@
   "reservation": {
     "title": "完成预订",
     "vehicleHeading": "您正在预订",
+    "classAssignmentNote": "本车型级别的具体车辆将在提车前分配。",
     "steps": {
       "dates": "日期",
       "addOns": "附加项",
@@ -1746,6 +1920,15 @@
       "rating": "★ {avg}（{count}条）",
       "noReviews": "暂无评价",
       "ratingAria": "{avg}星，{count}条评价"
+    },
+    "list": {
+      "heading": "评价",
+      "empty": "暂无评价",
+      "reviewer": "已验证的租客",
+      "overallAria": "5 星中的 {n} 星",
+      "dimensionValue": "{n}/5",
+      "loadMore": "查看更多评价",
+      "loadingMore": "加载中…"
     }
   },
   "currency": {

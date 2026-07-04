@@ -26,6 +26,9 @@ import type {
   FeeUnit,
   InsuranceStatus,
   LocationStatus,
+  OperatorApplicationBusinessType,
+  OperatorApplicationFleetSize,
+  OperatorApplicationStatus,
   OperatorMembershipStatus,
   OperatorRole,
   PaymentEventStatus,
@@ -43,7 +46,10 @@ import type { ComplianceAlertBand, ComplianceDocumentType } from '@kuruma/shared
 import type { DocumentSnapshot } from '@kuruma/shared/lib/consent-canonical'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
-import type { PaymentAnomalyResolution } from '@kuruma/shared/types/payment-anomaly'
+import type {
+  PaymentAnomalyKind,
+  PaymentAnomalyResolution,
+} from '@kuruma/shared/types/payment-anomaly'
 
 /**
  * The notification kind/status sets have a single source of truth: the
@@ -204,7 +210,9 @@ export interface PaymentRefund {
   updatedAt: Date
 }
 
-export type PaymentAnomalyKind = 'DOUBLE_PAYMENT' | 'AMOUNT_MISMATCH'
+// Kind lives in the @kuruma/shared enums.ts SSoT (#1383/#1427); re-exported so
+// api consumers (services/payment/payment.ts) keep importing it from ../../stores.
+export type { PaymentAnomalyKind }
 
 // A verified Stripe charge that needs human review rather than becoming revenue
 // (#508 P2): a duplicate charge on an already-paid booking (DOUBLE_PAYMENT) or an
@@ -418,9 +426,10 @@ export interface AddOn {
   description: string | null
   /**
    * Catalog i18n (slice 2): the platform template this add-on instances — the
-   * template supplies the localized name. Nullable through PR1 (the backfill
-   * stamps every active row; NOT NULL in PR2/slice 5). Legacy null-templateId
-   * rows fall back to the `name` column at resolution.
+   * template supplies the localized name. STAYS nullable (#1437 cancelled the
+   * PR2/slice-5 NOT-NULL flip): a SELF-AUTHORED row is legitimately null here and
+   * carries `nameI18n` instead. Legacy null-both rows fall back to the `name`
+   * column at resolution.
    */
   templateId: string | null
   /**
@@ -428,6 +437,13 @@ export interface AddOn {
    * LocalizedText — one locale may be authored alone). Null keeps the template's.
    */
   descriptionOverride: LocalizedTextOverride | null
+  /**
+   * SELF-AUTHORED name bundle (#1437): a full LocalizedText the operator owns for
+   * an item that does NOT pick a shared template. Null for a PICKED row (the
+   * template supplies the name) and for a legacy row. A row is picked XOR
+   * self-authored — the DB `add_on_options_not_both_identities` CHECK seals it.
+   */
+  nameI18n: LocalizedText | null
   priceJpy: number
   status: AddOnStatus
   createdAt: Date
@@ -456,6 +472,23 @@ export interface AddOnWithTemplate extends AddOn {
  * locale in the service layer; `description` is nullable in the DB.
  */
 export interface AddOnTemplate {
+  id: string
+  key: string
+  name: LocalizedText
+  description: LocalizedText | null
+  status: CatalogTemplateStatus
+  createdAt: Date
+  updatedAt: Date
+}
+
+/**
+ * Platform-owned, pre-translated insurance TEMPLATE (catalog i18n, slice 3).
+ * Structurally identical to {@link AddOnTemplate} — the two catalogs share one
+ * `catalogTemplateStatusEnum` and the same {en, ja?, zh?} bundle shape — but a
+ * distinct type keeps the add-on and insurance repositories from being wired to
+ * each other's rows. `key` = slugify(canonical English name).
+ */
+export interface InsuranceTemplate {
   id: string
   key: string
   name: LocalizedText
@@ -545,6 +578,34 @@ export interface ProviderInvite {
   updatedAt: Date
 }
 
+// #1277: self-serve operator registration. One row per application; status
+// drives the review lifecycle (PENDING -> APPROVED | REJECTED). The live-email
+// partial index (OPERATOR_APPLICATION_EMAIL_CONSTRAINT) blocks duplicate PENDING
+// submissions from the same address — the repository's `create` throws UNIQUE_VIOLATION
+// on conflict so the service can return 409.
+export interface OperatorApplication {
+  id: string
+  status: OperatorApplicationStatus
+  businessName: string
+  contactName: string
+  contactEmail: string
+  contactPhone: string
+  serviceArea: string
+  estimatedFleetSize: OperatorApplicationFleetSize
+  website: string | null
+  businessLicenseNumber: string | null
+  businessType: OperatorApplicationBusinessType | null
+  message: string | null
+  submittedLocale: string
+  operatorId: string | null
+  reviewedByUserId: string | null
+  reviewedAt: Date | null
+  reviewerNotes: string | null
+  rejectionReason: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
 export interface ConsentDocument {
   id: string
   type: ConsentType
@@ -607,6 +668,10 @@ export interface Review {
   subRatings: Record<string, number>
   comment: string | null
   moderationStatus: ReviewModerationStatus
+  // Moderation audit (#1454): the platform admin who last flipped moderationStatus and
+  // when. Both null on a never-moderated review; stamped together on hide.
+  moderatedBy: string | null
+  moderatedAt: Date | null
   // The fixed double-blind deadline; reveal fires at the earlier of both-submitted
   // or this instant.
   revealDeadlineAt: Date
@@ -615,6 +680,17 @@ export interface Review {
   publishedAt: Date | null
   createdAt: Date
   updatedAt: Date
+}
+
+// A user's report of a review for moderator attention (#1086, slice 6). One per
+// (review, reporter); report-only — a report never auto-hides, it only queues the
+// review for a platform admin. The in-app projection of a review_reports row.
+export interface ReviewReport {
+  id: string
+  reviewId: string
+  reporterUserId: string
+  reason: string
+  createdAt: Date
 }
 
 // Map stores removed — repositories handle data access now.

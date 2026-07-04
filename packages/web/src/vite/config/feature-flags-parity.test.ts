@@ -10,7 +10,12 @@ describe('feature-flag registry <-> vite-env.d.ts parity', () => {
     .map((m) => m[0])
     .filter((s): s is string => Boolean(s))
   const declaredSet = new Set(declared)
-  const registryEnvs = FEATURE_FLAG_KEYS.map((k) => FEATURE_FLAGS[k].env)
+  // serverOnly flags (e.g. SHARED_CATALOG) carry no VITE_FEATURE_ env, so they are not
+  // part of the vite-env.d.ts parity contract - the undefined filter drops them (and
+  // narrows to string[] for the Set<string> membership checks below).
+  const registryEnvs = FEATURE_FLAG_KEYS.map((k) => FEATURE_FLAGS[k].env).filter(
+    (env): env is string => env !== undefined,
+  )
 
   it('every VITE_FEATURE_ env declared in vite-env.d.ts has a registry entry', () => {
     for (const env of declaredSet) {

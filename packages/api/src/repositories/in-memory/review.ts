@@ -1,6 +1,19 @@
-import { PG_ERROR, REVIEWS_SUBJECT_CONSTRAINT } from '../../pg-errors'
-import type { Review } from '../../stores'
-import type { NewReview, ReviewEdit, ReviewRepository } from '../types'
+import type { ReviewModerationStatus } from '@kuruma/shared/enums'
+import {
+  PG_ERROR,
+  REVIEWS_SUBJECT_CONSTRAINT,
+  REVIEW_REPORT_UNIQUE_CONSTRAINT,
+} from '../../pg-errors'
+import type { Review, ReviewReport } from '../../stores'
+import type {
+  ListReportedOptions,
+  NewReview,
+  NewReviewReport,
+  ReportedReviewPage,
+  ReviewEdit,
+  ReviewListCursor,
+  ReviewRepository,
+} from '../types'
 
 // Mirror postgres-js's PostgresError: the violated constraint is exposed as
 // `constraint_name` (what pgConstraintName reads). Faithful mirroring lets the
@@ -17,9 +30,11 @@ function uniqueViolation(
 
 export class InMemoryReviewRepository implements ReviewRepository {
   private readonly store: Map<string, Review>
+  private readonly reports: Map<string, ReviewReport>
 
-  constructor(store?: Map<string, Review>) {
+  constructor(store?: Map<string, Review>, reports?: Map<string, ReviewReport>) {
     this.store = store ?? new Map()
+    this.reports = reports ?? new Map()
   }
 
   async insert(data: NewReview): Promise<Review> {
@@ -94,6 +109,120 @@ export class InMemoryReviewRepository implements ReviewRepository {
     return this.aggregate(classIds, (r) => r.subjectClassId)
   }
 
+  async insertReport(data: NewReviewReport): Promise<ReviewReport> {
+    // Mirror the DB unique (reviewId, reporterUserId): a second report by the same user
+    // trips the same constraint name the service branches on (ALREADY_REPORTED).
+    const clash = [...this.reports.values()].some(
+      (r) => r.reviewId === data.reviewId && r.reporterUserId === data.reporterUserId,
+    )
+    if (clash) throw uniqueViolation(REVIEW_REPORT_UNIQUE_CONSTRAINT)
+    const report: ReviewReport = { ...data, id: crypto.randomUUID(), createdAt: new Date() }
+    this.reports.set(report.id, report)
+    return report
+  }
+
+  async setModerationStatus(
+    id: string,
+    status: ReviewModerationStatus,
+    moderatedBy: string,
+    moderatedAt: Date,
+  ): Promise<Review | undefined> {
+    const existing = this.store.get(id)
+    if (!existing) return undefined
+    // Mirror the Drizzle write: flip status AND stamp the moderation audit (#1454).
+    const updated: Review = {
+      ...existing,
+      moderationStatus: status,
+      moderatedBy,
+      moderatedAt,
+      updatedAt: new Date(),
+    }
+    this.store.set(id, updated)
+    return updated
+  }
+
+  async listReported(options: ListReportedOptions): Promise<ReportedReviewPage> {
+    const { limit, status, cursor } = options
+    // Group reports by review; emit each still-present review WHOSE moderationStatus matches
+    // the requested partition (#1451: VISIBLE = unactioned queue, HIDDEN = resolved) with
+    // its distinct-reporter count (the unique seal makes report count === reporter count) +
+    // reasons, newest report first. Orphan reports (review gone) are skipped — cascade latent.
+    const byReview = new Map<string, ReviewReport[]>()
+    for (const report of this.reports.values()) {
+      byReview.set(report.reviewId, [...(byReview.get(report.reviewId) ?? []), report])
+    }
+    const entries = [...byReview.entries()].flatMap(([reviewId, reports]) => {
+      const review = this.store.get(reviewId)
+      if (!review || review.moderationStatus !== status) return []
+      const newestFirst = [...reports].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      const lastReportedAt = newestFirst[0]?.createdAt ?? new Date(0)
+      return [
+        {
+          review,
+          reportCount: reports.length,
+          reasons: newestFirst.map((r) => r.reason),
+          lastReportedAt,
+        },
+      ]
+    })
+    // (lastReportedAt DESC, reviewId DESC) — mirrors the Drizzle orderBy so the keyset
+    // boundary is byte-identical across drivers (the reveal sweep and same-ms reports make
+    // the id tiebreak necessary for a stable page boundary).
+    entries.sort((a, b) => {
+      const byDate = b.lastReportedAt.getTime() - a.lastReportedAt.getTime()
+      if (byDate !== 0) return byDate
+      return a.review.id < b.review.id ? 1 : a.review.id > b.review.id ? -1 : 0
+    })
+    const afterCursor = cursor
+      ? entries.filter((e) => {
+          const boundary = cursor.lastReportedAt.getTime()
+          const t = e.lastReportedAt.getTime()
+          return t < boundary || (t === boundary && e.review.id < cursor.reviewId)
+        })
+      : entries
+    // Peek one past the page so `nextCursor` is precise (null exactly when exhausted),
+    // mirroring the Drizzle limit+1.
+    const slice = afterCursor.slice(0, limit + 1)
+    const hasMore = slice.length > limit
+    const page = slice.slice(0, limit)
+    const last = page[page.length - 1]
+    const nextCursor =
+      hasMore && last ? { lastReportedAt: last.lastReportedAt, reviewId: last.review.id } : null
+    return {
+      items: page.map(({ review, reportCount, reasons }) => ({ review, reportCount, reasons })),
+      nextCursor,
+    }
+  }
+
+  async listPublishedForSubject(
+    subject: 'OPERATOR' | 'VEHICLE',
+    subjectId: string,
+    limit: number,
+    after?: ReviewListCursor,
+  ): Promise<Review[]> {
+    const keyOf = (r: Review) => (subject === 'OPERATOR' ? r.operatorId : r.subjectVehicleId)
+    return [...this.store.values()]
+      .filter(
+        (r): r is Review & { publishedAt: Date } =>
+          r.subject === subject &&
+          r.publishedAt !== null &&
+          r.moderationStatus === 'VISIBLE' &&
+          keyOf(r) === subjectId &&
+          // Keyset: strictly older than the cursor in (publishedAt desc, id desc) order.
+          // id compared with JS `<` (code units) == Drizzle's `COLLATE "C"` for ASCII uuids.
+          (after === undefined || isBeforeCursor(r.publishedAt, r.id, after)),
+      )
+      .sort((a, b) => {
+        // Newest-first, with an id tiebreak: the reveal sweep stamps a whole batch with
+        // ONE identical publishedAt, so date alone is an unstable order (and the keyset
+        // pagination follow-up needs a unique tiebreak anyway). Mirror the Drizzle
+        // orderBy(desc(publishedAt), desc(id)).
+        const byDate = b.publishedAt.getTime() - a.publishedAt.getTime()
+        return byDate !== 0 ? byDate : a.id < b.id ? 1 : a.id > b.id ? -1 : 0
+      })
+      .slice(0, limit)
+  }
+
   // Shared predicate (#1085): only published+visible reviews enter aggregates, so a
   // hidden or still-double-blind row never skews a public storefront rating.
   // Ids that match no published+visible row stay absent from the result Map.
@@ -114,4 +243,15 @@ export class InMemoryReviewRepository implements ReviewRepository {
     }
     return out
   }
+}
+
+/** True when (publishedAt, id) sorts strictly AFTER the cursor under the list's
+ *  (publishedAt desc, id desc) order — i.e. the row belongs on a later "load more" page.
+ *  Mirrors the Drizzle keyset predicate: publishedAt older, or same instant with a
+ *  code-point-smaller id (JS `<` == `COLLATE "C"` for ASCII uuids). */
+function isBeforeCursor(publishedAt: Date, id: string, cursor: ReviewListCursor): boolean {
+  const rowMs = publishedAt.getTime()
+  const cursorMs = cursor.publishedAt.getTime()
+  if (rowMs !== cursorMs) return rowMs < cursorMs
+  return id < cursor.id
 }

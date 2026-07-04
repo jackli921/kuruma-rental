@@ -12,9 +12,19 @@ import {
   toCallerContext,
 } from '../middleware/auth'
 import type { InsuranceOptionFilters } from '../services/filters'
-import type { InsuranceOptionService, InsuranceOptionUpdate } from '../services/insurance-option'
+import type { InsuranceOptionService } from '../services/insurance-option'
 import type { ResolveWriteOperatorId } from '../tenancy'
-import { fail, ok, parseBody, parseId, parseScopedCreate, stripUndefined } from './helpers'
+import {
+  fail,
+  failResult,
+  ok,
+  parseArchivableFilters,
+  parseBody,
+  parseCrossOperatorRead,
+  parseId,
+  parseScopedCreate,
+  stripUndefined,
+} from './helpers'
 
 export function createInsuranceOptionRoutes(
   service: InsuranceOptionService,
@@ -36,21 +46,9 @@ export function createInsuranceOptionRoutes(
       if (!MANAGEMENT_READ_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
       const ctx = toCallerContext(user)
-      const filters: InsuranceOptionFilters = {}
+      const filters: InsuranceOptionFilters = { ...parseArchivableFilters(c) }
 
-      const status = c.req.query('status')
-      if (status === 'ACTIVE' || status === 'ARCHIVED') filters.status = status
-      if (c.req.query('includeArchived') === 'true') filters.includeArchived = true
-
-      // Cross-operator read scope is enforced in the service (audit M3): a bypass
-      // caller that names neither operatorId nor includeAll is rejected there, so a
-      // forgotten guard here can't leak every operator's private config. Operator
-      // callers auto-scope; any operatorId they pass is ignored at the repo.
-      const read = {
-        operatorId: c.req.query('operatorId'),
-        includeAll: c.req.query('includeAll') === 'true',
-      }
-      return ok(c, await service.findAll(ctx, read, filters))
+      return ok(c, await service.findAll(ctx, parseCrossOperatorRead(c), filters))
     })
     .get('/insurance-options/:id', async (c) => {
       const user = requireUser(c)
@@ -85,7 +83,7 @@ export function createInsuranceOptionRoutes(
         deductibleJpy: d.deductibleJpy ?? null,
         status: 'ACTIVE',
       })
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.option, 201)
     })
     .patch('/insurance-options/:id', async (c) => {
@@ -101,9 +99,9 @@ export function createInsuranceOptionRoutes(
       const result = await service.update(
         toCallerContext(user),
         idResult.id,
-        stripUndefined(parsed.data) as InsuranceOptionUpdate,
+        stripUndefined(parsed.data),
       )
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.option)
     })
     .delete('/insurance-options/:id', async (c) => {
@@ -114,7 +112,7 @@ export function createInsuranceOptionRoutes(
       if (!idResult.ok) return idResult.response
 
       const result = await service.archive(toCallerContext(user), idResult.id)
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.option)
     })
 }

@@ -1,9 +1,10 @@
 import { seedId } from '@kuruma/shared/db/seed-id'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PUBLIC_CONTEXT, SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryAddOnRepository } from '../repositories/in-memory/add-on'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
+import { InMemoryClassRatePlanRepository } from '../repositories/in-memory/class-rate-plan'
 import { InMemoryInsuranceOptionRepository } from '../repositories/in-memory/insurance-option'
 import { InMemoryLocationRepository } from '../repositories/in-memory/location'
 import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
@@ -11,7 +12,16 @@ import { InMemoryStorefrontRepository } from '../repositories/in-memory/storefro
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleBlockRepository } from '../repositories/in-memory/vehicle-block'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
-import type { AddOn, InsuranceOption, Location, Operator, Vehicle, VehicleClass } from '../stores'
+import type {
+  AddOn,
+  ClassRatePlan,
+  InsuranceOption,
+  Location,
+  Operator,
+  Vehicle,
+  VehicleClass,
+} from '../stores'
+import { ClassOfferingService } from './class-offering'
 import { StorefrontDetailService } from './storefront-detail'
 
 const FROM = new Date('2026-08-01T10:00:00Z')
@@ -24,6 +34,8 @@ let bookingRepo: InMemoryBookingRepository
 let classRepo: InMemoryVehicleClassRepository
 let insuranceRepo: InMemoryInsuranceOptionRepository
 let addOnRepo: InMemoryAddOnRepository
+let classRatePlanRepo: InMemoryClassRatePlanRepository
+let classOfferingService: ClassOfferingService
 let service: StorefrontDetailService
 
 beforeEach(() => {
@@ -34,6 +46,7 @@ beforeEach(() => {
   classRepo = new InMemoryVehicleClassRepository()
   insuranceRepo = new InMemoryInsuranceOptionRepository()
   addOnRepo = new InMemoryAddOnRepository()
+  classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   const availabilityRepo = new InMemoryAvailabilityRepository(
     vehicleRepo,
@@ -41,12 +54,14 @@ beforeEach(() => {
     new InMemoryVehicleBlockRepository(),
     operatorRepo,
   )
+  classOfferingService = new ClassOfferingService(classRatePlanRepo, availabilityRepo)
   service = new StorefrontDetailService(
     storefrontRepo,
     availabilityRepo,
     classRepo,
     insuranceRepo,
     addOnRepo,
+    classOfferingService,
   )
 })
 
@@ -73,6 +88,7 @@ function makeAddOn(
     description: null,
     templateId: null,
     descriptionOverride: null,
+    nameI18n: null,
     priceJpy: 1500,
     status: 'ACTIVE',
     ...overrides,
@@ -142,6 +158,58 @@ function makeVehicle(overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'upda
     shakenExpiryDate: '2027-03-31',
     insuranceExpiryDate: '2027-03-31',
     ...overrides,
+  })
+}
+
+function makeRatePlan(overrides: Partial<Omit<ClassRatePlan, 'id' | 'createdAt' | 'updatedAt'>>) {
+  return classRatePlanRepo.create({
+    operatorId: 'op_a',
+    classId: 'class_compact',
+    pickupLocationId: 'loc_namba',
+    dayRateJpy: 6000,
+    isActive: true,
+    label: null,
+    ...overrides,
+  })
+}
+
+// A CONFIRMED booking that consumes one unit of class demand at the real
+// (operator, class, location) triple. The combo producer sizes availableCount by
+// the triple, not the assigned car, so a triple-matching booking is what a
+// sold-out combo needs (bookOverlapping's hardcoded triple only blocks the car).
+function bookClassDemand(
+  operatorId: string,
+  classId: string,
+  pickupLocationId: string,
+  times?: { startAt: Date; endAt: Date; effectiveEndAt: Date },
+) {
+  return bookingRepo.create(SYSTEM_CONTEXT, {
+    operatorId,
+    renterId: 'u1',
+    classId,
+    requestedVehicleId: null,
+    assignedVehicleId: null,
+    pickupLocationId,
+    dropoffLocationId: pickupLocationId,
+    startAt: times?.startAt ?? new Date('2026-08-01T09:00:00Z'),
+    endAt: times?.endAt ?? new Date('2026-08-01T12:00:00Z'),
+    effectiveEndAt: times?.effectiveEndAt ?? new Date('2026-08-01T13:00:00Z'),
+    status: 'CONFIRMED',
+    source: 'DIRECT',
+    fulfillmentMode: 'CLASS_COMBO',
+    bookingCode: `bk-${crypto.randomUUID().slice(0, 8)}`,
+    insuranceOptionId: null,
+    insuranceSnapshot: null,
+    feeSnapshot: [],
+    addOnSnapshot: [],
+    externalId: null,
+    notes: null,
+    totalPrice: null,
+    cancellationFee: null,
+    cancelledAt: null,
+    idempotencyKey: null,
+    disclaimerAcknowledgedAt: null,
+    disclaimerTermsVersion: null,
   })
 }
 
@@ -449,6 +517,193 @@ describe('StorefrontDetailService.getDetail (#391)', () => {
     if (result.ok) throw new Error('expected a failure result for a malformed cursor')
     expect(result.status).toBe(400)
     expect(result.error).toMatch(/cursor/i)
+  })
+
+  it('skips the class-combo scan on a cursor page — offerings ship on the first page only (#1422)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, name: 'Compact', acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    const base = { operatorId: op.id, classId: compact.id, pickupLocationId: namba.id }
+    await makeVehicle({ ...base, name: 'Car A' })
+    await makeVehicle({ ...base, name: 'Car B' })
+    await makeRatePlan({
+      operatorId: op.id,
+      classId: compact.id,
+      pickupLocationId: namba.id,
+      dayRateJpy: 6000,
+    })
+
+    const scan = vi.spyOn(classOfferingService, 'findOfferings')
+
+    // First page runs the producer scan once and carries the offering.
+    const page1 = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, {
+        locationId: namba.id,
+        from: FROM,
+        to: TO,
+        limit: 1,
+      }),
+    )
+    expect(page1.classOfferings).toHaveLength(1)
+    expect(scan).toHaveBeenCalledTimes(1)
+    const cursor = page1.nextCursor
+    if (cursor === null) throw new Error('expected a nextCursor for page 1')
+
+    // The load-more (cursor) page must NOT re-run the scan (1 plan + 2 counts/plan)
+    // and ships no offerings — the client already has them from page 1 (#1422).
+    const page2 = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, {
+        locationId: namba.id,
+        from: FROM,
+        to: TO,
+        limit: 1,
+        cursor,
+      }),
+    )
+    expect(scan).toHaveBeenCalledTimes(1)
+    expect(page2.classOfferings).toEqual([])
+    expect(page2.vehicles.map((v) => v.name)).toEqual(['Car B'])
+  })
+})
+
+describe('StorefrontDetailService.getDetail classOfferings (#464)', () => {
+  it('returns the location active class rate plans as CLASS_COMBO offerings, sized by availableCount', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, name: 'Compact', acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeRatePlan({
+      operatorId: op.id,
+      classId: compact.id,
+      pickupLocationId: namba.id,
+      dayRateJpy: 6000,
+    })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: namba.id, from: FROM, to: TO }),
+    )
+
+    expect(data.classOfferings).toEqual([
+      expect.objectContaining({ kind: 'CLASS_COMBO', classId: compact.id, availableCount: 1 }),
+    ])
+    // Combos are a SECOND producer — the SPECIFIC car list is unchanged.
+    expect(data.vehicles).toHaveLength(1)
+  })
+
+  it('narrows offerings by the ACRISS class filter the same way it narrows vehicles', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, name: 'Compact', acrissCode: 'CCAR' })
+    const van = await makeClass({ operatorId: op.id, name: 'Minivan', acrissCode: 'MVAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeVehicle({ operatorId: op.id, classId: van.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: op.id, classId: van.id, pickupLocationId: namba.id })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, {
+        locationId: namba.id,
+        from: FROM,
+        to: TO,
+        classes: ['CCAR'],
+      }),
+    )
+
+    expect(data.classOfferings).toEqual([
+      expect.objectContaining({ kind: 'CLASS_COMBO', classId: compact.id }),
+    ])
+    expect(data.vehicles.map((v) => v.classId)).toEqual([compact.id])
+  })
+
+  it('omits a sold-out class (capacity − demand <= 0) from classOfferings', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, name: 'Compact', acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    // Consume the class's only unit of supply for the window (capacity 1, demand 1).
+    await bookClassDemand(op.id, compact.id, namba.id)
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: namba.id, from: FROM, to: TO }),
+    )
+
+    expect(data.classOfferings).toEqual([])
+  })
+
+  it('omits a combo blocked only within the turnaround gap after `to` (write-side parity)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, name: 'Compact', acrissCode: 'CCAR' })
+    // The seeded store's defaultTurnaroundMinutes is 60, so the gap after TO (14:00Z)
+    // is [14:00, 15:00). A booking starting there is invisible to the renter window
+    // [FROM, TO) but blocks the submit — the read-side must not advertise it (#464 P1).
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await bookClassDemand(op.id, compact.id, namba.id, {
+      startAt: new Date('2026-08-01T14:30:00Z'),
+      endAt: new Date('2026-08-01T16:30:00Z'),
+      effectiveEndAt: new Date('2026-08-01T17:30:00Z'),
+    })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: namba.id, from: FROM, to: TO }),
+    )
+
+    expect(data.classOfferings).toEqual([])
+  })
+
+  // Multi-tenant isolation pins (#464). This is a PUBLIC read; the repo has chased
+  // this exact leak class before (#1224/#1268). Two layers: (1) another operator's
+  // offering at ITS OWN location must not surface here; (2) the contrived case that
+  // proves the `operatorId` filter — not just `locationIds` — is load-bearing.
+  it("excludes another operator's offering at its own location (location-scoped isolation)", async () => {
+    const opA = await makeOperator('Op A', 'op-a')
+    const compactA = await makeClass({ operatorId: opA.id, name: 'Compact', acrissCode: 'CCAR' })
+    const locA = await makeLocation({ operatorId: opA.id, name: 'Namba' })
+    await makeVehicle({ operatorId: opA.id, classId: compactA.id, pickupLocationId: locA.id })
+    await makeRatePlan({ operatorId: opA.id, classId: compactA.id, pickupLocationId: locA.id })
+
+    // Operator B: a well-formed active plan at ITS OWN location, with a road-legal car.
+    const opB = await makeOperator('Op B', 'op-b')
+    const vanB = await makeClass({ operatorId: opB.id, name: 'Minivan', acrissCode: 'MVAR' })
+    const locB = await makeLocation({ operatorId: opB.id, name: 'Umeda' })
+    await makeVehicle({ operatorId: opB.id, classId: vanB.id, pickupLocationId: locB.id })
+    await makeRatePlan({ operatorId: opB.id, classId: vanB.id, pickupLocationId: locB.id })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: locA.id, from: FROM, to: TO }),
+    )
+
+    expect(data.classOfferings).toContainEqual(
+      expect.objectContaining({ kind: 'CLASS_COMBO', classId: compactA.id }),
+    )
+    expect(data.classOfferings.map((o) => o.classId)).not.toContain(vanB.id)
+  })
+
+  it("excludes another operator's plan even when its pickupLocation is THIS store (operatorId scope is load-bearing)", async () => {
+    const opA = await makeOperator('Op A', 'op-a')
+    const compactA = await makeClass({ operatorId: opA.id, name: 'Compact', acrissCode: 'CCAR' })
+    const locA = await makeLocation({ operatorId: opA.id, name: 'Namba' })
+    await makeVehicle({ operatorId: opA.id, classId: compactA.id, pickupLocationId: locA.id })
+    await makeRatePlan({ operatorId: opA.id, classId: compactA.id, pickupLocationId: locA.id })
+
+    // Contrived: operator B owns an active plan AND a road-legal car whose
+    // pickupLocation is operator A's location. `locationIds` alone would let this
+    // through — only the `operatorId` filter keeps B's card off A's storefront.
+    const opB = await makeOperator('Op B', 'op-b')
+    const vanB = await makeClass({ operatorId: opB.id, name: 'Minivan', acrissCode: 'MVAR' })
+    await makeVehicle({ operatorId: opB.id, classId: vanB.id, pickupLocationId: locA.id })
+    await makeRatePlan({ operatorId: opB.id, classId: vanB.id, pickupLocationId: locA.id })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: locA.id, from: FROM, to: TO }),
+    )
+
+    expect(data.classOfferings).toContainEqual(
+      expect.objectContaining({ kind: 'CLASS_COMBO', classId: compactA.id }),
+    )
+    expect(data.classOfferings.map((o) => o.classId)).not.toContain(vanB.id)
   })
 })
 

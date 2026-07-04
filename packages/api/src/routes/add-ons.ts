@@ -11,13 +11,16 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
-import type { AddOnService, AddOnUpdate } from '../services/add-on'
+import type { AddOnService } from '../services/add-on'
 import type { AddOnFilters } from '../services/filters'
 import type { ResolveWriteOperatorId } from '../tenancy'
 import {
   fail,
+  failResult,
   ok,
+  parseArchivableFilters,
   parseBody,
+  parseCrossOperatorRead,
   parseId,
   parseLocale,
   parseScopedCreate,
@@ -47,21 +50,9 @@ export function createAddOnRoutes(
       if (!locale.ok) return locale.response
 
       const ctx = toCallerContext(user)
-      const filters: AddOnFilters = {}
+      const filters: AddOnFilters = { ...parseArchivableFilters(c) }
 
-      const status = c.req.query('status')
-      if (status === 'ACTIVE' || status === 'ARCHIVED') filters.status = status
-      if (c.req.query('includeArchived') === 'true') filters.includeArchived = true
-
-      // Cross-operator read scope is enforced in the service (audit M3): a bypass
-      // caller that names neither operatorId nor includeAll is rejected there, so a
-      // forgotten guard here can't leak every operator's private config. Operator
-      // callers auto-scope; any operatorId they pass is ignored at the repo.
-      const read = {
-        operatorId: c.req.query('operatorId'),
-        includeAll: c.req.query('includeAll') === 'true',
-      }
-      return ok(c, await service.findAll(ctx, read, filters, locale.locale))
+      return ok(c, await service.findAll(ctx, parseCrossOperatorRead(c), filters, locale.locale))
     })
     .get('/add-ons/:id', async (c) => {
       const user = requireUser(c)
@@ -98,13 +89,16 @@ export function createAddOnRoutes(
         ctx,
         {
           operatorId,
+          // Exactly one of templateId / nameI18n is set (createAddOnSchema refine);
+          // forward both so the service branches picked vs self-authored (#1437).
           templateId: d.templateId,
+          nameI18n: d.nameI18n,
           descriptionOverride: d.descriptionOverride ?? null,
           priceJpy: d.priceJpy,
         },
         locale.locale,
       )
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.option, 201)
     })
     .patch('/add-ons/:id', async (c) => {
@@ -123,10 +117,12 @@ export function createAddOnRoutes(
       const result = await service.update(
         toCallerContext(user),
         idResult.id,
-        stripUndefined(parsed.data) as AddOnUpdate,
+        stripUndefined(parsed.data),
         locale.locale,
+        // #1456: bind a bypass-admin edit to the operator it picked (?operatorId=).
+        c.req.query('operatorId'),
       )
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.option)
     })
     .delete('/add-ons/:id', async (c) => {
@@ -139,8 +135,14 @@ export function createAddOnRoutes(
       const locale = parseLocale(c)
       if (!locale.ok) return locale.response
 
-      const result = await service.archive(toCallerContext(user), idResult.id, locale.locale)
-      if (!result.ok) return fail(c, result.error, result.status)
+      const result = await service.archive(
+        toCallerContext(user),
+        idResult.id,
+        locale.locale,
+        // #1456: bind a bypass-admin archive to the operator it picked (?operatorId=).
+        c.req.query('operatorId'),
+      )
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.option)
     })
 }

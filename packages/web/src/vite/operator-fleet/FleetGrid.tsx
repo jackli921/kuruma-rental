@@ -23,6 +23,10 @@ interface FleetGridProps {
   readonly todayIso: string
   // Threaded to each card for the name → detail link (#527).
   readonly locale: string
+  /** All-mode only: resolves the per-vehicle operator label; undefined ⇒ no badge (#1264). */
+  readonly operatorNameFor?: ((vehicle: OperatorFleetVehicle) => string | undefined) | undefined
+  /** #1260: the operator a picker-admin picked, bound onto each card write; undefined for operator sessions. */
+  readonly pickedOperatorId?: string | undefined
 }
 
 // Grid mode for the operator fleet (#561): vehicles grouped by class into
@@ -44,6 +48,8 @@ export function FleetGrid({
   canWrite,
   todayIso,
   locale,
+  operatorNameFor,
+  pickedOperatorId,
 }: FleetGridProps) {
   const t = useTranslations('business.vehicles.group')
   const tBulk = useTranslations('business.vehicles.bulk')
@@ -134,6 +140,8 @@ export function FleetGrid({
                     canWrite={canWrite}
                     todayIso={todayIso}
                     locale={locale}
+                    operatorNameFor={operatorNameFor}
+                    pickedOperatorId={pickedOperatorId}
                   />
                 ))}
               </div>

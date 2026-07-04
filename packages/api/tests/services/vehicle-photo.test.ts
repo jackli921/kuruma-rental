@@ -1,12 +1,25 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
+import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 import { InMemoryPhotoStorage } from '../../src/repositories/in-memory/photo-storage'
 import { MAX_PHOTOS_PER_VEHICLE, VehiclePhotoService } from '../../src/services/vehicle-photo'
 import type { Vehicle } from '../../src/stores'
+import { TEST_OPERATOR_ID } from '../helpers/operator'
+
+// #1260: photo writes are bound to the acting operator. The success/mutating
+// paths run as the owning OPERATOR_OWNER (already tenant-scoped, so the guard
+// no-ops); validation / no-file / nonexistent paths return BEFORE the guard, so
+// they keep the unscoped SYSTEM_CONTEXT. The acting-operator denials themselves
+// are covered in vehicle-photo-write-scope.test.ts.
+const operator: CallerContext = {
+  userId: 'op-user',
+  role: 'OPERATOR_OWNER',
+  operatorId: TEST_OPERATOR_ID,
+}
 
 function vehicleInput(overrides?: Partial<Vehicle>) {
   return {
+    operatorId: TEST_OPERATOR_ID,
     name: 'Test Car',
     description: 'A test vehicle',
     photos: [] as string[],
@@ -48,7 +61,7 @@ beforeEach(async () => {
 describe('VehiclePhotoService.uploadPhotos', () => {
   it('uploads a valid image and appends the URL to the vehicle', async () => {
     const file = makeFile('a.jpg', 'image/jpeg', JPEG)
-    const result = await service.uploadPhotos(SYSTEM_CONTEXT, vehicleId, [file])
+    const result = await service.uploadPhotos(operator, vehicleId, [file])
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
@@ -124,7 +137,7 @@ describe('VehiclePhotoService.uploadPhotos rollback', () => {
     const flakyService = new VehiclePhotoService(repo, flakyStorage)
 
     const files = [makeFile('a.jpg', 'image/jpeg', JPEG), makeFile('b.jpg', 'image/jpeg', JPEG)]
-    const result = await flakyService.uploadPhotos(SYSTEM_CONTEXT, vehicleId, files)
+    const result = await flakyService.uploadPhotos(operator, vehicleId, files)
 
     expect(result.ok).toBe(false)
     if (result.ok) return
@@ -141,11 +154,11 @@ describe('VehiclePhotoService.uploadPhotos rollback', () => {
 describe('VehiclePhotoService.deletePhoto', () => {
   it('removes the photo from the vehicle and R2', async () => {
     const file = makeFile('a.jpg', 'image/jpeg', JPEG)
-    const up = await service.uploadPhotos(SYSTEM_CONTEXT, vehicleId, [file])
+    const up = await service.uploadPhotos(operator, vehicleId, [file])
     if (!up.ok) throw new Error('setup failed')
     const url = up.uploaded[0]!
 
-    const result = await service.deletePhoto(SYSTEM_CONTEXT, vehicleId, url)
+    const result = await service.deletePhoto(operator, vehicleId, url)
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.remaining).toBe(0)
@@ -155,11 +168,7 @@ describe('VehiclePhotoService.deletePhoto', () => {
   })
 
   it('returns 404 when the url is not associated with the vehicle', async () => {
-    const result = await service.deletePhoto(
-      SYSTEM_CONTEXT,
-      vehicleId,
-      'https://r2.example/missing.jpg',
-    )
+    const result = await service.deletePhoto(operator, vehicleId, 'https://r2.example/missing.jpg')
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(404)
@@ -168,7 +177,7 @@ describe('VehiclePhotoService.deletePhoto', () => {
   it('does not delete another vehicle’s stored object when its URL is cross-referenced', async () => {
     // Victim vehicle owns a real stored object.
     const victim = await repo.create(SYSTEM_CONTEXT, vehicleInput())
-    const up = await service.uploadPhotos(SYSTEM_CONTEXT, victim.id, [
+    const up = await service.uploadPhotos(operator, victim.id, [
       makeFile('v.jpg', 'image/jpeg', JPEG),
     ])
     if (!up.ok) throw new Error('setup failed')
@@ -177,7 +186,7 @@ describe('VehiclePhotoService.deletePhoto', () => {
 
     // Attacker references the victim's URL on their OWN row, then deletes it.
     await repo.appendPhotos(SYSTEM_CONTEXT, vehicleId, [victimUrl], MAX_PHOTOS_PER_VEHICLE)
-    const result = await service.deletePhoto(SYSTEM_CONTEXT, vehicleId, victimUrl)
+    const result = await service.deletePhoto(operator, vehicleId, victimUrl)
 
     expect(result.ok).toBe(true)
     // The ref is gone from the attacker's row (DB tenant-scoped removal) ...

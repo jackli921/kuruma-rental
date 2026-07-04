@@ -8,7 +8,7 @@ import {
   toCallerContext,
 } from '../middleware/auth'
 import type { VehicleBlockService } from '../services/vehicle-block'
-import { fail, ok, parseBody, parseDateRange, parseId } from './helpers'
+import { fail, failResult, ok, parseBody, parseDateRange, parseId } from './helpers'
 
 export function createVehicleBlockRoutes(service: VehicleBlockService) {
   const app = new Hono()
@@ -65,8 +65,7 @@ export function createVehicleBlockRoutes(service: VehicleBlockService) {
         parsed.data,
         actingOperatorId,
       )
-      if (!result.ok)
-        return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.block, 201)
     })
     .delete('/vehicles/:vehicleId/blocks/:blockId', async (c) => {
@@ -86,8 +85,7 @@ export function createVehicleBlockRoutes(service: VehicleBlockService) {
         blockIdResult.id,
         actingOperatorId,
       )
-      if (!result.ok)
-        return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)
+      if (!result.ok) return failResult(c, result)
       return ok(c, result.block)
     })
 }

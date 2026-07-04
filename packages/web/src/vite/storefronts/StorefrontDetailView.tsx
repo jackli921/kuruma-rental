@@ -1,9 +1,16 @@
-import { RatingBadge, reviewAggregatesQueryOptions } from '@/vite/reviews'
+import { useFeatureFlag } from '@/vite/config'
+import {
+  RatingBadge,
+  ReviewList,
+  operatorReviewsInfiniteQueryOptions,
+  reviewAggregatesQueryOptions,
+} from '@/vite/reviews'
 import { AvailableVehicleCard } from '@/vite/storefronts/AvailableVehicleCard'
+import { ClassOfferingCard } from '@/vite/storefronts/ClassOfferingCard'
 import type { StorefrontDetailData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
 import { turnaroundHours } from '@/vite/storefronts/turnaround'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft, Clock, MapPin } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
@@ -36,7 +43,8 @@ export function StorefrontDetailView({
 }: StorefrontDetailViewProps) {
   const t = useTranslations('search')
   const locale = useLocale()
-  const { storefront, vehicles } = detail
+  const reviewsEnabled = useFeatureFlag('REVIEWS')
+  const { storefront, vehicles, classOfferings } = detail
 
   // #1085 slice 5: one query for the storefront's operator badge + one batched
   // query for every visible vehicle's class badge. The class fetch drops null
@@ -47,6 +55,18 @@ export function StorefrontDetailView({
   )
   const classIds = vehicles.map((v) => v.classId).filter((id): id is string => id !== null)
   const { data: classRatings } = useQuery(reviewAggregatesQueryOptions('classes', classIds))
+  // #1449: paginated "load more" over the operator's reviews. Flatten the pages into one
+  // list for render; the cursor lives in react-query's page params, not component state.
+  const {
+    data: reviewPages,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    ...operatorReviewsInfiniteQueryOptions(storefront.operatorId),
+    enabled: reviewsEnabled,
+  })
+  const operatorReviews = reviewPages?.pages.flatMap((page) => page.reviews)
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -100,6 +120,41 @@ export function StorefrontDetailView({
           ))}
         </div>
       )}
+
+      {/* #464: class-combo deals for this store. The section identity comes from
+          `storefront` (each offering redundantly echoes its location, but the
+          store owns the pickup id — deferring to `offering.location` would let a
+          future mismatch silently mis-route the booking). */}
+      {classOfferings.length > 0 && (
+        <section className="mt-12">
+          <h2 className="mb-4 text-xl font-semibold tracking-tight">{t('detail.classDeals')}</h2>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {classOfferings.map((offering) => (
+              <ClassOfferingCard
+                key={offering.classId}
+                offering={offering}
+                locationId={storefront.locationId}
+                from={from}
+                to={to}
+                classFilter={classFilter}
+                pickupLocationId={pickupLocationId}
+                region={region}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {operatorReviews !== undefined ? (
+        <ReviewList
+          reviews={operatorReviews}
+          hasMore={hasNextPage}
+          onLoadMore={() => {
+            void fetchNextPage()
+          }}
+          isLoadingMore={isFetchingNextPage}
+        />
+      ) : null}
     </div>
   )
 }

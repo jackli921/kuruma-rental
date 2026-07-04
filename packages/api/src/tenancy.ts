@@ -1,4 +1,5 @@
 import type { BookingSource } from '@kuruma/shared/enums'
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import {
   type CallerContext,
   ForbiddenError,
@@ -207,6 +208,25 @@ export function threadReadScope(ctx: CallerContext): ThreadReadScope {
 export type FleetWriteDenial = { kind: 'operator-required' } | { kind: 'not-in-scope' }
 
 /**
+ * The core operator-binding denial (#1260): when a caller reached the target
+ * through an UNSCOPED `all` read, it must name the operator it is acting as, and
+ * that operator must own the target. Row/tenant-scoped callers pass through — the
+ * repository read scope already clamped them, so `findById` never handed them a
+ * foreign row. Whether a caller reads `all` is RESOURCE-specific, so each wrapper
+ * resolves that and passes the boolean in.
+ */
+function operatorBindingDenial(
+  readsAllOperators: boolean,
+  targetOperatorId: string,
+  actingOperatorId: string | undefined,
+): FleetWriteDenial | null {
+  if (!readsAllOperators) return null
+  if (!actingOperatorId) return { kind: 'operator-required' }
+  if (actingOperatorId !== targetOperatorId) return { kind: 'not-in-scope' }
+  return null
+}
+
+/**
  * Bind a fleet WRITE to the operator the caller is acting as (#1260).
  *
  * A tenant operator (OPERATOR_*) is already clamped to its own tenant by the
@@ -226,10 +246,61 @@ export function assertFleetWriteWithinOperator(
   targetOperatorId: string,
   actingOperatorId: string | undefined,
 ): FleetWriteDenial | null {
-  if (isOperatorRole(ctx.role)) return null
-  if (!actingOperatorId) return { kind: 'operator-required' }
-  if (actingOperatorId !== targetOperatorId) return { kind: 'not-in-scope' }
-  return null
+  return operatorBindingDenial(!isOperatorRole(ctx.role), targetOperatorId, actingOperatorId)
+}
+
+/**
+ * Bind a booking lifecycle WRITE (status advance, cancel) to the operator the
+ * caller picked (#1260). Bookings are PRIVATE: `bookingReadScope` maps only the
+ * bypass tier (PLATFORM_ADMIN) to `all`; renters read their own, operators their
+ * tenant, partners their sourced channel — all already clamped by `findById`. So
+ * bind the write only for that `all` reader. Keyed on the resolved read scope, NOT
+ * `!isOperatorRole` (the fleet key): `/cancel` has no route gate and admits
+ * renters (self-cancel) and legacy STAFF/ADMIN — both renter-scoped for bookings —
+ * who must never be forced to name an operator, and the fleet key would 422 them.
+ *
+ * Also guards booking CREATE (#1417): that path now reads the vehicle/pickup anchor
+ * with the caller's own ctx, so a tenant operator can no longer reach a foreign car
+ * at all (`findById` returns undefined -> a plain 'not found'). Only the bypass `all`
+ * tier still reads cross-operator inventory, so this same pick-an-operator bind is all
+ * create needs — no create-specific denial kind.
+ */
+export function assertBookingWriteWithinOperator(
+  ctx: CallerContext,
+  targetOperatorId: string,
+  actingOperatorId: string | undefined,
+): FleetWriteDenial | null {
+  return operatorBindingDenial(
+    bookingReadScope(ctx).kind === 'all',
+    targetOperatorId,
+    actingOperatorId,
+  )
+}
+
+/**
+ * Map a {@link FleetWriteDenial} to the shape a fleet-write service returns
+ * (#1260). Wired to booking status writes and booking CREATE (#1417); the
+ * block/vehicle slices adopt the same mapper so the refusal contract stays
+ * identical everywhere:
+ * - operator-required -> 422 carrying the same OPERATOR_REQUIRED code the global
+ *   OperatorRequiredError emits, so the web can discriminate "pick an operator".
+ * - not-in-scope      -> 404 with the CALLER's own not-found message: from the
+ *   acting operator's tenant the target simply does not exist (no existence
+ *   oracle), so a booking's 404 reads 'Booking not found', a vehicle's 'Vehicle
+ *   not found', indistinguishable from a truly-unknown id.
+ */
+export function fleetWriteDenialResult(
+  denial: FleetWriteDenial,
+  notFoundError: string,
+): { ok: false; status: 422 | 404; error: string; code?: ErrorCode } {
+  return denial.kind === 'operator-required'
+    ? {
+        ok: false,
+        status: 422,
+        error: 'operatorId is required: specify the operator to act as',
+        code: 'OPERATOR_REQUIRED',
+      }
+    : { ok: false, status: 404, error: notFoundError }
 }
 
 /**
@@ -254,4 +325,28 @@ export async function resolveOperatorIdForWrite(
   }
   if (inputOperatorId) return inputOperatorId
   throw new OperatorRequiredError('operatorId is required: specify a target operator')
+}
+
+/**
+ * Resolve the operator whose TEAM the caller may read/manage (#1230 slice 6).
+ *
+ * Deliberately STRICTER than {@link resolveOperatorIdForWrite}: team data is
+ * operator-internal, owner-tier, so a foreign operatorId is honored ONLY for
+ * PRIVILEGED_ROLES (PLATFORM_ADMIN). It is an allowlist, not a bypass-first
+ * denylist — operator role OR PRIVILEGED_ROLES pass; everyone else (renter,
+ * PARTNER, legacy STAFF/ADMIN) falls into `else` and is denied, which is why no
+ * explicit PARTNER branch is needed. Do NOT collapse this onto the write
+ * resolver: it keys on `!isOperatorRole` and would honor legacy STAFF/ADMIN,
+ * silently opening a cross-tenant team write (pinned by a route test).
+ */
+export function resolveTeamOperatorId(ctx: CallerContext, inputOperatorId?: string): string {
+  if (isOperatorRole(ctx.role)) {
+    if (!ctx.operatorId) throw new ForbiddenError('operator scope required')
+    return ctx.operatorId // input IGNORED — an operator cannot act cross-tenant
+  }
+  if (PRIVILEGED_ROLES.has(ctx.role)) {
+    if (inputOperatorId) return inputOperatorId // the `all` tier — honored ONLY here
+    throw new OperatorRequiredError('operatorId is required: specify a target operator')
+  }
+  throw new ForbiddenError('operator scope required') // renter / partner / legacy
 }

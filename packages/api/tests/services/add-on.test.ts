@@ -36,6 +36,16 @@ function createInput(operatorId: string, templateId: string) {
   }
 }
 
+// A self-authored create carries a nameI18n bundle and NO templateId (#1437).
+function selfAuthoredInput(operatorId: string, nameI18n: { en: string; ja?: string; zh?: string }) {
+  return {
+    operatorId,
+    nameI18n,
+    descriptionOverride: null,
+    priceJpy: 1500,
+  }
+}
+
 describe('AddOnService', () => {
   let repo: InMemoryAddOnRepository
   let service: AddOnService
@@ -116,6 +126,97 @@ describe('AddOnService', () => {
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.status).toBe(409)
     })
+
+    it('creates a SELF-AUTHORED add-on from a nameI18n bundle and resolves its name', async () => {
+      const result = await service.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'GPS unit', ja: 'GPS ユニット' }),
+        'ja',
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.option.templateId).toBeNull()
+        expect(result.option.nameI18n).toEqual({ en: 'GPS unit', ja: 'GPS ユニット' })
+        expect(result.option.resolvedName).toBe('GPS ユニット')
+      }
+    })
+
+    it('does not treat a self-authored create as an unknown template (no 400)', async () => {
+      // A self-authored create must never hit the template lookup — no templateId.
+      const result = await service.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'Dashcam' }),
+        LOCALE,
+      )
+      expect(result.ok).toBe(true)
+    })
+
+    it('rejects a template-picked create when the shared catalog is disabled (#1437)', async () => {
+      const off = new AddOnService(repo, new InMemoryAddOnTemplateRepository(), () =>
+        Promise.resolve(false),
+      )
+      const result = await off.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.status).toBe(422)
+        expect(result.error).toBe('The shared catalog is disabled; create a custom add-on instead')
+      }
+    })
+
+    it('still allows a self-authored create when the shared catalog is disabled (#1437)', async () => {
+      // The escape hatch must survive the kill-switch: operators can always self-author.
+      const off = new AddOnService(repo, new InMemoryAddOnTemplateRepository(), () =>
+        Promise.resolve(false),
+      )
+      const result = await off.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'GPS unit' }),
+        LOCALE,
+      )
+      expect(result.ok).toBe(true)
+    })
+
+    it('rejects a second self-authored add-on with the same en name (distinct 409)', async () => {
+      await service.create(ctxFor(opA), selfAuthoredInput(opA, { en: 'GPS unit' }), LOCALE)
+      const result = await service.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'GPS unit', ja: '別' }),
+        LOCALE,
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.status).toBe(409)
+        expect(result.error).toBe('You already offer an add-on with this name')
+      }
+    })
+
+    it('maps a self-authored lost-race unique-violation to a 409 name clash', async () => {
+      vi.spyOn(repo, 'findActiveByOperatorAndName').mockResolvedValue(undefined)
+      vi.spyOn(repo, 'create').mockRejectedValue(uniqueViolation())
+      const result = await service.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'GPS unit' }),
+        LOCALE,
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.status).toBe(409)
+        expect(result.error).toBe('You already offer an add-on with this name')
+      }
+    })
+
+    it('rejects picking a template whose en name collides with an existing self-authored item (name 409)', async () => {
+      // The child_seat template's en name is 'Child seat'; a self-authored item of the
+      // same name shares the active-name index, so this is a NAME clash, not a template
+      // clash — the message must point at the name the operator can actually fix.
+      await service.create(ctxFor(opA), selfAuthoredInput(opA, { en: 'Child seat' }), LOCALE)
+      const result = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.status).toBe(409)
+        expect(result.error).toBe('You already offer an add-on with this name')
+      }
+    })
   })
 
   describe('update', () => {
@@ -163,6 +264,57 @@ describe('AddOnService', () => {
       await service.update(ctxFor(opB), created.option.id, { priceJpy: 1 }, LOCALE)
       expect(updateSpy).not.toHaveBeenCalled()
     })
+
+    it('edits a self-authored item name — adds a locale and re-resolves (D5)', async () => {
+      const created = await service.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'GPS unit' }),
+        LOCALE,
+      )
+      if (!created.ok) throw new Error('seed failed')
+      const result = await service.update(
+        ctxFor(opA),
+        created.option.id,
+        { nameI18n: { en: 'GPS unit', ja: 'GPS ユニット' } },
+        'ja',
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.option.nameI18n).toEqual({ en: 'GPS unit', ja: 'GPS ユニット' })
+        expect(result.option.resolvedName).toBe('GPS ユニット')
+      }
+    })
+
+    it('rejects a nameI18n edit on a PICKED row (its name comes from the template)', async () => {
+      const created = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
+      if (!created.ok) throw new Error('seed failed')
+      const result = await service.update(
+        ctxFor(opA),
+        created.option.id,
+        { nameI18n: { en: 'My own name' } },
+        LOCALE,
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.status).toBe(400)
+    })
+
+    it('rejects a self-authored rename that collides with another active name (409)', async () => {
+      await service.create(ctxFor(opA), selfAuthoredInput(opA, { en: 'Dashcam' }), LOCALE)
+      const second = await service.create(
+        ctxFor(opA),
+        selfAuthoredInput(opA, { en: 'GPS unit' }),
+        LOCALE,
+      )
+      if (!second.ok) throw new Error('seed failed')
+      const result = await service.update(
+        ctxFor(opA),
+        second.option.id,
+        { nameI18n: { en: 'Dashcam' } },
+        LOCALE,
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.status).toBe(409)
+    })
   })
 
   describe('archive', () => {
@@ -191,5 +343,78 @@ describe('AddOnService', () => {
       const recreated = await service.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
       expect(recreated.ok).toBe(true)
     })
+  })
+})
+
+// #1456: PATCH/DELETE bind to the operator a picker admin acts as — parity with
+// bookings/fleet (#1260), fees (#1442), and locations. A bypass admin reads every
+// operator's add-on by raw id (operatorReadScope -> 'all'), so an unbound write
+// could touch any tenant; require it to name the picked operator and forbid a
+// mismatch. An operator session is already tenant-clamped by the read scope, so it
+// passes through with no acting id.
+describe('AddOnService — update/archive bind to the picked operator (#1456)', () => {
+  const adminCtx: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+  let repo: InMemoryAddOnRepository
+  let service: AddOnService
+
+  beforeEach(() => {
+    repo = new InMemoryAddOnRepository()
+    service = new AddOnService(repo, new InMemoryAddOnTemplateRepository())
+  })
+
+  // Self-authored so the seed needs no template setup and survives the kill-switch.
+  async function seedAddOnForOpA(): Promise<string> {
+    const created = await service.create(
+      ctxFor(opA),
+      selfAuthoredInput(opA, { en: 'GPS unit' }),
+      LOCALE,
+    )
+    if (!created.ok) throw new Error('seed failed')
+    return created.option.id
+  }
+
+  it('rejects an admin update with no picked operator (422 OPERATOR_REQUIRED)', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.update(adminCtx, id, { priceJpy: 3000 }, LOCALE, undefined)
+    expect(result).toMatchObject({ ok: false, status: 422, code: 'OPERATOR_REQUIRED' })
+  })
+
+  it('404s an admin update whose picked operator does not own the add-on', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.update(adminCtx, id, { priceJpy: 3000 }, LOCALE, opB)
+    expect(result).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('applies an admin update bound to the add-on-owning operator', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.update(adminCtx, id, { priceJpy: 3000 }, LOCALE, opA)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.option.priceJpy).toBe(3000)
+  })
+
+  it('lets an operator session update its own add-on with no acting id', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.update(ctxFor(opA), id, { priceJpy: 3000 }, LOCALE)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.option.priceJpy).toBe(3000)
+  })
+
+  it('rejects an admin archive with no picked operator (422 OPERATOR_REQUIRED)', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.archive(adminCtx, id, LOCALE, undefined)
+    expect(result).toMatchObject({ ok: false, status: 422, code: 'OPERATOR_REQUIRED' })
+  })
+
+  it('404s an admin archive whose picked operator does not own the add-on', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.archive(adminCtx, id, LOCALE, opB)
+    expect(result).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('archives an add-on bound to the owning operator', async () => {
+    const id = await seedAddOnForOpA()
+    const result = await service.archive(adminCtx, id, LOCALE, opA)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.option.status).toBe('ARCHIVED')
   })
 })

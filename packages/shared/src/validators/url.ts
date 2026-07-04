@@ -20,8 +20,19 @@ export function isHttpUrl(value: string): boolean {
 
 /**
  * A URL string constrained to the http(s) schemes. Reused by operator handoff
- * URLs and vehicle/vehicle-class photo arrays. When a length cap is also needed
- * (e.g. class photos' `.max(2048)`), compose `z.string().url().max(n).refine(
- * isHttpUrl, ...)` directly — `.max()` is unavailable on this ZodEffects.
+ * URLs and vehicle/vehicle-class photo arrays. When a length cap is also needed,
+ * use `httpUrlMax(n)` — `.max()` is a ZodString method, gone once `.refine()`
+ * turns this into a ZodEffects, so it can't chain onto `httpUrl`.
  */
 export const httpUrl = z.string().url().refine(isHttpUrl, { message: HTTP_URL_MESSAGE })
+
+/**
+ * `httpUrl` with a maximum length applied BEFORE the refine (so both the length
+ * cap and the http(s)-only guard hold). The single home for the capped shape the
+ * photo arrays need — previously re-inlined in vehicle-class.ts, which split the
+ * security-critical #967 refine into two copies a future tightening could miss
+ * (#1384). Returns the same `string`-output schema, so consumers are unaffected.
+ */
+export function httpUrlMax(maxLen: number): z.ZodType<string> {
+  return z.string().url().max(maxLen).refine(isHttpUrl, { message: HTTP_URL_MESSAGE })
+}

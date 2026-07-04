@@ -5,10 +5,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { useFeatureFlag } from '@/vite/config'
 import { DEFAULT_LOCALE, isLocale } from '@/vite/i18n/locale'
 import { AddOnForm } from '@/vite/operator-add-ons/AddOnForm'
 import { ADDON_QUERY_KEY, type CreateAddOnInput, createAddOn } from '@/vite/operator-add-ons/api'
 import { setLocaleSlot } from '@/vite/operator-add-ons/description-override'
+import { buildNameBundle } from '@/vite/operator-add-ons/name-bundle'
 import { addOnTemplatesQueryOptions } from '@/vite/operator-add-ons/templates-api'
 import type { WithOperatorId } from '@/vite/operator-context'
 import { useSession } from '@/vite/session'
@@ -31,12 +33,15 @@ export function AddAddOnDialog({ open, onOpenChange, pickedOperatorId }: AddAddO
   const csrfToken = useSession().data?.csrfToken ?? ''
   const rawLocale = useLocale()
   const locale = isLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE
+  // #1437: when the shared catalog is off, the picker is hidden and the operator must
+  // self-author — so skip the picker fetch and force the form's custom path.
+  const sharedCatalogEnabled = useFeatureFlag('SHARED_CATALOG')
 
-  // Only fetch the picker while the dialog is open; the server resolves each name
-  // to `locale` and drops templates this operator already offers.
+  // Only fetch the picker while the dialog is open AND the catalog is on; the server
+  // resolves each name to `locale` and drops templates this operator already offers.
   const { data: templates } = useQuery({
     ...addOnTemplatesQueryOptions(locale, pickedOperatorId),
-    enabled: open,
+    enabled: open && sharedCatalogEnabled,
   })
 
   const { mutateAsync, isPending, error, reset } = useMutation({
@@ -67,12 +72,19 @@ export function AddAddOnDialog({ open, onOpenChange, pickedOperatorId }: AddAddO
         <AddOnForm
           mode="create"
           templates={templates ?? []}
+          sharedCatalogEnabled={sharedCatalogEnabled}
           onSubmit={async (data) => {
-            const body: CreateAddOnInput = {
-              templateId: data.templateId,
-              priceJpy: data.priceJpy,
-              descriptionOverride: setLocaleSlot(null, locale, data.description),
-            }
+            const descriptionOverride = setLocaleSlot(null, locale, data.description)
+            // Exactly one identity: a custom item sends its own name bundle; a picked
+            // one sends the template id. The server refine enforces the same rule.
+            const body: CreateAddOnInput =
+              data.identityMode === 'custom'
+                ? {
+                    nameI18n: buildNameBundle(data.nameEn, data.nameJa, data.nameZh),
+                    priceJpy: data.priceJpy,
+                    descriptionOverride,
+                  }
+                : { templateId: data.templateId, priceJpy: data.priceJpy, descriptionOverride }
             await mutateAsync(pickedOperatorId ? { ...body, operatorId: pickedOperatorId } : body)
           }}
           onCancel={() => handleOpenChange(false)}

@@ -6,9 +6,13 @@ import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
-vi.mock('@tanstack/react-router', () => ({
-  Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
-}))
+vi.mock('@tanstack/react-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tanstack/react-router')>()
+  return {
+    ...actual,
+    Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
+  }
+})
 
 function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVehicle {
   return {
@@ -50,7 +54,10 @@ function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVe
 
 // canWrite={false} drops the checkbox + FleetRowActions (which needs a QueryClient),
 // leaving the thumbnail to render on its own.
-function renderCard(v: OperatorFleetVehicle) {
+function renderCard(
+  v: OperatorFleetVehicle,
+  extra?: { operatorNameFor?: (vehicle: OperatorFleetVehicle) => string | undefined },
+) {
   return render(
     <IntlProvider locale="en" messages={enMessages}>
       <FleetVehicleCard
@@ -61,6 +68,7 @@ function renderCard(v: OperatorFleetVehicle) {
         canWrite={false}
         todayIso="2026-01-01"
         locale="en"
+        {...extra}
       />
     </IntlProvider>,
   )
@@ -72,5 +80,17 @@ describe('FleetVehicleCard', () => {
     const img = screen.getByRole('img', { name: 'Toyota Aqua' })
     expect(img).toHaveAttribute('width', '300')
     expect(img).toHaveAttribute('height', '200')
+  })
+
+  it('renders the operator badge when a resolver returns a name (#1264 all-mode)', () => {
+    renderCard(vehicle({ id: 'v1', operatorId: 'op-1' }), {
+      operatorNameFor: () => 'Sakura Mobility',
+    })
+    expect(screen.getByText('Sakura Mobility')).toBeInTheDocument()
+  })
+
+  it('renders no operator badge when the resolver is absent (operator session)', () => {
+    renderCard(vehicle({ id: 'v1' }))
+    expect(screen.queryByText('Sakura Mobility')).toBeNull()
   })
 })

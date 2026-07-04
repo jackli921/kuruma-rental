@@ -1,6 +1,5 @@
 import type { CreateProviderInviteInput } from '@kuruma/shared/validators/provider-invite'
-import { randomToken } from '../auth/google'
-import { ConflictError } from '../auth/guards'
+import { ConflictError, NotFoundError } from '../auth/guards'
 import { sha256Hex } from '../auth/token-hash'
 import {
   PG_ERROR,
@@ -9,26 +8,22 @@ import {
   pgErrorCode,
 } from '../pg-errors'
 import type { OperatorRepository, ProviderInviteRepository } from '../repositories/types'
-
-// Invites are short-lived: a leaked link is only useful for a week, and the
-// recipient is expected to accept promptly during onboarding.
-export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+import { mintInvite } from './invite-mint'
+import { type ProviderInviteAuditEvent, buildProviderInviteRecord } from './provider-invite-record'
+// Re-export so existing importers (tests, etc.) keep working without touching their imports.
+export { INVITE_TTL_MS } from './invite-mint'
+export type { ProviderInviteAuditEvent }
 
 /** Raised when an invite is minted against an operatorId with no matching row.
- *  The route maps this to a 404 so a bad target reads as a client error, not a
- *  500 from the FK violation (#563). */
-export class OperatorNotFoundError extends Error {
+ *  Extends NotFoundError so the global handler maps it to 404 (#563, #1230 c1);
+ *  the platform-admin team path can now supply an arbitrary operatorId, so this
+ *  is reachable for the first time. The admin.ts:47 local catch is KEPT — it pins
+ *  the suffix-free 'Operator not found' message provider-invites.test.ts asserts. */
+export class OperatorNotFoundError extends NotFoundError {
+  override readonly name = 'OperatorNotFoundError'
   constructor(readonly operatorId: string) {
     super(`Operator not found: ${operatorId}`)
-    this.name = 'OperatorNotFoundError'
   }
-}
-
-export interface ProviderInviteAuditEvent {
-  readonly type: 'PROVIDER_INVITE_CREATED'
-  readonly invitedByUserId: string
-  readonly operatorId: string
-  readonly email: string
 }
 
 // Injected so the privilege-grant trail is assertable in tests and the service
@@ -80,19 +75,19 @@ export class ProviderInviteService {
     const operator = await this.operatorRepo.findById(input.operatorId)
     if (!operator) throw new OperatorNotFoundError(input.operatorId)
 
-    const token = randomToken(32)
-    const expiresAt = new Date(Date.now() + (this.config.ttlMs ?? INVITE_TTL_MS))
+    const minted = mintInvite({
+      webBaseUrl: this.config.webBaseUrl,
+      // exactOptionalPropertyTypes: spread only when defined, not as `ttlMs: undefined`
+      ...(this.config.ttlMs !== undefined ? { ttlMs: this.config.ttlMs } : {}),
+    })
+    const { row, event } = buildProviderInviteRecord(minted, {
+      email: input.email,
+      operatorId: input.operatorId,
+      role: input.role,
+      invitedByUserId,
+    })
     try {
-      await this.repo.create({
-        email: input.email,
-        operatorId: input.operatorId,
-        role: input.role,
-        tokenHash: sha256Hex(token),
-        status: 'PENDING',
-        expiresAt,
-        invitedByUserId,
-        acceptedByUserId: null,
-      })
+      await this.repo.create(row)
     } catch (err) {
       // The owner re-invited an email that already has a live invite. The partial-
       // unique index is the race fence; translate its 23505 to a 409 ConflictError
@@ -106,14 +101,8 @@ export class ProviderInviteService {
       }
       throw err
     }
-    this.recordAudit({
-      type: 'PROVIDER_INVITE_CREATED',
-      invitedByUserId,
-      operatorId: input.operatorId,
-      email: input.email,
-    })
-    const base = this.config.webBaseUrl.replace(/\/$/, '')
-    return { token, inviteUrl: `${base}/provider/invite/${token}`, expiresAt }
+    this.recordAudit(event)
+    return { token: minted.token, inviteUrl: minted.inviteUrl, expiresAt: minted.expiresAt }
   }
 
   // Public, unauthenticated invite preview for the acceptance page. Looked up by

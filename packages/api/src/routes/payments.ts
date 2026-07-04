@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { requireUser, toCallerContext } from '../middleware/auth'
 import type { PaymentService } from '../services/payment/payment'
-import { fail, ok, parseId } from './helpers'
+import { fail, failResult, ok, parseId } from './helpers'
 
 const STRIPE_SIGNATURE_HEADER = 'stripe-signature'
 
@@ -24,7 +24,7 @@ export function createPaymentRoutes(service: PaymentService) {
       const idResult = parseId(c, 'bookingId')
       if (!idResult.ok) return idResult.response
       const result = await service.createCheckoutSession(ctx, idResult.id)
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) return failResult(c, result)
       return ok(c, { url: result.url })
     })
     .get('/bookings/:bookingId/payment', async (c) => {
@@ -43,14 +43,24 @@ export function createPaymentRoutes(service: PaymentService) {
       const rawBody = await c.req.text()
       const result = await service.handleWebhook(rawBody, signature)
 
-      // A double charge or an amount mismatch needs an operator's eyes. The
-      // service now PERSISTS these to payment_anomalies (#508 P2, idempotent on
-      // stripeEventId); this log is supplementary real-time signal carrying the
-      // FULL context (event/session/paymentIntent/booking/amounts). NOTE: because
-      // persistence happens before the 200 ack, a transient insert failure rejects
-      // here → 500 → Stripe retry, which re-converges (the insert is idempotent) —
-      // an intentional trade-off favouring durable capture over a silent log-only ack.
-      if (result.outcome === 'double_payment' || result.outcome === 'amount_mismatch') {
+      // A double charge or an amount mismatch needs attention. The service PERSISTS
+      // these to payment_anomalies (#508 P2, idempotent on stripeEventId); this log is
+      // the real-time signal carrying FULL context (event/session/paymentIntent/booking/
+      // amounts). NOTE: persistence happens before the 200 ack, so a transient failure
+      // rejects here → 500 → Stripe retry, which re-converges (idempotent) — favouring
+      // durable capture over a silent log-only ack.
+      if (result.outcome === 'amount_mismatch') {
+        // #1378: the mismatched charge is AUTO-REFUNDED. Alert LOUD only when the refund
+        // did not go through ('failed'/'unrefundable') — captured funds may still be
+        // stranded and need a human. A completed/pending refund is a warning-level record.
+        const stranded = result.refund === 'failed' || result.refund === 'unrefundable'
+        const emit = stranded ? console.error : console.warn
+        emit('[payment:webhook] amount mismatch', {
+          refund: result.refund,
+          stranded,
+          ...result.context,
+        })
+      } else if (result.outcome === 'double_payment') {
         console.error('[payment:webhook] anomaly', {
           outcome: result.outcome,
           ...result.context,

@@ -37,6 +37,15 @@ function body(extra: Record<string, unknown> = {}) {
   return JSON.stringify({ templateId: CHILD_SEAT, priceJpy: 1500, ...extra })
 }
 
+// A self-authored create carries a nameI18n bundle and NO templateId (#1437).
+function selfAuthoredBody(extra: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    nameI18n: { en: 'GPS unit', ja: 'GPS ユニット' },
+    priceJpy: 1500,
+    ...extra,
+  })
+}
+
 const POST = (app: Hono, b = body()) =>
   app.request('/add-ons', {
     method: 'POST',
@@ -165,6 +174,75 @@ describe('Add-on routes — operator CRUD', () => {
   })
 })
 
+describe('Add-on routes — self-authored (#1437)', () => {
+  it('creates a self-authored add-on from a nameI18n bundle (no template)', async () => {
+    const repo = new InMemoryAddOnRepository()
+    const res = await POST(mountFor(repo, 'OPERATOR_OWNER', OP_A), selfAuthoredBody())
+    expect(res.status).toBe(201)
+    const { data } = await res.json()
+    expect(data.templateId).toBeNull()
+    expect(data.nameI18n).toEqual({ en: 'GPS unit', ja: 'GPS ユニット' })
+    // Forwarding regression guard (H1): a dropped nameI18n would leave the service
+    // with neither identity → 400, so a 201 with the resolved name proves the route
+    // carried the bundle through.
+    expect(data.resolvedName).toBe('GPS unit')
+  })
+
+  it('resolves the self-authored name to the caller locale (?locale=ja)', async () => {
+    const repo = new InMemoryAddOnRepository()
+    const res = await mountFor(repo, 'OPERATOR_OWNER', OP_A).request('/add-ons?locale=ja', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: selfAuthoredBody(),
+    })
+    expect(res.status).toBe(201)
+    expect((await res.json()).data.resolvedName).toBe('GPS ユニット')
+  })
+
+  it('400 when a create carries BOTH a templateId and a nameI18n', async () => {
+    const repo = new InMemoryAddOnRepository()
+    const res = await POST(
+      mountFor(repo, 'OPERATOR_OWNER', OP_A),
+      selfAuthoredBody({ templateId: CHILD_SEAT }),
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('400 when a create carries NEITHER a templateId nor a nameI18n', async () => {
+    const repo = new InMemoryAddOnRepository()
+    const res = await POST(
+      mountFor(repo, 'OPERATOR_OWNER', OP_A),
+      JSON.stringify({ priceJpy: 1500 }),
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('edits a self-authored name via PATCH nameI18n and re-resolves (D5)', async () => {
+    const repo = new InMemoryAddOnRepository()
+    const app = mountFor(repo, 'OPERATOR_OWNER', OP_A)
+    const created = await (await POST(app, selfAuthoredBody())).json()
+    const res = await app.request(`/add-ons/${created.data.id}?locale=ja`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nameI18n: { en: 'GPS receiver', ja: 'GPS 受信機' } }),
+    })
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.resolvedName).toBe('GPS 受信機')
+  })
+
+  it('400 (not 500) when PATCHing nameI18n onto a PICKED row', async () => {
+    const repo = new InMemoryAddOnRepository()
+    const app = mountFor(repo, 'OPERATOR_OWNER', OP_A)
+    const created = await (await POST(app)).json()
+    const res = await app.request(`/add-ons/${created.data.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nameI18n: { en: 'My own name' } }),
+    })
+    expect(res.status).toBe(400)
+  })
+})
+
 describe('Add-on routes — platform-admin scoping (bypass-precedence)', () => {
   async function seedTwoOperators() {
     const repo = new InMemoryAddOnRepository()
@@ -205,5 +283,55 @@ describe('Add-on routes — platform-admin scoping (bypass-precedence)', () => {
     const res = await POST(mountFor(repo, 'PLATFORM_ADMIN'), body({ operatorId: OP_A }))
     expect(res.status).toBe(201)
     expect((await res.json()).data.operatorId).toBe(OP_A)
+  })
+
+  // #1456: PATCH/DELETE bind a bypass admin's write to the operator it picked via
+  // ?operatorId= — parity with fees (#1442) and locations. No pick -> 422; wrong
+  // pick -> 404 (no existence oracle); right pick -> the write applies.
+  const PATCH = (app: Hono, id: string, qs = '') =>
+    app.request(`/add-ons/${id}${qs}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priceJpy: 3000 }),
+    })
+  const DELETE = (app: Hono, id: string, qs = '') =>
+    app.request(`/add-ons/${id}${qs}`, { method: 'DELETE' })
+
+  it('422 when a PLATFORM_ADMIN edits an add-on without a picked operator', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect((await PATCH(mountFor(repo, 'PLATFORM_ADMIN'), a.id)).status).toBe(422)
+  })
+
+  it('404 when a PLATFORM_ADMIN edits an add-on whose picked operator does not own it', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect(
+      (await PATCH(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_B}`)).status,
+    ).toBe(404)
+  })
+
+  it('200 when a PLATFORM_ADMIN edits an add-on bound to its owning operator', async () => {
+    const { repo, a } = await seedTwoOperators()
+    const res = await PATCH(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_A}`)
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.priceJpy).toBe(3000)
+  })
+
+  it('422 when a PLATFORM_ADMIN archives an add-on without a picked operator', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect((await DELETE(mountFor(repo, 'PLATFORM_ADMIN'), a.id)).status).toBe(422)
+  })
+
+  it('404 when a PLATFORM_ADMIN archives an add-on whose picked operator does not own it', async () => {
+    const { repo, a } = await seedTwoOperators()
+    expect(
+      (await DELETE(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_B}`)).status,
+    ).toBe(404)
+  })
+
+  it('200 when a PLATFORM_ADMIN archives an add-on bound to its owning operator', async () => {
+    const { repo, a } = await seedTwoOperators()
+    const res = await DELETE(mountFor(repo, 'PLATFORM_ADMIN'), a.id, `?operatorId=${OP_A}`)
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.status).toBe('ARCHIVED')
   })
 })

@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { type FleetFilterState, filterVehicles } from '@/lib/fleet-filters'
+import type { OperatorScope } from '@/vite/operator-context'
 import { BulkActionBar } from '@/vite/operator-fleet/BulkActionBar'
 import { EditVehicleSheet } from '@/vite/operator-fleet/EditVehicleSheet'
 import { FleetFilters } from '@/vite/operator-fleet/FleetFilters'
@@ -16,9 +17,11 @@ import { useTranslations } from 'use-intl'
 interface OperatorFleetViewProps {
   readonly vehicles: readonly OperatorFleetVehicle[]
   readonly classOptions: readonly VehicleClassOption[]
-  // False for bypass roles (no operatorId): the page renders read-only — no Add,
-  // no per-row/card actions, no selection, no bulk bar. See the route comment (#598).
-  readonly canWrite: boolean
+  // The operator-context scope (picked id, write gate, all-mode labeling). The
+  // route derives it from the session + picker; the view is presentational (#1264).
+  // canWrite false ⇒ read-only (no Add, no per-row/card actions, no selection, no
+  // bulk bar, #598); showOperator true ⇒ each row/card carries its operator badge.
+  readonly scope: OperatorScope
   // Threaded to the row/card so each vehicle name links to its detail page (#527).
   // Passed as a prop (not read from a router hook) to keep the view tree
   // router-free and unit-testable — the bookings locale-as-prop convention.
@@ -39,12 +42,17 @@ interface OperatorFleetViewProps {
 export function OperatorFleetView({
   vehicles,
   classOptions,
-  canWrite,
+  scope,
   locale,
   initialFilters,
 }: OperatorFleetViewProps) {
   const t = useTranslations('business.vehicles.fleet')
   const todayIso = new Date().toISOString().slice(0, 10)
+  // Derived from the scope: the write gate flows to every affordance below; the
+  // resolver labels rows with their operator only in all-mode (#1264).
+  const { canWrite, pickedOperatorId, showOperator, operatorNameById } = scope
+  const operatorNameFor = (v: OperatorFleetVehicle) =>
+    showOperator ? operatorNameById.get(v.operatorId) : undefined
   const [view, setView] = useFleetViewMode()
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const [filters, setFilters] = useState<FleetFilterState>(initialFilters ?? {})
@@ -110,6 +118,8 @@ export function OperatorFleetView({
                 canWrite={canWrite}
                 todayIso={todayIso}
                 locale={locale}
+                operatorNameFor={operatorNameFor}
+                pickedOperatorId={pickedOperatorId}
               />
             ) : (
               <FleetTable
@@ -123,6 +133,8 @@ export function OperatorFleetView({
                 canWrite={canWrite}
                 todayIso={todayIso}
                 locale={locale}
+                operatorNameFor={operatorNameFor}
+                pickedOperatorId={pickedOperatorId}
               />
             )}
           </div>
@@ -135,6 +147,7 @@ export function OperatorFleetView({
             selectedIds={effectiveSelectedIds}
             onDone={clearSelection}
             onClear={clearSelection}
+            pickedOperatorId={pickedOperatorId}
           />
           <EditVehicleSheet
             open={sheet !== null}
@@ -143,6 +156,7 @@ export function OperatorFleetView({
               if (!next) setSheet(null)
             }}
             onSaved={() => setSheet(null)}
+            pickedOperatorId={pickedOperatorId}
           />
         </>
       )}

@@ -78,6 +78,52 @@ describe('storefrontDetailResultSchema — #1085 slice 5 wire extensions', () =>
   })
 })
 
+describe('storefrontDetailResultSchema — #464 class offerings', () => {
+  const validOffering = {
+    kind: 'CLASS_COMBO',
+    location: {
+      locationId: 'loc_1',
+      operatorId: 'op_1',
+      operatorName: 'Best Car Rental',
+      name: 'Namba',
+      address: '1-1',
+      latitude: null,
+      longitude: null,
+    },
+    dailyRateJpy: 9000,
+    hourlyRateJpy: null,
+    classLabel: 'Compact',
+    acrissCode: 'CCAR',
+    seats: 5,
+    photos: [] as string[],
+    classId: 'cls_1',
+    availableCount: 3,
+  }
+
+  it('defaults classOfferings to [] when an old API omits the field (independent-deploy safety)', () => {
+    // web + api workers deploy independently: a new web hitting an old API that
+    // never emits the field must not parse-error the store loader. The schema is
+    // never stricter than the wire, so a missing field falls back to [].
+    const parsed = storefrontDetailResultSchema.parse({
+      storefront: validSummary,
+      vehicles: [validVehicle],
+      nextCursor: null,
+    })
+    expect(parsed.classOfferings).toEqual([])
+  })
+
+  it('parses a class offering carrying its classId and live availableCount', () => {
+    const parsed = storefrontDetailResultSchema.parse({
+      storefront: validSummary,
+      vehicles: [],
+      classOfferings: [validOffering],
+      nextCursor: null,
+    })
+    expect(parsed.classOfferings[0]?.classId).toBe('cls_1')
+    expect(parsed.classOfferings[0]?.availableCount).toBe(3)
+  })
+})
+
 describe('storefrontSearchResultSchema — pre-existing operatorId still pinned', () => {
   it('still parses a search result whose cards already carried operatorId (#391)', () => {
     // Sanity check that adding operatorId to the DETAIL summary did not

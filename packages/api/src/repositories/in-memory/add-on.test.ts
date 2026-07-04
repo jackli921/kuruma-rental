@@ -12,6 +12,7 @@ const seed = (operatorId: string): Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'>
   description: null,
   templateId: null,
   descriptionOverride: null,
+  nameI18n: null,
   priceJpy: 1500,
   status: 'ACTIVE',
 })

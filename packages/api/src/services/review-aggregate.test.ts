@@ -23,6 +23,8 @@ function published(overrides: Partial<NewReview> = {}): NewReview {
     subRatings: {},
     comment: null,
     moderationStatus: 'VISIBLE',
+    moderatedBy: null,
+    moderatedAt: null,
     revealDeadlineAt: REVEAL,
     submittedAt: PUBLISHED,
     publishedAt: PUBLISHED,

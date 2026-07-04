@@ -1,3 +1,4 @@
+import { OperatorBadge } from '@/vite/operator-context'
 import { FleetEditButton } from '@/vite/operator-fleet/FleetEditButton'
 import { FleetRowActions } from '@/vite/operator-fleet/FleetRowActions'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
@@ -21,6 +22,10 @@ interface FleetTableProps {
   // For the per-row name → detail link (#527). An anchor (not a button) so it
   // is keyboard/right-click navigable; rendered for read-only roles too.
   readonly locale: string
+  /** All-mode only: resolves the per-vehicle operator label; undefined ⇒ no badge (#1264). */
+  readonly operatorNameFor?: ((vehicle: OperatorFleetVehicle) => string | undefined) | undefined
+  /** #1260: the operator a picker-admin picked, bound onto each row write; undefined for operator sessions. */
+  readonly pickedOperatorId?: string | undefined
 }
 
 // Row mode for the operator fleet (#561): the original table, extracted from
@@ -39,6 +44,8 @@ export function FleetTable({
   canWrite,
   todayIso,
   locale,
+  operatorNameFor,
+  pickedOperatorId,
 }: FleetTableProps) {
   const t = useTranslations('business.vehicles.fleet')
   const tBulk = useTranslations('business.vehicles.bulk')
@@ -89,13 +96,16 @@ export function FleetTable({
                 </td>
               )}
               <td className="px-4 py-3">
-                <Link
-                  to="/$locale/manage/fleet/$vehicleId"
-                  params={{ locale, vehicleId: v.id }}
-                  className="font-medium hover:underline"
-                >
-                  {v.name}
-                </Link>
+                <div className="flex items-center gap-2">
+                  <Link
+                    to="/$locale/manage/fleet/$vehicleId"
+                    params={{ locale, vehicleId: v.id }}
+                    className="font-medium hover:underline"
+                  >
+                    {v.name}
+                  </Link>
+                  <OperatorBadge name={operatorNameFor?.(v)} />
+                </div>
                 <div className="text-muted-foreground text-xs">
                   <span>{v.licensePlate ?? t('none')}</span>
                   {v.make != null && (
@@ -126,7 +136,11 @@ export function FleetTable({
                 <td className="px-4 py-3 text-right">
                   <div className="inline-flex items-start justify-end gap-1">
                     <FleetEditButton onEdit={() => onEdit(v)} />
-                    <FleetRowActions vehicle={v} onEdit={() => onEdit(v)} />
+                    <FleetRowActions
+                      vehicle={v}
+                      onEdit={() => onEdit(v)}
+                      pickedOperatorId={pickedOperatorId}
+                    />
                   </div>
                 </td>
               )}

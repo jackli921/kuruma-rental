@@ -14,6 +14,7 @@ import {
   updateAddOn,
 } from '@/vite/operator-add-ons/api'
 import { setLocaleSlot } from '@/vite/operator-add-ons/description-override'
+import { buildNameBundle } from '@/vite/operator-add-ons/name-bundle'
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useLocale, useTranslations } from 'use-intl'
@@ -21,9 +22,12 @@ import { useLocale, useTranslations } from 'use-intl'
 interface EditAddOnDialogProps {
   addOn: OperatorAddOnData | null
   onOpenChange: (open: boolean) => void
+  // #1456: the tenant a picker admin acts as; threaded as ?operatorId= so the API
+  // binds the PATCH to it. Undefined for an operator session (auto-scoped).
+  pickedOperatorId?: string | undefined
 }
 
-export function EditAddOnDialog({ addOn, onOpenChange }: EditAddOnDialogProps) {
+export function EditAddOnDialog({ addOn, onOpenChange, pickedOperatorId }: EditAddOnDialogProps) {
   const t = useTranslations('business.addOns')
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
@@ -31,7 +35,8 @@ export function EditAddOnDialog({ addOn, onOpenChange }: EditAddOnDialogProps) {
   const locale = isLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE
 
   const { mutateAsync, isPending, error } = useMutation({
-    mutationFn: (data: UpdateAddOnInput) => updateAddOn(addOn?.id ?? '', data, csrfToken),
+    mutationFn: (data: UpdateAddOnInput) =>
+      updateAddOn(addOn?.id ?? '', data, csrfToken, pickedOperatorId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADDON_QUERY_KEY })
       onOpenChange(false)
@@ -54,24 +59,38 @@ export function EditAddOnDialog({ addOn, onOpenChange }: EditAddOnDialogProps) {
           <AddOnForm
             key={addOn.id}
             mode="edit"
+            // A row with a nameI18n bundle is SELF-AUTHORED (its name is editable, D5);
+            // otherwise it is picked and the template name is fixed/read-only.
+            editIdentity={addOn.nameI18n ? 'custom' : 'template'}
             templateName={addOn.resolvedName}
             onSubmit={async (data) => {
-              // The template is fixed on edit; only the price and the caller's UI-locale
-              // description slot change. Merge the slot into the raw override bag so a
-              // sibling locale the operator authored is preserved.
-              await mutateAsync({
-                priceJpy: data.priceJpy,
-                descriptionOverride: setLocaleSlot(
-                  addOn.descriptionOverride,
-                  locale,
-                  data.description,
-                ),
-              })
+              // Price + the caller's UI-locale description slot always change (merged
+              // into the raw bag so a sibling locale stays). A self-authored row ALSO
+              // re-sends its name bundle so the operator can add ja/zh or fix en (D5);
+              // a picked row never touches its (template-owned) name.
+              const descriptionOverride = setLocaleSlot(
+                addOn.descriptionOverride,
+                locale,
+                data.description,
+              )
+              await mutateAsync(
+                data.identityMode === 'custom'
+                  ? {
+                      priceJpy: data.priceJpy,
+                      descriptionOverride,
+                      nameI18n: buildNameBundle(data.nameEn, data.nameJa, data.nameZh),
+                    }
+                  : { priceJpy: data.priceJpy, descriptionOverride },
+              )
             }}
             onCancel={() => onOpenChange(false)}
             isSubmitting={isPending}
             defaultValues={{
+              identityMode: addOn.nameI18n ? 'custom' : 'template',
               templateId: addOn.templateId ?? '',
+              nameEn: addOn.nameI18n?.en ?? '',
+              nameJa: addOn.nameI18n?.ja ?? '',
+              nameZh: addOn.nameI18n?.zh ?? '',
               priceJpy: addOn.priceJpy,
               description: addOn.descriptionOverride?.[locale] ?? '',
             }}

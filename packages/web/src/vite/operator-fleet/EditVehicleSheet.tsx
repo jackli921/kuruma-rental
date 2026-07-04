@@ -18,6 +18,8 @@ interface EditVehicleSheetProps {
   readonly onOpenChange: (open: boolean) => void
   /** Called after a create/update succeeds (parent closes the sheet). */
   readonly onSaved: () => void
+  /** The picked operator (create scope + create body); undefined for operator sessions. */
+  readonly pickedOperatorId?: string | undefined
 }
 
 // Slide-over host that composes the add/edit form with photo management (#560).
@@ -29,11 +31,23 @@ interface EditVehicleSheetProps {
 // absent list never blocks the form. PhotoUpload renders in both modes: in create
 // mode it shows its own "save the vehicle first" hint, since photos attach to a
 // persisted vehicle id.
-export function EditVehicleSheet({ open, vehicle, onOpenChange, onSaved }: EditVehicleSheetProps) {
+export function EditVehicleSheet({
+  open,
+  vehicle,
+  onOpenChange,
+  onSaved,
+  pickedOperatorId,
+}: EditVehicleSheetProps) {
   const t = useTranslations('business.vehicles')
-  const { data: classOptions } = useQuery({ ...vehicleClassOptionsQueryOptions(), enabled: open })
+  // Scope rule: edit → the vehicle's own operator (composite-FK correctness);
+  // create → the picked operator. Never the ambient pick while editing (#1264).
+  const dropdownOperatorId = vehicle?.operatorId ?? pickedOperatorId
+  const { data: classOptions } = useQuery({
+    ...vehicleClassOptionsQueryOptions(dropdownOperatorId),
+    enabled: open,
+  })
   const { data: locationOptions } = useQuery({
-    ...pickupLocationOptionsQueryOptions(),
+    ...pickupLocationOptionsQueryOptions(dropdownOperatorId),
     enabled: open,
   })
   const isEdit = vehicle != null
@@ -51,8 +65,13 @@ export function EditVehicleSheet({ open, vehicle, onOpenChange, onSaved }: EditV
             locationOptions={locationOptions ?? []}
             onSaved={onSaved}
             onCancel={() => onOpenChange(false)}
+            pickedOperatorId={pickedOperatorId}
           />
-          <PhotoUpload vehicleId={vehicle?.id ?? null} photos={vehicle?.photos ?? []} />
+          <PhotoUpload
+            vehicleId={vehicle?.id ?? null}
+            photos={vehicle?.photos ?? []}
+            pickedOperatorId={pickedOperatorId}
+          />
         </div>
       </SheetContent>
     </Sheet>

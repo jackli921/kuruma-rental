@@ -3,7 +3,10 @@ import { getApiBaseUrl } from '@/vite/api-base'
 import { type WithOperatorId, buildScopeParam } from '@/vite/operator-context'
 import { ADD_ON_STATUSES } from '@kuruma/shared/enums'
 import { DEFAULT_LOCALE, type Locale } from '@kuruma/shared/i18n/locales'
-import { localizedTextOverrideSchema } from '@kuruma/shared/i18n/localized-text'
+import {
+  localizedTextOverrideSchema,
+  localizedTextSchema,
+} from '@kuruma/shared/i18n/localized-text'
 import type { OperatorAddOnData } from '@kuruma/shared/types/add-on'
 import type { CreateAddOnInput, UpdateAddOnInput } from '@kuruma/shared/validators/add-on'
 import { queryOptions } from '@tanstack/react-query'
@@ -35,6 +38,9 @@ const addOnSchema = z.object({
   resolvedName: z.string(),
   resolvedDescription: z.string().nullable(),
   descriptionOverride: localizedTextOverrideSchema.nullable(),
+  // Self-authored name bundle (#1437), raw so the edit form can add ja/zh later (D5);
+  // null for a picked or legacy row.
+  nameI18n: localizedTextSchema.nullable(),
   priceJpy: z.number(),
   status: z.enum(ADD_ON_STATUSES),
 }) satisfies z.ZodType<OperatorAddOnData>
@@ -91,7 +97,7 @@ async function writeJson(
 
 // A platform admin operating as a picked tenant must name the target operator in
 // the body (platformAdminCreateAddOnSchema requires it); an operator session omits
-// it and is auto-scoped server-side. PATCH/DELETE are id-scoped and never carry it.
+// it and is auto-scoped server-side.
 export async function createAddOn(
   input: WithOperatorId<CreateAddOnInput>,
   csrfToken: string,
@@ -99,18 +105,31 @@ export async function createAddOn(
   return writeJson('/add-ons', 'POST', input, csrfToken)
 }
 
+// #1456: PATCH/DELETE bind to the picked operator via `?operatorId=` (the API 422s a
+// bypass admin who names none, 404s a mismatch). An operator session omits it.
+function operatorQuery(pickedOperatorId?: string): string {
+  return pickedOperatorId ? `?operatorId=${encodeURIComponent(pickedOperatorId)}` : ''
+}
+
 export async function updateAddOn(
   id: string,
   input: UpdateAddOnInput,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<OperatorAddOnData> {
-  return writeJson(`/add-ons/${encodeURIComponent(id)}`, 'PATCH', input, csrfToken)
+  const path = `/add-ons/${encodeURIComponent(id)}${operatorQuery(pickedOperatorId)}`
+  return writeJson(path, 'PATCH', input, csrfToken)
 }
 
 // Soft-archive (DELETE flips status to ARCHIVED). No body — the CSRF header still
 // rides along because a cookie-authed DELETE is a mutation the guard protects.
-export async function archiveAddOn(id: string, csrfToken: string): Promise<OperatorAddOnData> {
-  const res = await fetch(`${getApiBaseUrl()}/add-ons/${encodeURIComponent(id)}`, {
+export async function archiveAddOn(
+  id: string,
+  csrfToken: string,
+  pickedOperatorId?: string,
+): Promise<OperatorAddOnData> {
+  const path = `/add-ons/${encodeURIComponent(id)}${operatorQuery(pickedOperatorId)}`
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: { 'X-CSRF-Token': csrfToken },

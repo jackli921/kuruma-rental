@@ -293,6 +293,11 @@
             "empty": "No floats awaiting assignment",
             "overflowLabel": "At least {limit} awaiting assignment (showing the first {limit})"
           }
+        },
+        "board": {
+          "label": "Fleet planning board, {range}",
+          "bookingBar": "{vehicle}. Booking: {renter}, {status}, {range}",
+          "blockBar": "{vehicle}. {kind} block: {title}, {range}"
         }
       },
       "detail": {
@@ -775,6 +780,13 @@
         "price": "{price} per booking"
       },
       "form": {
+        "identityLegend": "How do you want to add this?",
+        "identityTemplate": "Pick from catalog",
+        "identityCustom": "Create your own",
+        "nameEn": "Name (English)",
+        "nameJa": "Name (Japanese)",
+        "nameZh": "Name (Chinese)",
+        "customNameNudge": "Tourists see English wherever Japanese or Chinese is blank. Fill both to reach more renters.",
         "template": "Add-on",
         "templatePlaceholder": "Select an add-on",
         "description": "Description",
@@ -877,6 +889,7 @@
       "deactivating": "Deactivating...",
       "staffNotice": "Only an owner can invite staff.",
       "noOperatorContext": "This page manages a single operator's team. Use the admin portal to manage operators.",
+      "pickOperatorPrompt": "Select an operator from the picker above to view and manage its team.",
       "unknownName": "Unnamed",
       "roleOwner": "Owner",
       "roleStaff": "Staff",
@@ -905,6 +918,49 @@
       "label": "Operator",
       "all": "All operators",
       "badge": "Operator: {name}"
+    },
+    "register": {
+      "title": "List your business on Kuruma",
+      "subtitle": "Tell us about your rental business. We review every application.",
+      "form": {
+        "businessName": "Business name",
+        "contactName": "Contact name",
+        "contactEmail": "Email",
+        "contactPhone": "Phone",
+        "serviceArea": "Service area (city/prefecture)",
+        "fleetSize": "Estimated fleet size",
+        "website": "Website (optional)",
+        "licenseNumber": "Business license number (optional)",
+        "businessType": "Business type (optional)",
+        "message": "Anything else? (optional)",
+        "consent": "I agree to be contacted about my application",
+        "submit": "Submit application",
+        "submitting": "Submitting...",
+        "individual": "Individual",
+        "company": "Company",
+        "fleetSizePlaceholder": "Select a fleet size",
+        "businessTypePlaceholder": "Select an option",
+        "errors": {
+          "businessName": "Please enter your business name.",
+          "contactName": "Please enter a contact name.",
+          "contactEmail": "Please enter a valid email address.",
+          "contactPhone": "Please enter a valid phone number.",
+          "serviceArea": "Please enter your service area.",
+          "estimatedFleetSize": "Please select a fleet size.",
+          "website": "Please enter a valid URL starting with http:// or https://.",
+          "businessLicenseNumber": "Please shorten the license number.",
+          "message": "Please shorten your message.",
+          "consent": "You must agree before submitting your application."
+        }
+      },
+      "errors": {
+        "generic": "Couldn't submit your application. Please try again.",
+        "duplicate": "An application or account already exists for this email."
+      },
+      "success": {
+        "title": "Application received",
+        "body": "Thanks - we'll reach out at {email}."
+      }
     }
   },
   "messaging": {
@@ -961,6 +1017,8 @@
       "subtitle": "Your reservation is confirmed. Show your reservation code at pickup.",
       "bookingCode": "Reservation code",
       "vehicleClass": "Class",
+      "vehicle": "Vehicle",
+      "assignmentNote": "A specific car will be assigned before pickup.",
       "pickupDate": "Pickup",
       "returnDate": "Return",
       "status": "Status",
@@ -1232,7 +1290,8 @@
     "cta": {
       "heading": "Ready to explore Japan?",
       "description": "Browse our fleet and book your car in minutes. Free cancellation up to 72 hours before pickup.",
-      "button": "Find your car"
+      "button": "Find your car",
+      "operatorCta": "List your business"
     },
     "footer": {
       "copyright": "Kuruma Rental. All rights reserved.",
@@ -1319,8 +1378,10 @@
     "detail": {
       "backToSearch": "Back to search",
       "availableVehicles": "Available cars",
+      "classDeals": "Class deals",
       "noVehicles": "No cars are available at this store for the selected dates.",
       "book": "Book this car",
+      "bookClass": "Book this class",
       "notFound": "Store not found",
       "notFoundDescription": "This store does not exist or is no longer available."
     }
@@ -1335,8 +1396,93 @@
       "governance": "Consent governance",
       "customers": "Customers",
       "operators": "Operators",
+      "templates": "Template library",
       "featureFlags": "Feature flags",
-      "backToSite": "Back to site"
+      "backToSite": "Back to site",
+      "applications": "Applications",
+      "reviews": "Review moderation"
+    },
+    "applications": {
+      "title": "Operator applications",
+      "subtitle": "Review and triage new operator onboarding requests.",
+      "empty": "No applications are awaiting review.",
+      "contactLabel": "Contact",
+      "emailLabel": "Email",
+      "phoneLabel": "Phone",
+      "serviceAreaLabel": "Service area",
+      "fleetSizeLabel": "Fleet size",
+      "businessTypeLabel": "Business type",
+      "fleetSize": {
+        "1-5": "1-5 vehicles",
+        "6-20": "6-20 vehicles",
+        "21-50": "21-50 vehicles",
+        "50+": "50+ vehicles"
+      },
+      "businessType": {
+        "INDIVIDUAL": "Individual",
+        "COMPANY": "Company"
+      },
+      "websiteLabel": "Website",
+      "messageLabel": "Message",
+      "submittedLabel": "Submitted",
+      "reasonLabel": "Rejection reason",
+      "reject": "Reject",
+      "error": "Couldn't record the rejection. Try again.",
+      "approve": "Approve",
+      "approving": "Approving…",
+      "inviteReadyLabel": "Invitation link",
+      "inviteReadyHint": "Send this one-time link to the operator to finish onboarding.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "approved": "Approved",
+      "regenerate": "Regenerate link",
+      "regenerating": "Regenerating…",
+      "regenerateFailed": "Couldn't regenerate the invite link. Try again.",
+      "regenerateUnavailable": "This invite can no longer be regenerated. The owner may already be onboarded.",
+      "alreadyReviewed": "This application was already reviewed, or the email already belongs to an operator.",
+      "approveFailed": "Couldn't approve the application. Try again.",
+      "loadError": "Couldn't load the applications queue.",
+      "retry": "Retry"
+    },
+    "templateLibrary": {
+      "title": "Template library",
+      "subtitle": "Curate the platform-owned add-on and insurance templates every operator picks from.",
+      "tab": {
+        "addOns": "Add-ons ({count})",
+        "insurance": "Insurance ({count})"
+      },
+      "colName": "Name",
+      "colKey": "Key",
+      "colStatus": "Status",
+      "colTranslations": "Translations",
+      "colActions": "Actions",
+      "active": "Active",
+      "archived": "Archived",
+      "empty": "No templates in this catalog yet.",
+      "loadError": "Couldn't load the template library.",
+      "retry": "Retry",
+      "action": {
+        "edit": "Edit",
+        "editNamed": "Edit {name}",
+        "create": "New template"
+      },
+      "edit": {
+        "title": "Edit template",
+        "description": "Translate each locale, then set the status. Promote a backfill-minted template by switching it to Active.",
+        "nameSection": "Name",
+        "descriptionSection": "Description",
+        "statusLabel": "Status",
+        "nameEnRequired": "An English name is required.",
+        "save": "Save",
+        "saving": "Saving…",
+        "cancel": "Cancel"
+      },
+      "create": {
+        "title": "New template",
+        "description": "Add a template to the catalog. The English name is required; the key is generated from it.",
+        "submit": "Create",
+        "submitting": "Creating…"
+      }
     },
     "featureFlags": {
       "title": "Feature flags",
@@ -1608,6 +1754,33 @@
       },
       "loadError": "Couldn't load customers.",
       "retry": "Retry"
+    },
+    "reviewModeration": {
+      "title": "Review moderation",
+      "description": "Reported reviews awaiting a moderation decision. Hiding a review removes it from public view and from the other party.",
+      "empty": "No reported reviews.",
+      "stars": "{n} / 5",
+      "reports": "{count, plural, one {# report} other {# reports}}",
+      "subject": {
+        "OPERATOR": "Review of the operator",
+        "VEHICLE": "Review of the vehicle",
+        "RENTER": "Review of the renter"
+      },
+      "by": {
+        "RENTER": "By a renter",
+        "OPERATOR": "By the operator"
+      },
+      "hide": "Hide review",
+      "hiding": "Hiding…",
+      "hidden": "Hidden",
+      "hideError": "Could not hide the review. Please try again.",
+      "loadError": "Could not load reported reviews.",
+      "retry": "Try again",
+      "filterLabel": "Filter reviews",
+      "filterUnactioned": "Needs review",
+      "filterResolved": "Resolved",
+      "loadMore": "Load more",
+      "loadingMore": "Loading…"
     }
   },
   "documents": {
@@ -1630,6 +1803,7 @@
   "reservation": {
     "title": "Complete your booking",
     "vehicleHeading": "You're booking",
+    "classAssignmentNote": "A specific car in this class will be assigned before pickup.",
     "steps": {
       "dates": "Dates",
       "addOns": "Extras",
@@ -1746,6 +1920,15 @@
       "rating": "★ {avg} ({count})",
       "noReviews": "No reviews yet",
       "ratingAria": "{avg} stars, {count} reviews"
+    },
+    "list": {
+      "heading": "Reviews",
+      "empty": "No reviews yet",
+      "reviewer": "Verified renter",
+      "overallAria": "{n} out of 5 stars",
+      "dimensionValue": "{n}/5",
+      "loadMore": "Show more reviews",
+      "loadingMore": "Loading…"
     }
   },
   "currency": {

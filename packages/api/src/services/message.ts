@@ -1,22 +1,14 @@
-import type { CreateThreadInput } from '@kuruma/shared/validators/message'
 import type { CallerContext } from '../middleware/auth'
-import { PRIVILEGED_ROLES } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type {
   MessageCreateResult,
   MessageRepository,
   ThreadRepository,
 } from '../repositories/types'
-import type { Message, Thread } from '../stores'
+import type { Message } from '../stores'
 
 type ThreadListItem = Awaited<ReturnType<ThreadRepository['findAll']>>[number]
 type ThreadDetail = NonNullable<Awaited<ReturnType<ThreadRepository['findById']>>>
-
-/** A thread create either fails the participant gate or produces a record with
- *  its HTTP-meaningful status (201 fresh insert / 200 idempotent replay). */
-export type CreateThreadResult =
-  | { kind: 'forbidden' }
-  | { kind: 'created'; thread: Thread; status: 200 | 201 }
 
 export type MarkReadResult = { kind: 'thread_not_found' } | { kind: 'ok' }
 
@@ -37,8 +29,8 @@ export type NotifyOperatorNewMessage = (args: {
 }) => Promise<void>
 
 /**
- * Messaging business logic, Hono-free: thread/message creation with idempotent
- * replay handling and the participant-authz gate. The route stays a thin shell
+ * Messaging business logic, Hono-free: message creation with idempotent replay
+ * handling and the participant-authz gate. The route stays a thin shell
  * that parses input, maps these results to HTTP, and owns the 404-before-400
  * ordering by calling {@link MessageService.getThread} before parsing the body.
  */
@@ -60,29 +52,6 @@ export class MessageService {
 
   async getThread(ctx: CallerContext, id: string): Promise<ThreadDetail | undefined> {
     return this.threadRepo.findById(ctx, id)
-  }
-
-  async createThread(ctx: CallerContext, input: CreateThreadInput): Promise<CreateThreadResult> {
-    if (!PRIVILEGED_ROLES.has(ctx.role) && !input.participantIds.includes(ctx.userId)) {
-      return { kind: 'forbidden' }
-    }
-    const idempotencyKey = input.idempotencyKey ?? null
-    const { record, status } = await idempotentCreate(
-      idempotencyKey,
-      (k) => this.threadRepo.findByIdempotencyKey(ctx, k),
-      () =>
-        // operatorId is intentionally NOT passed (#1205, review finding 1): the
-        // caller-facing path must never derive tenant scope from a request body.
-        // It stays null here; only ensureThread stamps it, from the booking.
-        this.threadRepo.create(
-          ctx,
-          input.bookingId ?? null,
-          input.participantIds,
-          idempotencyKey,
-          null,
-        ),
-    )
-    return { kind: 'created', thread: record, status }
   }
 
   /**

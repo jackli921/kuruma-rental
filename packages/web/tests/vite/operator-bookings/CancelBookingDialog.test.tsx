@@ -9,11 +9,15 @@ import enMessages from '../../../messages/en.json'
 
 const c = enMessages.bookings.operator.detail.cancelBooking
 
-function renderDialog(queryClient = new QueryClient()) {
+function renderDialog(queryClient = new QueryClient(), pickedOperatorId?: string) {
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
-        <CancelBookingDialog bookingId="bk-1" csrfToken="csrf-tok" />
+        <CancelBookingDialog
+          bookingId="bk-1"
+          csrfToken="csrf-tok"
+          pickedOperatorId={pickedOperatorId}
+        />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -32,7 +36,20 @@ describe('CancelBookingDialog', () => {
     expect(spy).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: c.confirm }))
-    await waitFor(() => expect(spy).toHaveBeenCalledWith('bk-1', 'csrf-tok'))
+    // #1361: a tenant operator carries no picked operator, so the 4th arg is undefined.
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('bk-1', 'csrf-tok', undefined))
+  })
+
+  // #1361: a picker admin's cancel must carry its chosen operator (?operatorId=) or the
+  // #1260 write guard 422s. tsc can't catch a dropped optional arg, so pin the thread.
+  it('threads the picked operator into the cancel write for a picker admin', async () => {
+    const user = userEvent.setup()
+    const spy = vi.spyOn(api, 'cancelBooking').mockResolvedValue({} as never)
+    renderDialog(new QueryClient(), 'op_7')
+
+    await user.click(screen.getByRole('button', { name: c.action }))
+    await user.click(screen.getByRole('button', { name: c.confirm }))
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('bk-1', 'csrf-tok', 'op_7'))
   })
 
   it('invalidates the booking + overview caches and closes on success', async () => {

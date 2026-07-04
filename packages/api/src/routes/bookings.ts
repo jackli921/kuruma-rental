@@ -152,6 +152,19 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
     .post('/bookings', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
+      // #1440 (MED-2): a PARTNER (Trip.com) is a booking CHANNEL, not a manual booker.
+      // Unlike /status and /substitution-candidates, this route has no
+      // MANAGEMENT_READ_ROLES gate (renters self-serve), so a PARTNER would otherwise
+      // reach the service — where its create is only *accidentally* safe (the synthetic
+      // 'partner:api-key' renterId FK-fails; the inventory bind passes partners through,
+      // bookingReadScope='partner' never 'all'). Reject at the route so the exclusion is
+      // DESIGNED, not reliant on an FK accident. A partner-initiated create is a future
+      // channel integration (its own issue), not this endpoint.
+      // authz model: docs/architecture/booking-authz.md
+      if (ctx.role === 'PARTNER') {
+        return fail(c, 'Partners cannot create bookings', 403)
+      }
+
       const parsed = await parseBody(c, createBookingSchema)
       if (!parsed.ok) return parsed.response
 
@@ -210,6 +223,11 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
         idempotencyKey: parsed.data.idempotencyKey ?? null,
         disclaimerAccepted: parsed.data.disclaimerAccepted ?? false,
       }
+      // #1260: a picker admin (PLATFORM_ADMIN) binds the manual booking to the
+      // operator it chose via ?operatorId=; tenant operators ignore it (their read
+      // scope clamps them). The service requires it for a bypass-admin create and
+      // scopes both the customer and the vehicle/inventory to that operator.
+      const actingOperatorId = c.req.query('operatorId')
       const createResult = await service.create(
         ctx,
         parsed.data.fulfillmentMode === 'CLASS_COMBO'
@@ -219,6 +237,8 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
               fulfillmentMode: 'SPECIFIC',
               requestedVehicleId: parsed.data.requestedVehicleId,
             },
+        undefined,
+        actingOperatorId,
       )
 
       if (!createResult.ok) {
@@ -250,15 +270,35 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
       const parsed = await parseBody(c, updateBookingStatusSchema)
       if (!parsed.ok) return parsed.response
 
-      const result = await service.updateStatus(ctx, idResult.id, parsed.data.status)
+      // #1260: a picker admin binds the write to the operator it chose via
+      // ?operatorId=; tenant operators ignore it (clamped by their read scope).
+      const actingOperatorId = c.req.query('operatorId')
+      const result = await service.updateStatus(
+        ctx,
+        idResult.id,
+        parsed.data.status,
+        actingOperatorId,
+      )
       if (!result.ok) {
-        return fail(c, result.error, result.status)
+        return fail(c, result.error, result.status, {
+          ...(result.code ? { code: result.code } : {}),
+        })
       }
 
       return ok(c, result.booking)
     })
     .post('/bookings/:id/cancel', async (c) => {
       const ctx = toCallerContext(requireUser(c))
+
+      // #1367: a PARTNER (Trip.com) books but does not MANAGE the order — it is
+      // excluded from /status, /substitute and /events for the same reason.
+      // /cancel has no role gate (renter self-cancel is a renter-facing feature),
+      // so exclude the PARTNER explicitly: its `partner` read scope resolves any
+      // TRIP_COM-sourced booking across operators, which the operator-binding
+      // guard cannot clamp (a channel is not one operator). authz: booking-authz.md
+      if (ctx.role === 'PARTNER') {
+        return fail(c, 'Partners cannot cancel bookings', 403)
+      }
 
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
@@ -275,9 +315,16 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
         ? { code: parsed.data.reason.code, note: parsed.data.reason.note || null }
         : null
 
-      const result = await service.cancel(ctx, idResult.id, reason)
+      // #1260: /cancel has no route gate, so a bypass admin could otherwise cancel
+      // ANY operator's booking (a refund-moving cross-tenant write). Bind it to the
+      // picked operator via ?operatorId=; renters/operators are read-scope clamped
+      // and ignore it. `undefined` keeps the service's default `now`.
+      const actingOperatorId = c.req.query('operatorId')
+      const result = await service.cancel(ctx, idResult.id, reason, undefined, actingOperatorId)
       if (!result.ok) {
-        return fail(c, result.error, result.status)
+        return fail(c, result.error, result.status, {
+          ...(result.code ? { code: result.code } : {}),
+        })
       }
 
       return ok(c, result.booking, 200, { cancellation: result.cancellation })

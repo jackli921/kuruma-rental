@@ -77,10 +77,12 @@ export function OperatorLocationsView({ locations, scope }: OperatorLocationsVie
           <EditLocationDialog
             location={editing}
             onOpenChange={(open) => !open && setEditing(null)}
+            pickedOperatorId={pickedOperatorId}
           />
           <ArchiveLocationDialog
             location={archiving}
             onOpenChange={(open) => !open && setArchiving(null)}
+            pickedOperatorId={pickedOperatorId}
           />
         </>
       ) : null}

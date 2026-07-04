@@ -1,5 +1,10 @@
+import { type PublicReviewDto, operatorReviewsInfiniteQueryOptions } from '@/vite/reviews'
 import { StorefrontDetailView } from '@/vite/storefronts/StorefrontDetailView'
-import type { AvailableVehicleData, StorefrontDetailData } from '@/vite/storefronts/api'
+import type {
+  AvailableVehicleData,
+  ClassOfferingData,
+  StorefrontDetailData,
+} from '@/vite/storefronts/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -18,6 +23,7 @@ vi.mock('@tanstack/react-router', () => ({
     params?: { locale?: string }
     search?: {
       vehicleId?: string
+      classId?: string
       locationId?: string
       from?: string
       to?: string
@@ -30,6 +36,7 @@ vi.mock('@tanstack/react-router', () => ({
       data-to={to}
       data-locale={params?.locale}
       data-vehicle={search?.vehicleId}
+      data-class={search?.classId}
       data-location={search?.locationId}
       data-from={search?.from}
       data-rangeto={search?.to}
@@ -61,7 +68,34 @@ function makeVehicle(overrides: Partial<AvailableVehicleData> = {}): AvailableVe
   }
 }
 
-function makeDetail(vehicles: AvailableVehicleData[]): StorefrontDetailData {
+function makeOffering(overrides: Partial<ClassOfferingData> = {}): ClassOfferingData {
+  return {
+    kind: 'CLASS_COMBO',
+    location: {
+      locationId: 'loc-1',
+      operatorId: 'op-best',
+      operatorName: 'Best Car Rental',
+      name: 'Best Car Rental Osaka',
+      address: '1-2-3 Namba, Osaka',
+      latitude: null,
+      longitude: null,
+    },
+    dailyRateJpy: 9000,
+    hourlyRateJpy: null,
+    classLabel: 'Compact',
+    acrissCode: 'CCAR',
+    seats: 5,
+    photos: [],
+    classId: 'cls-compact',
+    availableCount: 3,
+    ...overrides,
+  }
+}
+
+function makeDetail(
+  vehicles: AvailableVehicleData[],
+  classOfferings: ClassOfferingData[] = [],
+): StorefrontDetailData {
   return {
     storefront: {
       locationId: 'loc-1',
@@ -73,17 +107,23 @@ function makeDetail(vehicles: AvailableVehicleData[]): StorefrontDetailData {
       turnaroundMinutes: 120,
     },
     vehicles,
+    classOfferings,
     nextCursor: null,
   }
 }
 
-function renderDetail(detail: StorefrontDetailData, extra: { region?: string } = {}) {
+function renderDetail(
+  detail: StorefrontDetailData,
+  extra: { region?: string; seedFn?: (qc: QueryClient) => void } = {},
+) {
   // #1085 slice 5: the view now batches operator + class review aggregates via
   // useQuery, so the test wraps in a fresh QueryClient that never retries (a
   // missing handler would otherwise spin forever).
+  const { seedFn, ...rest } = extra
   const qc = new QueryClient({
     defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
   })
+  seedFn?.(qc)
   return render(
     <QueryClientProvider client={qc}>
       <IntlProvider locale="en" messages={en}>
@@ -91,11 +131,24 @@ function renderDetail(detail: StorefrontDetailData, extra: { region?: string } =
           detail={detail}
           from="2026-07-01T10:00"
           to="2026-07-03T10:00"
-          {...extra}
+          {...rest}
         />
       </IntlProvider>
     </QueryClientProvider>,
   )
+}
+
+// Seed the infinite-query cache the shape useInfiniteQuery expects (pages + pageParams);
+// a plain array is the wrong shape now that the view pages reviews via a cursor (#1449).
+function seedReviews(
+  qc: QueryClient,
+  reviews: PublicReviewDto[],
+  nextCursor: string | null = null,
+) {
+  qc.setQueryData(operatorReviewsInfiniteQueryOptions('op-best').queryKey, {
+    pages: [{ reviews, nextCursor }],
+    pageParams: [null],
+  })
 }
 
 describe('StorefrontDetailView', () => {
@@ -175,5 +228,68 @@ describe('StorefrontDetailView', () => {
     vi.stubEnv('VITE_FEATURE_REVIEWS', undefined)
     renderDetail(makeDetail([makeVehicle({ id: 'v-classed', classId: 'cls-compact' })]))
     expect(screen.queryByTestId('rating-badge-skeleton')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Reviews' })).toBeNull()
+  })
+
+  it('renders the reviews section (empty state) when the REVIEWS flag is on', () => {
+    renderDetail(makeDetail([]), { seedFn: (qc) => seedReviews(qc, []) })
+    expect(screen.getByRole('heading', { name: 'Reviews' })).toBeInTheDocument()
+    expect(screen.getByText('No reviews yet')).toBeInTheDocument()
+  })
+
+  it('shows nothing for the reviews section while the query is in-flight', () => {
+    renderDetail(makeDetail([]))
+    expect(screen.queryByRole('heading', { name: 'Reviews' })).toBeNull()
+    expect(screen.queryByText('No reviews yet')).toBeNull()
+  })
+
+  it('wires pre-seeded reviews from the query cache into ReviewList', () => {
+    const review: PublicReviewDto = {
+      id: 'r1',
+      overall: 5,
+      subRatings: {},
+      comment: 'Fantastic trip',
+      publishedAt: '2026-06-01T00:00:00.000Z',
+    }
+    renderDetail(makeDetail([]), { seedFn: (qc) => seedReviews(qc, [review]) })
+    expect(screen.getByText('Fantastic trip')).toBeInTheDocument()
+  })
+
+  it('shows the "load more" button when the first review page has a nextCursor (#1449)', () => {
+    const review: PublicReviewDto = {
+      id: 'r1',
+      overall: 4,
+      subRatings: {},
+      comment: 'Good ride',
+      publishedAt: '2026-06-01T00:00:00.000Z',
+    }
+    // A non-null nextCursor means react-query reports hasNextPage → the button renders.
+    renderDetail(makeDetail([]), { seedFn: (qc) => seedReviews(qc, [review], 'NEXT_PAGE_TOKEN') })
+    expect(screen.getByRole('button', { name: 'Show more reviews' })).toBeInTheDocument()
+  })
+
+  // #464: class-combo deals render in their own section, each linking into the
+  // reservation flow by class (no assigned car yet).
+  it('renders a Class deals section with a card per class offering', () => {
+    renderDetail(makeDetail([], [makeOffering()]))
+    expect(screen.getByText('Class deals')).toBeInTheDocument()
+    expect(screen.getByText('Compact')).toBeInTheDocument()
+    expect(screen.getByText('3 cars available')).toBeInTheDocument()
+  })
+
+  it('carries the storefront location + dates + classId (never a vehicleId) into the class-deal CTA', () => {
+    renderDetail(makeDetail([], [makeOffering()]))
+    const book = screen.getByRole('link', { name: 'Book this class' })
+    expect(book).toHaveAttribute('data-to', '/$locale/bookings/new')
+    expect(book).toHaveAttribute('data-class', 'cls-compact')
+    expect(book).toHaveAttribute('data-location', 'loc-1')
+    expect(book).toHaveAttribute('data-from', '2026-07-01T10:00')
+    expect(book).toHaveAttribute('data-rangeto', '2026-07-03T10:00')
+    expect(book).not.toHaveAttribute('data-vehicle')
+  })
+
+  it('omits the Class deals section when the store has no offerings', () => {
+    renderDetail(makeDetail([makeVehicle()]))
+    expect(screen.queryByText('Class deals')).toBeNull()
   })
 })

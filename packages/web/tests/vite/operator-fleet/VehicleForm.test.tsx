@@ -87,6 +87,7 @@ interface RenderOptions {
   locations?: readonly PickupLocationOption[]
   onSaved?: () => void
   onCancel?: () => void
+  pickedOperatorId?: string
 }
 
 function renderForm({
@@ -94,6 +95,7 @@ function renderForm({
   locations = locationOptions,
   onSaved = vi.fn(),
   onCancel = vi.fn(),
+  pickedOperatorId,
 }: RenderOptions = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
@@ -108,6 +110,7 @@ function renderForm({
           locationOptions={locations}
           onSaved={onSaved}
           onCancel={onCancel}
+          pickedOperatorId={pickedOperatorId}
         />
       </IntlProvider>
     </QueryClientProvider>,
@@ -180,6 +183,7 @@ describe('VehicleForm', () => {
       'veh_1',
       expect.objectContaining({ name: 'Toyota Aqua G', dailyRateJpy: 6800 }),
       'test-csrf',
+      undefined,
     )
     expect(mockedCreate).not.toHaveBeenCalled()
   })
@@ -202,6 +206,7 @@ describe('VehicleForm', () => {
       'veh_1',
       expect.objectContaining({ name: 'Toyota Aqua Legacy' }),
       'test-csrf',
+      undefined,
     )
   })
 
@@ -310,6 +315,7 @@ describe('VehicleForm', () => {
       'veh_1',
       expect.objectContaining({ classId: archivedClassId }),
       'test-csrf',
+      undefined,
     )
   })
 
@@ -414,6 +420,7 @@ describe('VehicleForm', () => {
       'veh_1',
       expect.objectContaining({ pickupLocationId: archivedLocationId }),
       'test-csrf',
+      undefined,
     )
   })
 
@@ -441,6 +448,7 @@ describe('VehicleForm', () => {
       'veh_1',
       expect.objectContaining({ pickupLocationId: missingLocationId }),
       'test-csrf',
+      undefined,
     )
   })
 
@@ -451,5 +459,52 @@ describe('VehicleForm', () => {
 
     expect(screen.queryByLabelText(en.pickupLocation)).not.toBeInTheDocument()
     expect(screen.getByText(en.pickupLocationEmptyHint)).toBeInTheDocument()
+  })
+
+  it('injects the picked operatorId into the create body (#1264)', async () => {
+    const user = userEvent.setup()
+    mockedCreate.mockResolvedValue(existingVehicle())
+    renderForm({ vehicle: null, pickedOperatorId: 'op_9' })
+
+    await user.type(screen.getByLabelText(en.name), 'New Car')
+    await user.type(screen.getByLabelText(en.dailyRate), '7500')
+    await fillRequiredDocs(user)
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalled())
+    expect(vi.mocked(createVehicle).mock.calls[0]![0]).toMatchObject({ operatorId: 'op_9' })
+  })
+
+  it('omits operatorId from the create body when no operator is picked (#1264)', async () => {
+    const user = userEvent.setup()
+    mockedCreate.mockResolvedValue(existingVehicle())
+    renderForm({ vehicle: null })
+
+    await user.type(screen.getByLabelText(en.name), 'New Car')
+    await user.type(screen.getByLabelText(en.dailyRate), '7500')
+    await fillRequiredDocs(user)
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalled())
+    expect(vi.mocked(createVehicle).mock.calls[0]![0]).not.toHaveProperty('operatorId')
+  })
+
+  it('binds the edit write to the picked operator (#1260)', async () => {
+    const user = userEvent.setup()
+    mockedUpdate.mockResolvedValue(existingVehicle())
+    renderForm({ vehicle: existingVehicle(), pickedOperatorId: 'op_9' })
+
+    const nameInput = screen.getByLabelText(en.name)
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Toyota Aqua G')
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1))
+    expect(mockedUpdate).toHaveBeenCalledWith(
+      'veh_1',
+      expect.objectContaining({ name: 'Toyota Aqua G' }),
+      'test-csrf',
+      'op_9',
+    )
   })
 })

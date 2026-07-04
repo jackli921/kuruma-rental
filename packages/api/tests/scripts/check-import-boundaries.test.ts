@@ -43,6 +43,12 @@ describe('check-import-boundaries — construction rule (#721)', () => {
         'users: new DrizzleUserRepository(txDb),',
       ),
     ).toEqual([])
+    expect(
+      checkContent(
+        'repositories/drizzle/operator-approval-transaction.ts',
+        'applications: new DrizzleOperatorApplicationRepository(txDb),',
+      ),
+    ).toEqual([])
   })
 
   it('allows the composition root to construct concretes', () => {

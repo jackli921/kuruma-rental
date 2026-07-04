@@ -24,7 +24,14 @@ export * from './add-on'
 export * from './booking-types'
 export * from './provider-access'
 export { documentStatusEnum, documentTypeEnum, renterDocuments } from './renter-documents'
+export {
+  operatorApplications,
+  operatorApplicationStatusEnum,
+  operatorApplicationFleetSizeEnum,
+  operatorApplicationBusinessTypeEnum,
+} from './operator-applications'
 export { regions, regionTypeEnum, regionStatusEnum } from './regions'
 export * from './consent'
 export * from './review'
+export * from './review-report'
 export * from './feature-flags'

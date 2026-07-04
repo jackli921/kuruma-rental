@@ -1,4 +1,5 @@
 import type { CalendarBookingRow } from '@/vite/operator-bookings/api'
+import type { BlockCalendarEvent } from '@/vite/operator-bookings/calendar-events'
 import { describe, expect, it } from 'vitest'
 import {
   UNASSIGNED_GROUP_ID,
@@ -32,8 +33,30 @@ const FLEET = [
   { id: 'v2', name: 'Note' },
 ]
 
-function build(rows: CalendarBookingRow[], vehicles = FLEET) {
-  return buildTimelineLayout({ rows, vehicles, from: FROM, to: TO, unassignedLabel: 'Unassigned' })
+function block(over: Partial<BlockCalendarEvent> = {}): BlockCalendarEvent {
+  return {
+    type: 'block',
+    id: 'blk1',
+    title: 'Oil change',
+    start: new Date(Date.UTC(2027, 0, 12)),
+    end: new Date(Date.UTC(2027, 0, 14)),
+    resourceId: 'v1',
+    kind: 'MAINTENANCE',
+    reason: 'Oil change',
+    notes: null,
+    ...over,
+  }
+}
+
+function build(rows: CalendarBookingRow[], vehicles = FLEET, blocks: BlockCalendarEvent[] = []) {
+  return buildTimelineLayout({
+    rows,
+    vehicles,
+    blocks,
+    from: FROM,
+    to: TO,
+    unassignedLabel: 'Unassigned',
+  })
 }
 
 describe('buildTimelineLayout', () => {
@@ -60,6 +83,7 @@ describe('buildTimelineLayout', () => {
     const { items } = build([row()])
     expect(items).toEqual([
       {
+        type: 'booking',
         id: 'bk1',
         bookingId: 'bk1',
         group: 'v1',
@@ -68,6 +92,7 @@ describe('buildTimelineLayout', () => {
         end: Date.UTC(2027, 0, 14),
         band: 'booked',
         status: 'CONFIRMED',
+        interactive: true,
       },
     ])
   })
@@ -75,7 +100,7 @@ describe('buildTimelineLayout', () => {
   it('splits a turnaround tail into a second lighter band', () => {
     const { items } = build([row({ effectiveEndAt: iso(2027, 1, 16) })])
     expect(items).toHaveLength(2)
-    const tail = items.find((i) => i.band === 'turnaround')
+    const tail = items.find((i) => i.type === 'booking' && i.band === 'turnaround')
     expect(tail).toMatchObject({
       id: 'bk1::turnaround',
       bookingId: 'bk1',
@@ -93,13 +118,13 @@ describe('buildTimelineLayout', () => {
 
   it('clamps a turnaround running past the window to the window end', () => {
     const { items } = build([row({ endAt: iso(2027, 1, 22), effectiveEndAt: iso(2027, 1, 30) })])
-    const tail = items.find((i) => i.band === 'turnaround')
+    const tail = items.find((i) => i.type === 'booking' && i.band === 'turnaround')
     expect(tail?.end).toBe(TO)
   })
 
   it('drops a turnaround band that falls entirely after the window', () => {
     const { items } = build([row({ endAt: iso(2027, 1, 24), effectiveEndAt: iso(2027, 1, 26) })])
-    expect(items.every((i) => i.band === 'booked')).toBe(true)
+    expect(items.every((i) => i.type === 'booking' && i.band === 'booked')).toBe(true)
   })
 
   it('drops a booked band entirely before the window but keeps an in-window tail', () => {
@@ -121,6 +146,92 @@ describe('buildTimelineLayout', () => {
     expect(items[0]?.title).toBe('x@y.z')
     const { items: i2 } = build([row({ renterName: null, renterEmail: null })])
     expect(i2[0]?.title).toBe('KUR-1')
+  })
+
+  // #1349 a11y: a booking must be exactly ONE keyboard/screen-reader stop. When both
+  // its booked band and turnaround tail render, the booked band is the interactive one
+  // and the tail is suppressed (aria-hidden, non-focusable) so a keyboard user does not
+  // land on two bars that open the same trip.
+  it('marks the booked band interactive and its turnaround tail non-interactive', () => {
+    const { items } = build([row({ effectiveEndAt: iso(2027, 1, 16) })])
+    const booked = items.find((i) => i.type === 'booking' && i.band === 'booked')
+    const tail = items.find((i) => i.type === 'booking' && i.band === 'turnaround')
+    expect(booked?.interactive).toBe(true)
+    expect(tail?.interactive).toBe(false)
+  })
+
+  // But a tail that is its booking's ONLY in-window bar (the booked band was clipped
+  // out before the window) must stay interactive — else the booking is visible on
+  // screen yet unreachable by keyboard, a worse failure than the double-stop.
+  it('keeps a lone surviving turnaround tail interactive (booked band clipped out)', () => {
+    const { items } = build([
+      row({ startAt: iso(2027, 1, 4), endAt: iso(2027, 1, 8), effectiveEndAt: iso(2027, 1, 12) }),
+    ])
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ band: 'turnaround', interactive: true })
+  })
+
+  it('marks a scheduled block interactive (always its own keyboard stop)', () => {
+    const { items } = build([], FLEET, [block()])
+    expect(items[0]?.interactive).toBe(true)
+  })
+})
+
+describe('buildTimelineLayout blocks', () => {
+  it('renders a block as a kind-tagged band on its vehicle row', () => {
+    const { items } = build([], FLEET, [block()])
+    expect(items).toEqual([
+      {
+        type: 'block',
+        id: 'blk1',
+        blockId: 'blk1',
+        group: 'v1',
+        title: 'Oil change',
+        start: Date.UTC(2027, 0, 12),
+        end: Date.UTC(2027, 0, 14),
+        kind: 'MAINTENANCE',
+        interactive: true,
+      },
+    ])
+  })
+
+  it('carries the block discriminant with a kind and no booking status', () => {
+    const { items } = build([], FLEET, [block({ kind: 'OUT_OF_SERVICE' })])
+    const it0 = items[0]
+    expect(it0).toMatchObject({ type: 'block', kind: 'OUT_OF_SERVICE' })
+    expect(it0 && 'status' in it0).toBe(false)
+    expect(it0 && 'bookingId' in it0).toBe(false)
+  })
+
+  it('clamps a block spanning past both window edges to the window', () => {
+    const { items } = build([], FLEET, [
+      block({ start: new Date(Date.UTC(2027, 0, 5)), end: new Date(Date.UTC(2027, 0, 30)) }),
+    ])
+    expect(items[0]).toMatchObject({ type: 'block', start: FROM, end: TO })
+  })
+
+  it('drops a block that falls entirely outside the window', () => {
+    const { items } = build([], FLEET, [
+      block({ start: new Date(Date.UTC(2027, 0, 1)), end: new Date(Date.UTC(2027, 0, 3)) }),
+    ])
+    expect(items).toHaveLength(0)
+  })
+
+  it('skips a block on a non-fleet vehicle and never opens an Unassigned row for it', () => {
+    const { groups, items } = build([], FLEET, [block({ resourceId: 'ghost' })])
+    expect(items).toHaveLength(0)
+    expect(groups.some((g) => g.id === UNASSIGNED_GROUP_ID)).toBe(false)
+  })
+
+  it('lays booking and block bands together, bookings first', () => {
+    const { items } = build([row()], FLEET, [
+      block({
+        id: 'blk9',
+        start: new Date(Date.UTC(2027, 0, 16)),
+        end: new Date(Date.UTC(2027, 0, 18)),
+      }),
+    ])
+    expect(items.map((i) => i.type)).toEqual(['booking', 'block'])
   })
 })
 
@@ -144,7 +255,7 @@ describe('bookingIdFromTimelineItem', () => {
     const { items } = build([
       row({ id: 'bk9', endAt: iso(2027, 1, 14), effectiveEndAt: iso(2027, 1, 15) }),
     ])
-    const tail = items.find((i) => i.band === 'turnaround')
+    const tail = items.find((i) => i.type === 'booking' && i.band === 'turnaround')
     expect(tail).toBeDefined()
     expect(tail?.id).not.toBe('bk9') // it carries the suffix
     expect(bookingIdFromTimelineItem(tail!.id)).toBe('bk9')

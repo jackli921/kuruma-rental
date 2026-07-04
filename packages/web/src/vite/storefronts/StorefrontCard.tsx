@@ -1,4 +1,5 @@
 import { IndicativeNote } from '@/vite/currency'
+import { formatFromPriceLabel, preferredRateJpy } from '@/vite/pricing-label'
 import { type AggregateEntry, RatingBadge } from '@/vite/reviews'
 import { ClassSummaryBadges } from '@/vite/storefronts/ClassSummaryBadges'
 import { StoreMonogram } from '@/vite/storefronts/StoreMonogram'
@@ -45,14 +46,13 @@ export function StorefrontCard({
   const t = useTranslations('search')
   const locale = useLocale()
 
-  const priceLabel =
-    storefront.fromDailyPriceJpy != null
-      ? t('fromDaily', { price: storefront.fromDailyPriceJpy.toLocaleString('en-US') })
-      : storefront.fromHourlyPriceJpy != null
-        ? t('fromHourly', { price: storefront.fromHourlyPriceJpy.toLocaleString('en-US') })
-        : t('noPrice')
+  const priceLabel = formatFromPriceLabel(
+    storefront.fromDailyPriceJpy,
+    storefront.fromHourlyPriceJpy,
+    t,
+  )
   // The "from" JPY figure the indicative note converts (daily preferred, else hourly).
-  const fromPriceJpy = storefront.fromDailyPriceJpy ?? storefront.fromHourlyPriceJpy ?? null
+  const fromPriceJpy = preferredRateJpy(storefront.fromDailyPriceJpy, storefront.fromHourlyPriceJpy)
 
   return (
     <Link

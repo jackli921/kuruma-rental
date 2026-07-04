@@ -4,8 +4,11 @@ import { z } from 'zod'
 import {
   exceedsContentLength,
   fail,
+  failResult,
   ok,
+  parseArchivableFilters,
   parseBody,
+  parseCrossOperatorRead,
   parseDateRange,
   parseId,
   parseLimit,
@@ -25,6 +28,22 @@ function createTestApp() {
   app.get('/fail-404', (c) => fail(c, 'not found', 404))
   app.get('/fail-extras', (c) =>
     fail(c, 'rule violated', 400, { code: 'RULE_X', details: { required: 6 } }),
+  )
+
+  app.get('/fail-result-bare', (c) => failResult(c, { status: 404, error: 'not found' }))
+  app.get('/fail-result-code', (c) =>
+    failResult(c, { status: 409, error: 'conflict', code: 'RULE_X' }),
+  )
+  app.get('/fail-result-count', (c) =>
+    failResult(c, {
+      status: 409,
+      error: 'reassign first',
+      code: 'HAS_ACTIVE_BOOKINGS',
+      activeBookingsCount: 2,
+    }),
+  )
+  app.get('/fail-result-zero-count', (c) =>
+    failResult(c, { status: 409, error: 'edge', code: 'X', activeBookingsCount: 0 }),
   )
 
   const testSchema = z.object({
@@ -69,6 +88,9 @@ function createTestApp() {
   })
 
   app.post('/guarded', (c) => rejectOversizedBody(c, GUARD_MAX_BYTES) ?? ok(c, { passed: true }))
+
+  app.get('/read-scope', (c) => ok(c, parseCrossOperatorRead(c)))
+  app.get('/archivable', (c) => ok(c, parseArchivableFilters(c)))
 
   app.get('/parse-id/:id', (c) => {
     const result = parseId(c)
@@ -192,6 +214,54 @@ describe('fail()', () => {
       code: 'RULE_X',
       details: { required: 6 },
     })
+  })
+})
+
+describe('failResult()', () => {
+  const app = createTestApp()
+
+  it('returns the bare { success: false, error } envelope when the result carries no discriminants', async () => {
+    const res = await app.request('/fail-result-bare')
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ success: false, error: 'not found' })
+  })
+
+  it('forwards the machine-readable code discriminant', async () => {
+    const res = await app.request('/fail-result-code')
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ success: false, error: 'conflict', code: 'RULE_X' })
+  })
+
+  it('forwards both code and activeBookingsCount', async () => {
+    const res = await app.request('/fail-result-count')
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'reassign first',
+      code: 'HAS_ACTIVE_BOOKINGS',
+      activeBookingsCount: 2,
+    })
+  })
+
+  it('forwards activeBookingsCount === 0 (guard is a defined-check, not a truthiness check)', async () => {
+    const res = await app.request('/fail-result-zero-count')
+
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'edge',
+      code: 'X',
+      activeBookingsCount: 0,
+    })
+  })
+
+  it('never leaks the internal status/ok fields into the response body', async () => {
+    const body = await (await app.request('/fail-result-code')).json()
+
+    expect(body.status).toBeUndefined()
+    expect(body.ok).toBeUndefined()
   })
 })
 
@@ -430,6 +500,62 @@ describe('parsePagination()', () => {
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error).toBe('limit must be between 1 and 50')
+  })
+})
+
+describe('parseCrossOperatorRead()', () => {
+  const app = createTestApp()
+
+  it('defaults to no operatorId and includeAll=false when nothing is passed', async () => {
+    const res = await app.request('/read-scope')
+    expect(await res.json()).toEqual({ success: true, data: { includeAll: false } })
+  })
+
+  it('carries operatorId through verbatim', async () => {
+    const res = await app.request('/read-scope?operatorId=op_1')
+    expect(await res.json()).toEqual({
+      success: true,
+      data: { operatorId: 'op_1', includeAll: false },
+    })
+  })
+
+  it('sets includeAll only on the exact string "true"', async () => {
+    const yes = await app.request('/read-scope?includeAll=true')
+    expect((await yes.json()).data.includeAll).toBe(true)
+    // A typo/truthy-but-not-"true" value must NOT widen scope.
+    const no = await app.request('/read-scope?includeAll=1')
+    expect((await no.json()).data.includeAll).toBe(false)
+  })
+})
+
+describe('parseArchivableFilters()', () => {
+  const app = createTestApp()
+
+  it('is empty when no filter params are passed', async () => {
+    const res = await app.request('/archivable')
+    expect(await res.json()).toEqual({ success: true, data: {} })
+  })
+
+  it('accepts only the ACTIVE/ARCHIVED status literals and ignores others', async () => {
+    expect((await (await app.request('/archivable?status=ACTIVE')).json()).data).toEqual({
+      status: 'ACTIVE',
+    })
+    expect((await (await app.request('/archivable?status=ARCHIVED')).json()).data).toEqual({
+      status: 'ARCHIVED',
+    })
+    expect((await (await app.request('/archivable?status=BOGUS')).json()).data).toEqual({})
+  })
+
+  it('sets includeArchived only on the exact string "true"', async () => {
+    expect((await (await app.request('/archivable?includeArchived=true')).json()).data).toEqual({
+      includeArchived: true,
+    })
+    expect((await (await app.request('/archivable?includeArchived=1')).json()).data).toEqual({})
+  })
+
+  it('combines status and includeArchived', async () => {
+    const res = await app.request('/archivable?status=ACTIVE&includeArchived=true')
+    expect((await res.json()).data).toEqual({ status: 'ACTIVE', includeArchived: true })
   })
 })
 

@@ -15,6 +15,7 @@ import {
 // file at cutover (#378).
 export type {
   AvailableVehicleData,
+  ClassOfferingData,
   ClassSummaryData,
   OperatingHoursData,
   StorefrontCardData,

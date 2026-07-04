@@ -10,6 +10,7 @@ import {
   createVehicle,
   deleteVehiclePhoto,
   fetchOperatorFleet,
+  fetchPickupLocationOptions,
   fetchVehicleClassOptions,
   fetchVehicleDetail,
   operatorFleetQueryOptions,
@@ -17,6 +18,7 @@ import {
   updateVehicle,
   updateVehicleStatus,
   uploadVehiclePhotos,
+  vehicleClassOptionsQueryOptions,
   vehicleDetailQueryOptions,
   vehicleRowFromDetail,
 } from '@/vite/operator-fleet/api'
@@ -327,6 +329,54 @@ describe('fetchVehicleClassOptions', () => {
     expect(parsed.searchParams.get('includeAll')).toBe('true')
     expect((init as RequestInit).credentials).toBe('include')
   })
+
+  it('scopes the class read to the picked operator (#1264)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    await fetchVehicleClassOptions('op_9')
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicle-classes/manage')
+    expect(parsed.searchParams.get('operatorId')).toBe('op_9')
+    expect(parsed.searchParams.has('includeAll')).toBe(false)
+  })
+})
+
+describe('vehicleClassOptionsQueryOptions (#1264 key parity)', () => {
+  it('keys by "all" when unpicked', () => {
+    expect(vehicleClassOptionsQueryOptions().queryKey).toEqual([
+      'operator-fleet',
+      'class-options',
+      'all',
+    ])
+  })
+  it('keys by the picked operator', () => {
+    expect(vehicleClassOptionsQueryOptions('op_9').queryKey).toEqual([
+      'operator-fleet',
+      'class-options',
+      'op_9',
+    ])
+  })
+})
+
+describe('fetchPickupLocationOptions (#1264 scoping)', () => {
+  it('keeps includeArchived and opts into includeAll when unpicked', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    await fetchPickupLocationOptions()
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/locations')
+    expect(parsed.searchParams.get('includeArchived')).toBe('true')
+    expect(parsed.searchParams.get('includeAll')).toBe('true')
+  })
+  it('scopes to the picked operator (keeps includeArchived, drops includeAll)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    await fetchPickupLocationOptions('op_9')
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.searchParams.get('includeArchived')).toBe('true')
+    expect(parsed.searchParams.get('operatorId')).toBe('op_9')
+    expect(parsed.searchParams.has('includeAll')).toBe(false)
+  })
 })
 
 describe('fetchVehicleDetail (#711 response validation)', () => {
@@ -519,5 +569,85 @@ describe('operator-fleet writes (#817 response validation)', () => {
     )
 
     await expect(retireVehicle('veh-1', 'csrf-tok')).rejects.toBeInstanceOf(ParseError)
+  })
+})
+
+describe('operator-fleet writes bind the picked operator (#1260)', () => {
+  // A picker-admin (bypass caller) must name the operator it acts as, or the API
+  // returns 422 OPERATOR_REQUIRED. An operator session passes undefined and the
+  // server scopes by the session cookie — so no picked id ⇒ no operatorId param.
+  it('updateVehicle appends ?operatorId when picked, omits it otherwise', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: vehicleRowRaw() }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await updateVehicle('veh-1', {} as UpdateVehicleInput, 'csrf-tok', 'op_9')
+    const picked = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(picked.pathname).toBe('/api/vehicles/veh-1')
+    expect(picked.searchParams.get('operatorId')).toBe('op_9')
+
+    await updateVehicle('veh-1', {} as UpdateVehicleInput, 'csrf-tok')
+    const unpicked = new URL(fetchMock.mock.calls[1]![0] as string, 'http://x')
+    expect(unpicked.searchParams.has('operatorId')).toBe(false)
+  })
+
+  it('updateVehicleStatus appends ?operatorId after the reason arg when picked', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: vehicleRowRaw({ status: 'MAINTENANCE' }) }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await updateVehicleStatus('veh-1', 'MAINTENANCE', 'csrf-tok', 'Oil change', 'op_9')
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicles/veh-1/status')
+    expect(parsed.searchParams.get('operatorId')).toBe('op_9')
+  })
+
+  it('bulkUpdateVehicleStatus appends ?operatorId when picked', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [vehicleRowRaw()] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await bulkUpdateVehicleStatus(['veh-1'], 'MAINTENANCE', 'csrf-tok', 'op_9')
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicles/bulk-status')
+    expect(parsed.searchParams.get('operatorId')).toBe('op_9')
+  })
+
+  it('retireVehicle appends ?operatorId when picked', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: vehicleRowRaw({ status: 'RETIRED' }) }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await retireVehicle('veh-1', 'csrf-tok', 'op_9')
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicles/veh-1')
+    expect(parsed.searchParams.get('operatorId')).toBe('op_9')
+  })
+
+  it('uploadVehiclePhotos appends ?operatorId when picked', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: { uploaded: ['/p/a.png'], total: 1 } }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const file = new File(['x'], 'a.png', { type: 'image/png' })
+    await uploadVehiclePhotos('veh-1', [file], 'csrf-tok', 'op_9')
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicles/veh-1/photos')
+    expect(parsed.searchParams.get('operatorId')).toBe('op_9')
+  })
+
+  it('deleteVehiclePhoto appends &operatorId alongside the existing ?url= when picked', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: { deleted: '/p/a.png', remaining: 0 } }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await deleteVehiclePhoto('veh-1', '/p/a.png', 'csrf-tok', 'op_9')
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicles/veh-1/photos')
+    // Both params must survive the ? / & composition (withOperatorScope edge).
+    expect(parsed.searchParams.get('url')).toBe('/p/a.png')
+    expect(parsed.searchParams.get('operatorId')).toBe('op_9')
   })
 })

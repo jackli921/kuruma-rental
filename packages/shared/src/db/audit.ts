@@ -10,6 +10,8 @@ export const auditEventKindEnum = pgEnum('audit_event_kind', [
   'PROVIDER_INVITE_CREATED', // an operator owner / admin invited a staff member (#521)
   'OPERATOR_PROFILE_UPDATED', // owner-tier change to a money-flow field, e.g. preAuthHandoffUrl (#903)
   'OPERATOR_MEMBER_DEACTIVATED', // owner revoked a staff member's access (#904 slice 2)
+  'OPERATOR_APPLICATION_APPROVED', // platform admin approved a pending operator application (#1277)
+  'OPERATOR_APPLICATION_REJECTED', // platform admin rejected a pending operator application (#1277)
 ])
 
 // Append-only event ledger. One row per audited action; never updated or deleted.

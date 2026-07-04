@@ -1,4 +1,5 @@
-import type { Review } from '../stores'
+import type { ReviewModerationStatus } from '@kuruma/shared/enums'
+import type { Review, ReviewReport } from '../stores'
 
 /** A review to persist. id + createdAt + updatedAt are store-assigned (DB defaults
  *  / in-memory), so the submission service never invents them. `publishedAt` is
@@ -9,6 +10,50 @@ export type NewReview = Omit<Review, 'id' | 'createdAt' | 'updatedAt'>
 /** The only mutable content of a review (the rest is identity/reveal state derived
  *  server-side and never editable). Applied by `update` until the row publishes. */
 export type ReviewEdit = Pick<Review, 'overall' | 'subRatings' | 'comment'>
+
+/** A report to persist. id + createdAt are store-assigned (DB default / in-memory). */
+export type NewReviewReport = Omit<ReviewReport, 'id' | 'createdAt'>
+
+/** Keyset cursor for the public review list (#1449). Points at the last row of the
+ *  previous page; the next page is every row strictly OLDER in (publishedAt desc, id desc)
+ *  order. A composite (publishedAt, id) key — publishedAt alone is not unique because the
+ *  reveal sweep stamps a whole batch with one timestamp, so id is the stable tiebreak. */
+export interface ReviewListCursor {
+  readonly publishedAt: Date
+  readonly id: string
+}
+
+/** A reported review for the admin moderation queue: the review plus how many distinct
+ *  users flagged it and their reasons (newest-reported first from the repo). */
+export interface ReportedReview {
+  review: Review
+  reportCount: number
+  reasons: readonly string[]
+}
+
+/** Keyset cursor for the moderation queue (#1451): the previous page's last boundary — a
+ *  report-recency instant plus a reviewId tiebreak, matching the queue's
+ *  (lastReportedAt DESC, reviewId DESC) order. Opaque to callers above the repo. */
+export interface ReportedQueueCursor {
+  lastReportedAt: Date
+  reviewId: string
+}
+
+/** Query for the moderation queue (#1451). `status` partitions it: 'VISIBLE' = unactioned
+ *  (the default working set — hidden rows never accumulate here), 'HIDDEN' = already
+ *  resolved. `limit` + `cursor` bound each page so the payload/query can't grow unbounded. */
+export interface ListReportedOptions {
+  limit: number
+  status: ReviewModerationStatus
+  cursor?: ReportedQueueCursor | undefined
+}
+
+/** One page of the moderation queue: the reported reviews plus the cursor for the next
+ *  page, or null when no further page may exist. */
+export interface ReportedReviewPage {
+  items: readonly ReportedReview[]
+  nextCursor: ReportedQueueCursor | null
+}
 
 /** reviews data access (#1067 slice 1, extended slice 2). The submission service is
  *  the only writer; reveal-on-read (slice 2) and subject aggregates (slice 5) layer on
@@ -55,4 +100,40 @@ export interface ReviewRepository {
   aggregateByClass(
     classIds: readonly string[],
   ): Promise<Map<string, { sum: number; count: number }>>
+  // Persist a report (slice 6 #1086). Throws a PG-shaped UNIQUE_VIOLATION with
+  // constraint_name === REVIEW_REPORT_UNIQUE_CONSTRAINT when this user already reported
+  // the review, so the service maps a duplicate to 409 without a check-then-act race.
+  insertReport(report: NewReviewReport): Promise<ReviewReport>
+  // Flip a review's moderation status (admin hide, slice 6). Stamps the moderation audit
+  // (#1454): `moderatedBy` = the acting admin, `moderatedAt` = the moderation instant — so a
+  // multi-admin platform can attribute the action (distinct from the mutable `updatedAt`).
+  // Returns the updated row, or undefined when no review has that id (→ 404). Idempotent on
+  // status, but each call re-stamps the audit with the latest actor/time.
+  setModerationStatus(
+    id: string,
+    status: ReviewModerationStatus,
+    moderatedBy: string,
+    moderatedAt: Date,
+  ): Promise<Review | undefined>
+  // The admin moderation queue (slice 6 #1086), keyset-paginated + status-partitioned
+  // (#1451). Reviews with >=1 report whose moderationStatus === options.status, each with
+  // its distinct-reporter count + reasons, ordered (lastReportedAt DESC, reviewId DESC),
+  // capped at options.limit, starting after options.cursor. `nextCursor` is non-null only
+  // when the page was full (a further page may exist).
+  listReported(options: ListReportedOptions): Promise<ReportedReviewPage>
+  // Public display read (review-display slice). The newest published + VISIBLE
+  // reviews whose subject key matches, capped at `limit`, ordered publishedAt DESC then
+  // id DESC. subject='OPERATOR' scopes on the denormalized operatorId; 'VEHICLE' on
+  // subjectVehicleId. RENTER is never listable (privacy) — the service enforces that,
+  // so this port only accepts the two public subjects.
+  // `after` (#1449) is the keyset cursor: return only rows strictly older than it in the
+  // same order, so "load more" never repeats or skips a row. The id tiebreak is compared
+  // under C/byte order in BOTH impls (Drizzle `COLLATE "C"`, InMemory JS `<`) so a
+  // same-publishedAt batch pages identically in tests and prod (uuids are ASCII → equal).
+  listPublishedForSubject(
+    subject: 'OPERATOR' | 'VEHICLE',
+    subjectId: string,
+    limit: number,
+    after?: ReviewListCursor,
+  ): Promise<Review[]>
 }

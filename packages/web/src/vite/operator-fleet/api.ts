@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { buildScopeParam } from '@/vite/operator-context'
 import type {
   BulkVehicleStatus,
   CreateVehicleInput,
@@ -38,7 +39,8 @@ import {
 // read is impossible from here by construction. #407 slice 4: a PLATFORM_ADMIN
 // on the dashboard picker may narrow this aggregate to one operator by appending
 // `?operatorId=X` (sent ONLY when picked; the lenient endpoint ignores no-param =
-// aggregate). The /manage/fleet page is NOT a picker route and always passes none.
+// aggregate). #1264: the /manage/fleet list is itself a picker route now, so it
+// threads the picked operator through here; an operator session still passes none.
 // Canonical write types come from @kuruma/shared so the (#526 follow-up) forms
 // stay in lockstep with the Zod validators rather than drifting a parallel copy.
 
@@ -83,9 +85,11 @@ export function operatorFleetQueryOptions(pickedOperatorId?: string) {
 }
 
 // --- Mutations (cookie-based; consumed by the #526 follow-up slices) ----------
-// All write paths are operator-scoped server-side; the client never names a
-// tenant. Each unwraps the ok() envelope and throws ApiError on failure so the
-// caller's useMutation onError can surface it.
+// Write paths are operator-scoped server-side by the session cookie. An operator
+// session names no tenant; a picker-admin (bypass caller) MUST name the operator
+// it picked (#1260 `withOperatorScope`), or the API returns 422 OPERATOR_REQUIRED.
+// Each unwraps the ok() envelope and throws ApiError on failure so the caller's
+// useMutation onError can surface it.
 //
 // #817: these write endpoints return the *bare* vehicle row (shared `Vehicle` =
 // `VehicleBase`, with none of the fleet-overview enrichment — `utilization`,
@@ -114,6 +118,18 @@ async function writeJson<T>(
   return unwrap(res, schema)
 }
 
+// #1260: a picker-admin (bypass caller) must name the operator it acts as on every
+// fleet write, so the API can bind the write to the picked tenant instead of
+// inferring it from the target row (the closed cross-tenant hole). Append
+// `?operatorId=` ONLY when an operator is picked; an operator session passes
+// undefined and the server scopes by the session cookie. NOT buildScopeParam,
+// whose unpicked `includeAll=true` default is a read-only concept.
+function withOperatorScope(path: string, pickedOperatorId: string | undefined): string {
+  if (!pickedOperatorId) return path
+  const sep = path.includes('?') ? '&' : '?'
+  return `${path}${sep}operatorId=${encodeURIComponent(pickedOperatorId)}`
+}
+
 export function createVehicle(data: CreateVehicleInput, csrfToken: string): Promise<VehicleRow> {
   return writeJson('/vehicles', 'POST', data, csrfToken, vehicleRowSchema)
 }
@@ -122,9 +138,10 @@ export function updateVehicle(
   id: string,
   data: UpdateVehicleInput,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<VehicleRow> {
   return writeJson(
-    `/vehicles/${encodeURIComponent(id)}`,
+    withOperatorScope(`/vehicles/${encodeURIComponent(id)}`, pickedOperatorId),
     'PATCH',
     data,
     csrfToken,
@@ -137,10 +154,11 @@ export function updateVehicleStatus(
   status: VehicleStatus,
   csrfToken: string,
   reason?: string,
+  pickedOperatorId?: string,
 ): Promise<VehicleRow> {
   const body = reason != null ? { status, reason } : { status }
   return writeJson(
-    `/vehicles/${encodeURIComponent(id)}/status`,
+    withOperatorScope(`/vehicles/${encodeURIComponent(id)}/status`, pickedOperatorId),
     'PATCH',
     body,
     csrfToken,
@@ -152,9 +170,10 @@ export function bulkUpdateVehicleStatus(
   vehicleIds: string[],
   status: BulkVehicleStatus,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<VehicleRow[]> {
   return writeJson(
-    '/vehicles/bulk-status',
+    withOperatorScope('/vehicles/bulk-status', pickedOperatorId),
     'PATCH',
     { vehicleIds, status },
     csrfToken,
@@ -162,12 +181,19 @@ export function bulkUpdateVehicleStatus(
   )
 }
 
-export async function retireVehicle(id: string, csrfToken: string): Promise<VehicleRow> {
-  const res = await fetch(`${getApiBaseUrl()}/vehicles/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrfToken },
-  })
+export async function retireVehicle(
+  id: string,
+  csrfToken: string,
+  pickedOperatorId?: string,
+): Promise<VehicleRow> {
+  const res = await fetch(
+    `${getApiBaseUrl()}${withOperatorScope(`/vehicles/${encodeURIComponent(id)}`, pickedOperatorId)}`,
+    {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'X-CSRF-Token': csrfToken },
+    },
+  )
   return unwrap(res, vehicleRowSchema)
 }
 
@@ -175,15 +201,19 @@ export async function uploadVehiclePhotos(
   vehicleId: string,
   files: readonly File[],
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<PhotoUploadResult> {
   const formData = new FormData()
   for (const file of files) formData.append('file', file)
-  const res = await fetch(`${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/photos`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'X-CSRF-Token': csrfToken },
-    body: formData,
-  })
+  const res = await fetch(
+    `${getApiBaseUrl()}${withOperatorScope(`/vehicles/${encodeURIComponent(vehicleId)}/photos`, pickedOperatorId)}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: formData,
+    },
+  )
   return unwrap(res, photoUploadResultSchema)
 }
 
@@ -191,8 +221,12 @@ export async function deleteVehiclePhoto(
   vehicleId: string,
   photoUrl: string,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<PhotoDeleteResult> {
-  const url = `${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/photos?url=${encodeURIComponent(photoUrl)}`
+  const url = `${getApiBaseUrl()}${withOperatorScope(
+    `/vehicles/${encodeURIComponent(vehicleId)}/photos?url=${encodeURIComponent(photoUrl)}`,
+    pickedOperatorId,
+  )}`
   const res = await fetch(url, {
     method: 'DELETE',
     credentials: 'include',
@@ -274,23 +308,24 @@ export function vehicleRowFromDetail(d: VehicleDetailResponse): OperatorFleetVeh
 // (#528). Operator callers stay tenant-scoped server-side; a bypass admin must
 // explicitly opt into the cross-operator read.
 
-export async function fetchVehicleClassOptions(): Promise<VehicleClassOption[]> {
-  // `/manage` is the session-authed class list (#528). The public
-  // `/vehicle-classes` is PUBLIC_CONTEXT 'all'-scope — it would leak every
-  // operator's classes into this operator's own form dropdown. `includeAll=true`
-  // satisfies the private route's explicit cross-operator read contract for
-  // bypass roles (else they 400); OPERATOR_* callers stay scoped by the API.
-  // Fleet is not a picker route, so there is no `?operator` to honor here.
-  const res = await fetch(`${getApiBaseUrl()}/vehicle-classes/manage?includeAll=true`, {
-    credentials: 'include',
-  })
+export async function fetchVehicleClassOptions(operatorId?: string): Promise<VehicleClassOption[]> {
+  // `/manage` is the session-authed class list (#528). buildScopeParam sends
+  // `operatorId=X` when a bypass admin picked one (#1264 — matches the vehicle's
+  // operator so the composite FK holds), else `includeAll=true` (the bypass-role
+  // cross-operator read contract; OPERATOR_* callers stay scoped by the API).
+  const res = await fetch(
+    `${getApiBaseUrl()}/vehicle-classes/manage?${buildScopeParam(operatorId)}`,
+    {
+      credentials: 'include',
+    },
+  )
   return unwrap(res, vehicleClassOptionsListSchema)
 }
 
-export function vehicleClassOptionsQueryOptions() {
+export function vehicleClassOptionsQueryOptions(operatorId?: string) {
   return queryOptions({
-    queryKey: ['operator-fleet', 'class-options'],
-    queryFn: fetchVehicleClassOptions,
+    queryKey: ['operator-fleet', 'class-options', operatorId ?? 'all'],
+    queryFn: () => fetchVehicleClassOptions(operatorId),
   })
 }
 
@@ -299,21 +334,22 @@ export function vehicleClassOptionsQueryOptions() {
 // inside the web module boundary — mirrors fetchVehicleClassOptions above. The
 // session-authed `/locations` list is operator-scoped server-side; a UI-created
 // vehicle needs a pickupLocationId or it never surfaces in storefront search.
-export async function fetchPickupLocationOptions(): Promise<PickupLocationOption[]> {
-  // `includeArchived=true` keeps a since-archived *assigned* location resolvable
-  // for the edit fallback (the form filters to ACTIVE for selectable options).
-  // `includeAll=true` satisfies the private route's explicit cross-operator read
-  // contract for bypass roles (else they 400); OPERATOR_* callers stay scoped by
-  // the API and it ignores the flag. Fleet is not a picker route — no `?operator`.
-  const res = await fetch(`${getApiBaseUrl()}/locations?includeArchived=true&includeAll=true`, {
-    credentials: 'include',
-  })
+export async function fetchPickupLocationOptions(
+  operatorId?: string,
+): Promise<PickupLocationOption[]> {
+  // `includeArchived=true` keeps a since-archived assigned location resolvable for
+  // the edit fallback. buildScopeParam narrows to the picked operator (#1264) or
+  // opts into the cross-operator read for a bypass admin; OPERATOR_* stay scoped.
+  const res = await fetch(
+    `${getApiBaseUrl()}/locations?includeArchived=true&${buildScopeParam(operatorId)}`,
+    { credentials: 'include' },
+  )
   return unwrap(res, pickupLocationOptionsListSchema)
 }
 
-export function pickupLocationOptionsQueryOptions() {
+export function pickupLocationOptionsQueryOptions(operatorId?: string) {
   return queryOptions({
-    queryKey: ['operator-fleet', 'location-options'],
-    queryFn: fetchPickupLocationOptions,
+    queryKey: ['operator-fleet', 'location-options', operatorId ?? 'all'],
+    queryFn: () => fetchPickupLocationOptions(operatorId),
   })
 }

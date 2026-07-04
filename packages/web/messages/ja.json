@@ -293,6 +293,11 @@
             "empty": "未割当のフロート予約はありません",
             "overflowLabel": "少なくとも{limit}件が割当待ち（先頭{limit}件を表示）"
           }
+        },
+        "board": {
+          "label": "配車ボード、{range}",
+          "bookingBar": "{vehicle}。予約: {renter}、{status}、{range}",
+          "blockBar": "{vehicle}。{kind}ブロック: {title}、{range}"
         }
       },
       "detail": {
@@ -775,6 +780,13 @@
         "price": "1予約あたり {price}"
       },
       "form": {
+        "identityLegend": "追加方法を選択",
+        "identityTemplate": "カタログから選ぶ",
+        "identityCustom": "自分で作成",
+        "nameEn": "名称（英語）",
+        "nameJa": "名称（日本語）",
+        "nameZh": "名称（中国語）",
+        "customNameNudge": "日本語・中国語が空欄の場合、旅行者には英語が表示されます。両方入力するとより多くの利用者に届きます。",
         "template": "オプション",
         "templatePlaceholder": "オプションを選択",
         "description": "説明",
@@ -877,6 +889,7 @@
       "deactivating": "無効化中...",
       "staffNotice": "スタッフを招待できるのはオーナーのみです。",
       "noOperatorContext": "このページは単一の事業者のチームを管理します。事業者の管理は管理ポータルを使用してください。",
+      "pickOperatorPrompt": "上部の選択メニューから事業者を選ぶと、そのチームを表示・管理できます。",
       "unknownName": "名前未設定",
       "roleOwner": "オーナー",
       "roleStaff": "スタッフ",
@@ -905,6 +918,49 @@
       "label": "事業者",
       "all": "すべての事業者",
       "badge": "事業者: {name}"
+    },
+    "register": {
+      "title": "Kurumaにあなたの事業を掲載する",
+      "subtitle": "レンタカー事業について教えてください。すべての申請を審査します。",
+      "form": {
+        "businessName": "事業者名",
+        "contactName": "担当者名",
+        "contactEmail": "メールアドレス",
+        "contactPhone": "電話番号",
+        "serviceArea": "サービスエリア（市区町村・都道府県）",
+        "fleetSize": "保有台数（概算）",
+        "website": "ウェブサイト（任意）",
+        "licenseNumber": "事業許可番号（任意）",
+        "businessType": "事業形態（任意）",
+        "message": "その他ご連絡事項（任意）",
+        "consent": "申請に関するご連絡を受け取ることに同意します",
+        "submit": "申請を送信する",
+        "submitting": "送信中...",
+        "individual": "個人",
+        "company": "法人",
+        "fleetSizePlaceholder": "台数を選択してください",
+        "businessTypePlaceholder": "選択してください",
+        "errors": {
+          "businessName": "事業者名を入力してください。",
+          "contactName": "担当者名を入力してください。",
+          "contactEmail": "有効なメールアドレスを入力してください。",
+          "contactPhone": "有効な電話番号を入力してください。",
+          "serviceArea": "対応エリアを入力してください。",
+          "estimatedFleetSize": "台数を選択してください。",
+          "website": "http:// または https:// で始まる有効なURLを入力してください。",
+          "businessLicenseNumber": "免許番号を短くしてください。",
+          "message": "メッセージを短くしてください。",
+          "consent": "申請の前に同意していただく必要があります。"
+        }
+      },
+      "errors": {
+        "generic": "申請を送信できませんでした。もう一度お試しください。",
+        "duplicate": "このメールアドレスの申請またはアカウントはすでに存在します。"
+      },
+      "success": {
+        "title": "申請を受け付けました",
+        "body": "ありがとうございます - {email} 宛にご連絡いたします。"
+      }
     }
   },
   "messaging": {
@@ -961,6 +1017,8 @@
       "subtitle": "ご予約が確定しました。受取時に予約コードをご提示ください。",
       "bookingCode": "予約コード",
       "vehicleClass": "クラス",
+      "vehicle": "車両",
+      "assignmentNote": "お受け取り前に具体的な車両が割り当てられます。",
       "pickupDate": "貸出",
       "returnDate": "返却",
       "status": "ステータス",
@@ -1232,7 +1290,8 @@
     "cta": {
       "heading": "日本を探索する準備はできましたか？",
       "description": "車両を閲覧して数分で予約。ピックアップの72時間前まで無料キャンセル。",
-      "button": "車を見つける"
+      "button": "車を見つける",
+      "operatorCta": "ビジネスを掲載する"
     },
     "footer": {
       "copyright": "クルマレンタル 全著作権所有。",
@@ -1319,8 +1378,10 @@
     "detail": {
       "backToSearch": "検索に戻る",
       "availableVehicles": "空車",
+      "classDeals": "クラス指定プラン",
       "noVehicles": "選択した日時にこの店舗で利用できるクルマはありません。",
       "book": "このクルマを予約",
+      "bookClass": "このクラスを予約",
       "notFound": "店舗が見つかりません",
       "notFoundDescription": "この店舗は存在しないか、現在ご利用いただけません。"
     }
@@ -1335,8 +1396,93 @@
       "governance": "同意ガバナンス",
       "customers": "顧客",
       "operators": "事業者",
+      "templates": "テンプレートライブラリ",
       "featureFlags": "機能フラグ",
-      "backToSite": "サイトに戻る"
+      "backToSite": "サイトに戻る",
+      "applications": "申請",
+      "reviews": "レビューのモデレーション"
+    },
+    "applications": {
+      "title": "事業者申請",
+      "subtitle": "新規事業者のオンボーディング申請を確認・対応します。",
+      "empty": "審査待ちの申請はありません。",
+      "contactLabel": "担当者",
+      "emailLabel": "メールアドレス",
+      "phoneLabel": "電話番号",
+      "serviceAreaLabel": "サービスエリア",
+      "fleetSizeLabel": "想定車両台数",
+      "businessTypeLabel": "事業形態",
+      "fleetSize": {
+        "1-5": "1〜5台",
+        "6-20": "6〜20台",
+        "21-50": "21〜50台",
+        "50+": "50台以上"
+      },
+      "businessType": {
+        "INDIVIDUAL": "個人",
+        "COMPANY": "法人"
+      },
+      "websiteLabel": "ウェブサイト",
+      "messageLabel": "メッセージ",
+      "submittedLabel": "申請日",
+      "reasonLabel": "却下理由",
+      "reject": "却下",
+      "error": "却下を記録できませんでした。もう一度お試しください。",
+      "approve": "承認",
+      "approving": "承認中…",
+      "inviteReadyLabel": "招待リンク",
+      "inviteReadyHint": "このワンタイムリンクを事業者に送信してオンボーディングを完了してください。",
+      "copy": "コピー",
+      "copied": "コピーしました",
+      "approved": "承認済み",
+      "regenerate": "リンクを再発行",
+      "regenerating": "再発行中…",
+      "regenerateFailed": "招待リンクを再発行できませんでした。もう一度お試しください。",
+      "regenerateUnavailable": "この招待はもう再発行できません。オーナーはすでにオンボーディング済みの可能性があります。",
+      "alreadyReviewed": "この申請はすでに審査済みか、メールアドレスがすでに事業者に登録されています。",
+      "approveFailed": "申請を承認できませんでした。もう一度お試しください。",
+      "loadError": "申請キューを読み込めませんでした。",
+      "retry": "再試行"
+    },
+    "templateLibrary": {
+      "title": "テンプレートライブラリ",
+      "subtitle": "すべての事業者が選択する、プラットフォーム管理のオプションおよび保険テンプレートを管理します。",
+      "tab": {
+        "addOns": "オプション ({count})",
+        "insurance": "保険 ({count})"
+      },
+      "colName": "名称",
+      "colKey": "キー",
+      "colStatus": "ステータス",
+      "colTranslations": "翻訳",
+      "colActions": "操作",
+      "active": "有効",
+      "archived": "アーカイブ済み",
+      "empty": "このカタログにはまだテンプレートがありません。",
+      "loadError": "テンプレートライブラリを読み込めませんでした。",
+      "retry": "再試行",
+      "action": {
+        "edit": "編集",
+        "editNamed": "{name}を編集",
+        "create": "新規テンプレート"
+      },
+      "edit": {
+        "title": "テンプレートを編集",
+        "description": "各言語を翻訳してからステータスを設定します。バックフィルで作成されたテンプレートは、有効に切り替えると公開されます。",
+        "nameSection": "名称",
+        "descriptionSection": "説明",
+        "statusLabel": "ステータス",
+        "nameEnRequired": "英語名は必須です。",
+        "save": "保存",
+        "saving": "保存中…",
+        "cancel": "キャンセル"
+      },
+      "create": {
+        "title": "新規テンプレート",
+        "description": "カタログにテンプレートを追加します。英語名は必須で、キーはそこから生成されます。",
+        "submit": "作成",
+        "submitting": "作成中…"
+      }
     },
     "featureFlags": {
       "title": "機能フラグ",
@@ -1608,6 +1754,33 @@
       },
       "loadError": "顧客を読み込めませんでした。",
       "retry": "再試行"
+    },
+    "reviewModeration": {
+      "title": "レビューのモデレーション",
+      "description": "モデレーション判断待ちの通報されたレビューです。レビューを非表示にすると、一般公開と相手側の両方から見えなくなります。",
+      "empty": "通報されたレビューはありません。",
+      "stars": "{n} / 5",
+      "reports": "{count, plural, other {#件の通報}}",
+      "subject": {
+        "OPERATOR": "オペレーターへのレビュー",
+        "VEHICLE": "車両へのレビュー",
+        "RENTER": "利用者へのレビュー"
+      },
+      "by": {
+        "RENTER": "利用者による",
+        "OPERATOR": "オペレーターによる"
+      },
+      "hide": "レビューを非表示",
+      "hiding": "非表示にしています…",
+      "hidden": "非表示",
+      "hideError": "レビューを非表示にできませんでした。もう一度お試しください。",
+      "loadError": "通報されたレビューを読み込めませんでした。",
+      "retry": "再試行",
+      "filterLabel": "レビューを絞り込む",
+      "filterUnactioned": "要対応",
+      "filterResolved": "対応済み",
+      "loadMore": "さらに読み込む",
+      "loadingMore": "読み込み中…"
     }
   },
   "documents": {
@@ -1630,6 +1803,7 @@
   "reservation": {
     "title": "予約を完了する",
     "vehicleHeading": "予約するクルマ",
+    "classAssignmentNote": "このクラスの具体的なクルマは、受取時までに割り当てられます。",
     "steps": {
       "dates": "日時",
       "addOns": "オプション",
@@ -1746,6 +1920,15 @@
       "rating": "★ {avg}({count}件)",
       "noReviews": "レビューはまだありません",
       "ratingAria": "{avg}つ星、{count}件のレビュー"
+    },
+    "list": {
+      "heading": "レビュー",
+      "empty": "まだレビューはありません",
+      "reviewer": "認証済みの利用者",
+      "overallAria": "5つ星中{n}つ星",
+      "dimensionValue": "{n}/5",
+      "loadMore": "もっと見る",
+      "loadingMore": "読み込み中…"
     }
   },
   "currency": {

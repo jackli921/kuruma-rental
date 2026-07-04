@@ -1,5 +1,13 @@
+import { ParseError } from '@/lib/api-error'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchAggregates, reviewAggregatesQueryOptions } from './api'
+import {
+  fetchAggregates,
+  fetchOperatorReviews,
+  fetchVehicleReviews,
+  operatorReviewsInfiniteQueryOptions,
+  reviewAggregatesQueryOptions,
+  vehicleReviewsInfiniteQueryOptions,
+} from './api'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return {
@@ -54,6 +62,139 @@ describe('fetchAggregates (#1085 slice 5)', () => {
       // forks on this exact value, so a regression to `{}` or {count:0} matters.
       op_unrated: null,
     })
+  })
+})
+
+const sampleReview = {
+  id: 'r1',
+  overall: 5,
+  subRatings: { cleanliness: 5 },
+  comment: 'great',
+  publishedAt: '2026-06-02T03:00:00.000Z',
+  // #1450: faithful to the wire shape — the schema now requires this field, so omitting it
+  // would make fetchOperatorReviews' seam parse throw (a floating rejection, green-locally-red-CI).
+  reviewerFirstName: 'Jack',
+}
+
+describe('fetchOperatorReviews', () => {
+  it('parses the {reviews, nextCursor} page from the data envelope', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { reviews: [sampleReview], nextCursor: 'TOK' } }),
+    )
+    const result = await fetchOperatorReviews('op1')
+    expect(result).toEqual({ reviews: [sampleReview], nextCursor: 'TOK' })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/reviews/for/operators/op1')
+  })
+
+  it('appends the ?after cursor (url-encoded) when paging', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { reviews: [], nextCursor: null } }),
+    )
+    await fetchOperatorReviews('op1', 'a+b/c=')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/reviews/for/operators/op1?after=a%2Bb%2Fc%3D')
+  })
+
+  it('omits ?after entirely for the first page (null/undefined cursor)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { reviews: [], nextCursor: null } }),
+    )
+    await fetchOperatorReviews('op1', null)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/reviews/for/operators/op1')
+  })
+
+  it('throws ParseError when nextCursor is missing (seam parse)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: { reviews: [sampleReview] } }))
+    await expect(fetchOperatorReviews('op1')).rejects.toThrow(ParseError)
+  })
+
+  it('throws ParseError when a review field is dropped (seam parse)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { reviews: [{ id: 'r1' }], nextCursor: null } }),
+    )
+    await expect(fetchOperatorReviews('op1')).rejects.toThrow(ParseError)
+  })
+})
+
+describe('operatorReviewsInfiniteQueryOptions', () => {
+  it('keys the cache with the operator id so a refactor cannot silently bust the entry', () => {
+    const opts = operatorReviewsInfiniteQueryOptions('op_abc')
+    expect(opts.queryKey).toEqual(['reviews', 'list', 'operators', 'op_abc'])
+  })
+
+  it('starts with no cursor and advances the page param via nextCursor', () => {
+    const opts = operatorReviewsInfiniteQueryOptions('op1')
+    expect(opts.initialPageParam).toBeNull()
+    expect(
+      opts.getNextPageParam({ reviews: [sampleReview], nextCursor: 'NEXT' }, [], null, []),
+    ).toBe('NEXT')
+  })
+
+  it('stops paging when a page returns nextCursor null', () => {
+    const opts = operatorReviewsInfiniteQueryOptions('op1')
+    // A null nextCursor tells react-query there is no further page (hasNextPage=false).
+    expect(
+      opts.getNextPageParam({ reviews: [sampleReview], nextCursor: null }, [], null, []),
+    ).toBeNull()
+  })
+})
+
+// #1448: the vehicle reader mirrors the operator reader against a different subject
+// path segment. Same wire shape (public review page), same cursor semantics — the only
+// things that MUST differ are the URL segment and the cache-key subject, so those are
+// what the assertions pin.
+describe('fetchVehicleReviews (#1448)', () => {
+  it('parses the {reviews, nextCursor} page from the data envelope', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { reviews: [sampleReview], nextCursor: 'TOK' } }),
+    )
+    const result = await fetchVehicleReviews('veh1')
+    expect(result).toEqual({ reviews: [sampleReview], nextCursor: 'TOK' })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/reviews/for/vehicles/veh1')
+  })
+
+  it('appends the ?after cursor (url-encoded) when paging', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { reviews: [], nextCursor: null } }),
+    )
+    await fetchVehicleReviews('veh1', 'a+b/c=')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/reviews/for/vehicles/veh1?after=a%2Bb%2Fc%3D')
+  })
+
+  it('omits ?after entirely for the first page (null cursor)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { reviews: [], nextCursor: null } }),
+    )
+    await fetchVehicleReviews('veh1', null)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/reviews/for/vehicles/veh1')
+  })
+
+  it('throws ParseError when a review field is dropped (seam parse)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { reviews: [{ id: 'r1' }], nextCursor: null } }),
+    )
+    await expect(fetchVehicleReviews('veh1')).rejects.toThrow(ParseError)
+  })
+})
+
+describe('vehicleReviewsInfiniteQueryOptions (#1448)', () => {
+  it('keys the cache under the vehicle subject + id so it never collides with the operator list', () => {
+    const opts = vehicleReviewsInfiniteQueryOptions('veh_abc')
+    expect(opts.queryKey).toEqual(['reviews', 'list', 'vehicles', 'veh_abc'])
+  })
+
+  it('starts with no cursor and advances the page param via nextCursor', () => {
+    const opts = vehicleReviewsInfiniteQueryOptions('veh1')
+    expect(opts.initialPageParam).toBeNull()
+    expect(
+      opts.getNextPageParam({ reviews: [sampleReview], nextCursor: 'NEXT' }, [], null, []),
+    ).toBe('NEXT')
+  })
+
+  it('stops paging when a page returns nextCursor null', () => {
+    const opts = vehicleReviewsInfiniteQueryOptions('veh1')
+    expect(
+      opts.getNextPageParam({ reviews: [sampleReview], nextCursor: null }, [], null, []),
+    ).toBeNull()
   })
 })
 

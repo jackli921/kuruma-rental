@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PG_ERROR, REVIEWS_SUBJECT_CONSTRAINT } from '../../src/pg-errors'
 import { InMemoryReviewRepository } from '../../src/repositories/in-memory/review'
 import type { NewReview } from '../../src/repositories/types'
+import type { Review, ReviewReport } from '../../src/stores'
 
 // Slice 1 (#1067): the InMemory ReviewRepository must mirror the single DB seal — assign
 // id/timestamps on insert and throw a PG-shaped UNIQUE_VIOLATION (with `constraint_name`)
@@ -77,6 +78,214 @@ describe('InMemoryReviewRepository', () => {
     )
     expect(second.subject).toBe('VEHICLE')
     expect(await repo.findByBookingId('bk_1')).toHaveLength(2)
+  })
+})
+
+// review-display slice (#1067): public listing of published+visible reviews for a subject.
+describe('listPublishedForSubject', () => {
+  it('returns only published + VISIBLE operator reviews, newest first, excludes hidden/unrevealed/other-op/vehicle', async () => {
+    const repo = new InMemoryReviewRepository()
+
+    const rOld = await repo.insert(
+      renterReview({
+        bookingId: 'bk_old',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: new Date('2026-06-01T00:00:00Z'),
+        moderationStatus: 'VISIBLE',
+      }),
+    )
+    const rNew = await repo.insert(
+      renterReview({
+        bookingId: 'bk_new',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: new Date('2026-06-03T00:00:00Z'),
+        moderationStatus: 'VISIBLE',
+        authorUserId: 'user_renter_2',
+      }),
+    )
+    // HIDDEN — must be excluded
+    await repo.insert(
+      renterReview({
+        bookingId: 'bk_hidden',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: new Date('2026-06-02T00:00:00Z'),
+        moderationStatus: 'HIDDEN',
+        authorUserId: 'user_renter_3',
+      }),
+    )
+    // unrevealed (publishedAt: null) — must be excluded
+    await repo.insert(
+      renterReview({
+        bookingId: 'bk_unrevealed',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: null,
+        moderationStatus: 'VISIBLE',
+        authorUserId: 'user_renter_4',
+      }),
+    )
+    // different operator — must be excluded
+    await repo.insert(
+      renterReview({
+        bookingId: 'bk_otherop',
+        operatorId: 'op2',
+        subject: 'OPERATOR',
+        publishedAt: new Date('2026-06-02T00:00:00Z'),
+        moderationStatus: 'VISIBLE',
+        authorUserId: 'user_renter_5',
+      }),
+    )
+    // VEHICLE subject for op1 — must be excluded
+    await repo.insert(
+      renterReview({
+        bookingId: 'bk_vehicle',
+        operatorId: 'op1',
+        subject: 'VEHICLE',
+        subjectVehicleId: 'v1',
+        publishedAt: new Date('2026-06-02T00:00:00Z'),
+        moderationStatus: 'VISIBLE',
+        authorUserId: 'user_renter_6',
+      }),
+    )
+
+    const result = await repo.listPublishedForSubject('OPERATOR', 'op1', 20)
+    expect(result.map((r) => r.id)).toEqual([rNew.id, rOld.id])
+  })
+
+  it('respects the limit, returning the newest N reviews', async () => {
+    const repo = new InMemoryReviewRepository()
+
+    // Seed 5 published+visible OPERATOR reviews for op1 with ascending publishedAt
+    const inserted: string[] = []
+    for (let i = 0; i < 5; i++) {
+      const r = await repo.insert(
+        renterReview({
+          bookingId: `bk_limit_${i}`,
+          operatorId: 'op1',
+          subject: 'OPERATOR',
+          publishedAt: new Date(`2026-06-0${i + 1}T00:00:00Z`),
+          moderationStatus: 'VISIBLE',
+          authorUserId: `user_${i}`,
+        }),
+      )
+      inserted.push(r.id)
+    }
+    // inserted[0]..inserted[4] = oldest..newest
+    const result = await repo.listPublishedForSubject('OPERATOR', 'op1', 2)
+    expect(result).toHaveLength(2)
+    expect(result.map((r) => r.id)).toEqual([inserted[4], inserted[3]])
+  })
+
+  it('VEHICLE subject scopes on subjectVehicleId, not operatorId', async () => {
+    const repo = new InMemoryReviewRepository()
+    const vehicleReview = await repo.insert(
+      renterReview({
+        bookingId: 'bk_v1',
+        operatorId: 'op1',
+        subject: 'VEHICLE',
+        subjectVehicleId: 'v1',
+        publishedAt: new Date('2026-06-01T00:00:00Z'),
+        moderationStatus: 'VISIBLE',
+      }),
+    )
+    // same operatorId but OPERATOR-subject — must NOT appear in a VEHICLE query
+    await repo.insert(
+      renterReview({
+        bookingId: 'bk_op1',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: new Date('2026-06-01T00:00:00Z'),
+        moderationStatus: 'VISIBLE',
+        authorUserId: 'user_renter_2',
+      }),
+    )
+    const result = await repo.listPublishedForSubject('VEHICLE', 'v1', 20)
+    expect(result.map((r) => r.id)).toEqual([vehicleReview.id])
+  })
+
+  it('breaks publishedAt ties by id descending', async () => {
+    const repo = new InMemoryReviewRepository()
+    const sameDate = new Date('2026-06-01T00:00:00Z')
+    const r1 = await repo.insert(
+      renterReview({
+        bookingId: 'bk_tie1',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: sameDate,
+        moderationStatus: 'VISIBLE',
+      }),
+    )
+    const r2 = await repo.insert(
+      renterReview({
+        bookingId: 'bk_tie2',
+        operatorId: 'op1',
+        subject: 'OPERATOR',
+        publishedAt: sameDate,
+        moderationStatus: 'VISIBLE',
+        authorUserId: 'user_renter_2',
+      }),
+    )
+    const expectedOrder = [r1.id, r2.id].sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))
+    const result = await repo.listPublishedForSubject('OPERATOR', 'op1', 20)
+    expect(result.map((r) => r.id)).toEqual(expectedOrder)
+  })
+
+  // #1449 keyset "load more": an `after` cursor returns the rows strictly OLDER than it,
+  // in the SAME (publishedAt desc, id desc) order — so paging never repeats or skips a row.
+  it('with an after cursor, returns only rows strictly after it in the same order', async () => {
+    const repo = new InMemoryReviewRepository()
+    for (let i = 0; i < 5; i++) {
+      await repo.insert(
+        renterReview({
+          bookingId: `bk_cursor_${i}`,
+          operatorId: 'op1',
+          subject: 'OPERATOR',
+          publishedAt: new Date(`2026-06-0${i + 1}T00:00:00Z`),
+          moderationStatus: 'VISIBLE',
+          authorUserId: `user_${i}`,
+        }),
+      )
+    }
+    // The unpaginated order is the source of truth; derive the cursor from it so the
+    // assertion survives any id the store assigns (mutation-resistant, not id-hardcoded).
+    const full = await repo.listPublishedForSubject('OPERATOR', 'op1', 20)
+    expect(full).toHaveLength(5)
+    const second = full[1]
+    if (!second?.publishedAt) throw new Error('fixture: expected a published second row')
+    const after = await repo.listPublishedForSubject('OPERATOR', 'op1', 20, {
+      publishedAt: second.publishedAt,
+      id: second.id,
+    })
+    expect(after.map((r) => r.id)).toEqual(full.slice(2).map((r) => r.id))
+  })
+
+  it('the after cursor tiebreaks WITHIN an identical publishedAt batch', async () => {
+    const repo = new InMemoryReviewRepository()
+    const sameDate = new Date('2026-06-01T00:00:00Z')
+    for (let i = 0; i < 3; i++) {
+      await repo.insert(
+        renterReview({
+          bookingId: `bk_tiecursor_${i}`,
+          operatorId: 'op1',
+          subject: 'OPERATOR',
+          publishedAt: sameDate,
+          moderationStatus: 'VISIBLE',
+          authorUserId: `user_${i}`,
+        }),
+      )
+    }
+    const full = await repo.listPublishedForSubject('OPERATOR', 'op1', 20)
+    expect(full).toHaveLength(3)
+    const first = full[0]
+    if (!first) throw new Error('fixture: expected a first row')
+    const afterFirst = await repo.listPublishedForSubject('OPERATOR', 'op1', 20, {
+      publishedAt: sameDate,
+      id: first.id,
+    })
+    expect(afterFirst.map((r) => r.id)).toEqual(full.slice(1).map((r) => r.id))
   })
 })
 
@@ -238,5 +447,111 @@ describe('InMemoryReviewRepository — aggregates (#1085)', () => {
     )
     const out = await repo.aggregateByClass(['cls_1'])
     expect(out.get('cls_1')).toEqual({ sum: 9, count: 2 })
+  })
+})
+
+// Moderation queue keyset pagination + status partition (#1451). Report timestamps drive
+// the (lastReportedAt DESC, reviewId DESC) order, so this seeds the store + reports Maps
+// directly (insertReport stamps createdAt = now, which can't be controlled). The Drizzle
+// mirror of this order/filter is locked by the real-pg integration suite.
+describe('listReported — keyset pagination + status partition (#1451)', () => {
+  const T1 = new Date('2026-06-01T00:00:00Z')
+  const T2 = new Date('2026-06-02T00:00:00Z')
+  const T3 = new Date('2026-06-03T00:00:00Z')
+
+  function review(id: string, over: Partial<Review> = {}): Review {
+    return {
+      id,
+      bookingId: `bk_${id}`,
+      operatorId: 'op_1',
+      authorUserId: `author_${id}`,
+      authorRole: 'RENTER',
+      subject: 'OPERATOR',
+      subjectVehicleId: null,
+      subjectClassId: null,
+      overall: 3,
+      subRatings: {},
+      comment: null,
+      moderationStatus: 'VISIBLE',
+      moderatedBy: null,
+      moderatedAt: null,
+      revealDeadlineAt: REVEAL_DEADLINE,
+      submittedAt: SUBMITTED,
+      publishedAt: SUBMITTED,
+      createdAt: SUBMITTED,
+      updatedAt: SUBMITTED,
+      ...over,
+    }
+  }
+  function report(id: string, reviewId: string, createdAt: Date, reason = 'spam'): ReviewReport {
+    return { id, reviewId, reporterUserId: `reporter_${id}`, reason, createdAt }
+  }
+
+  // Three VISIBLE reviews reported at ascending times + one HIDDEN review with a report.
+  function seed() {
+    const store = new Map<string, Review>([
+      ['rv1', review('rv1')],
+      ['rv2', review('rv2')],
+      ['rv3', review('rv3')],
+      ['rh', review('rh', { moderationStatus: 'HIDDEN' })],
+    ])
+    const reports = new Map<string, ReviewReport>([
+      ['p1', report('p1', 'rv1', T1)],
+      ['p2', report('p2', 'rv2', T2)],
+      ['p3', report('p3', 'rv3', T3)],
+      ['ph', report('ph', 'rh', T2)],
+    ])
+    return new InMemoryReviewRepository(store, reports)
+  }
+
+  it('pages newest-reported first and hands back a cursor to the next page', async () => {
+    const repo = seed()
+    const page1 = await repo.listReported({ limit: 2, status: 'VISIBLE' })
+    expect(page1.items.map((e) => e.review.id)).toEqual(['rv3', 'rv2'])
+    expect(page1.nextCursor).toEqual({ lastReportedAt: T2, reviewId: 'rv2' })
+
+    const page2 = await repo.listReported({
+      limit: 2,
+      status: 'VISIBLE',
+      cursor: page1.nextCursor ?? undefined,
+    })
+    // Only the oldest-reported visible review remains, and the queue is exhausted.
+    expect(page2.items.map((e) => e.review.id)).toEqual(['rv1'])
+    expect(page2.nextCursor).toBeNull()
+  })
+
+  it('the VISIBLE partition never surfaces a HIDDEN review; HIDDEN is a separate queue', async () => {
+    const repo = seed()
+    const visible = await repo.listReported({ limit: 10, status: 'VISIBLE' })
+    expect(visible.items.map((e) => e.review.id)).toEqual(['rv3', 'rv2', 'rv1'])
+    expect(visible.items.some((e) => e.review.id === 'rh')).toBe(false)
+
+    const hidden = await repo.listReported({ limit: 10, status: 'HIDDEN' })
+    expect(hidden.items.map((e) => e.review.id)).toEqual(['rh'])
+  })
+
+  it('breaks a lastReportedAt tie by reviewId descending, and the cursor splits the tie cleanly', async () => {
+    // Two visible reviews reported at the SAME instant -> id-desc tiebreak (rb before ra).
+    const store = new Map<string, Review>([
+      ['ra', review('ra')],
+      ['rb', review('rb')],
+    ])
+    const reports = new Map<string, ReviewReport>([
+      ['pa', report('pa', 'ra', T2)],
+      ['pb', report('pb', 'rb', T2)],
+    ])
+    const repo = new InMemoryReviewRepository(store, reports)
+
+    const page1 = await repo.listReported({ limit: 1, status: 'VISIBLE' })
+    expect(page1.items.map((e) => e.review.id)).toEqual(['rb'])
+    expect(page1.nextCursor).toEqual({ lastReportedAt: T2, reviewId: 'rb' })
+
+    const page2 = await repo.listReported({
+      limit: 1,
+      status: 'VISIBLE',
+      cursor: page1.nextCursor ?? undefined,
+    })
+    expect(page2.items.map((e) => e.review.id)).toEqual(['ra'])
+    expect(page2.nextCursor).toBeNull()
   })
 })

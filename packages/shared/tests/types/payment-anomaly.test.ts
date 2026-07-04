@@ -1,23 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { paymentAnomalyKindEnum, paymentAnomalyResolutionEnum } from '../../src/db/schema'
-import {
-  PAYMENT_ANOMALY_KINDS,
-  PAYMENT_ANOMALY_RESOLUTIONS,
-  type PaymentAnomalyView,
-} from '../../src/types/payment-anomaly'
+import type { PaymentAnomalyView } from '../../src/types/payment-anomaly'
 
+// The kind/resolution unions are pinned to the DB enums (order included) by the
+// #688 SSoT loop in enums.test.ts and the db-drift CI job; this file only guards
+// the PaymentAnomalyView wire shape the API returns and the web consumes.
 describe('PaymentAnomalyView contract', () => {
-  // Drift fence: the web-facing kind union must stay identical to the DB enum
-  // (payment_anomaly_kind). Web cannot import the schema, so this is the only
-  // place the two are pinned together — mirrors the roleEnum guard in schema.test.ts.
-  it('PAYMENT_ANOMALY_KINDS mirrors the payment_anomaly_kind DB enum (order matters)', () => {
-    expect([...PAYMENT_ANOMALY_KINDS]).toEqual([...paymentAnomalyKindEnum.enumValues])
-  })
-
-  it('PAYMENT_ANOMALY_RESOLUTIONS mirrors the payment_anomaly_resolution DB enum (order matters)', () => {
-    expect([...PAYMENT_ANOMALY_RESOLUTIONS]).toEqual([...paymentAnomalyResolutionEnum.enumValues])
-  })
-
   it('a DOUBLE_PAYMENT view carries the refund/reconcile identifiers', () => {
     const view: PaymentAnomalyView = {
       id: 'pa_1',

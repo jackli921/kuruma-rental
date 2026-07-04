@@ -1,22 +1,34 @@
-import type { ReviewAuthorRole, ReviewSubject } from '@kuruma/shared/enums'
+import type { ReviewAuthorRole, ReviewModerationStatus, ReviewSubject } from '@kuruma/shared/enums'
 import {
   computeRevealDeadline,
   decideReveal,
   summarizeSides,
 } from '@kuruma/shared/lib/review-reveal'
-import type { EditReviewInput, SubmitReviewInput } from '@kuruma/shared/validators/review'
+import type {
+  EditReviewInput,
+  ReportReviewInput,
+  SubmitReviewInput,
+} from '@kuruma/shared/validators/review'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
-import { PG_ERROR, REVIEWS_SUBJECT_CONSTRAINT, pgConstraintName, pgErrorCode } from '../pg-errors'
+import {
+  PG_ERROR,
+  REVIEWS_SUBJECT_CONSTRAINT,
+  REVIEW_REPORT_UNIQUE_CONSTRAINT,
+  pgConstraintName,
+  pgErrorCode,
+} from '../pg-errors'
 import type {
   BookingEventRepository,
   BookingRepository,
   NewReview,
   OperatorMembershipRepository,
+  ReportedQueueCursor,
+  ReportedReviewPage,
   ReviewEdit,
   ReviewRepository,
   VehicleRepository,
 } from '../repositories/types'
-import type { Booking, Review } from '../stores'
+import type { Booking, Review, ReviewReport } from '../stores'
 
 interface Fail {
   readonly ok: false
@@ -28,6 +40,7 @@ type Ok<T> = { readonly ok: true } & T
 export type SubmitResult = Ok<{ review: Review }> | Fail
 export type EditResult = Ok<{ review: Review }> | Fail
 export type GetReviewsResult = Ok<{ reviews: Review[] }> | Fail
+export type ReportResult = Ok<{ report: ReviewReport }> | Fail
 export interface SweepSummary {
   readonly scanned: number
   readonly published: number
@@ -35,6 +48,12 @@ export interface SweepSummary {
 }
 
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error })
+
+// Moderation-queue page bounds (#1451). The queue is admin-only and small today, but a
+// list endpoint ships with a limit from day one — an unbounded payload/query is a latent
+// scaling cliff. Callers may request a smaller page; the max caps a hostile/large `limit`.
+const DEFAULT_MODERATION_QUEUE_LIMIT = 20
+const MAX_MODERATION_QUEUE_LIMIT = 100
 
 // The sub-dimensions each direction may rate (#1067). The KEYS of each inner record
 // double as the subjects a given author role is allowed to review — so this one table
@@ -160,6 +179,8 @@ export class ReviewService {
       subRatings,
       comment: input.comment ?? null,
       moderationStatus: 'VISIBLE',
+      moderatedBy: null,
+      moderatedAt: null,
       revealDeadlineAt: computeRevealDeadline(completedAt),
       submittedAt: now,
       publishedAt: null,
@@ -245,19 +266,86 @@ export class ReviewService {
 
     await this.settleReveal(bookingId, now)
     const reviews = await this.reviewRepo.findByBookingId(bookingId)
-    // The reader always sees their own rows; a counterparty row only once published. An
-    // OPERATOR reader additionally sees their operator's OWN side even while hidden /
-    // authored by a colleague (#1158): the operator->renter review is the tenant's, not
-    // the staff member's, so a colleague's pending row must hide the rate-renter prompt.
-    // All OPERATOR rows for a booking share its operatorId, so this never reveals the
-    // renter's still-hidden side — the renter↔operator double-blind stays intact.
-    const visible = reviews.filter(
-      (r) =>
-        r.authorUserId === ctx.userId ||
-        r.publishedAt !== null ||
-        (role === 'OPERATOR' && r.authorRole === 'OPERATOR'),
-    )
+    // The reader always sees their own rows (even after an admin hides them — the author
+    // must know their content was moderated). Every OTHER path is additionally gated on
+    // moderationStatus === 'VISIBLE', so an admin-HIDDEN review stops leaking to a revealed
+    // counterparty or an operator colleague (#1086) — otherwise `publishedAt !== null`
+    // alone would keep surfacing it. Of the remaining rows a reader may see: a counterparty
+    // row once published, and — for an OPERATOR reader — their operator's OWN side even
+    // while hidden/authored by a colleague (#1158), so a colleague's pending row still hides
+    // the rate-renter prompt. All OPERATOR rows share the booking's operatorId, so this never
+    // reveals the renter's still-hidden side — the renter↔operator double-blind stays intact.
+    const visible = reviews.filter((r) => {
+      if (r.authorUserId === ctx.userId) return true
+      if (r.moderationStatus !== 'VISIBLE') return false
+      return r.publishedAt !== null || (role === 'OPERATOR' && r.authorRole === 'OPERATOR')
+    })
     return { ok: true, reviews: visible }
+  }
+
+  /** Flag a review for moderator attention (#1086). Only a publicly-visible review
+   *  (published AND VISIBLE) can be reported: a still-hidden double-blind row, an
+   *  admin-HIDDEN row, and a missing id are indistinguishable — all 404 — so a report
+   *  cannot probe whether a counterparty's review exists yet. A report NEVER auto-hides;
+   *  it only queues the review (owner decision, keeps the model retaliation-proof). The
+   *  unique (reviewId, reporterUserId) seal maps a repeat report to 409 ALREADY_REPORTED
+   *  without a check-then-act race. */
+  async reportReview(
+    ctx: CallerContext,
+    reviewId: string,
+    input: ReportReviewInput,
+  ): Promise<ReportResult> {
+    const review = await this.reviewRepo.findById(reviewId)
+    if (!review || review.publishedAt === null || review.moderationStatus !== 'VISIBLE') {
+      return fail(404, 'REVIEW_NOT_FOUND')
+    }
+    try {
+      const report = await this.reviewRepo.insertReport({
+        reviewId: review.id,
+        reporterUserId: ctx.userId,
+        reason: input.reason,
+      })
+      return { ok: true, report }
+    } catch (err) {
+      if (
+        pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION &&
+        pgConstraintName(err) === REVIEW_REPORT_UNIQUE_CONSTRAINT
+      ) {
+        return fail(409, 'ALREADY_REPORTED')
+      }
+      throw err
+    }
+  }
+
+  /** Admin soft-hide (#1086): flip a review to HIDDEN so it stops surfacing publicly and
+   *  to the counterparty (getForBooking + slice-5 aggregates both gate on VISIBLE), while
+   *  the row is kept for audit. Records WHO hid it and WHEN (#1454) — `ctx.userId` +
+   *  `now` — so a multi-admin platform can attribute the action. Returns the updated row,
+   *  or undefined when no review has that id (→ 404 at the route). Idempotent on status —
+   *  re-hiding stays HIDDEN (and re-stamps the audit with the latest actor). The
+   *  platform-admin write gate is applied in the route (routes/admin-reviews.ts), atop the
+   *  structural `/admin/*` floor. */
+  async hideReview(ctx: CallerContext, reviewId: string, now: Date): Promise<Review | undefined> {
+    return this.reviewRepo.setModerationStatus(reviewId, 'HIDDEN', ctx.userId, now)
+  }
+
+  /** The admin moderation queue (#1086), keyset-paginated + status-partitioned (#1451).
+   *  Defaults to the UNACTIONED partition (VISIBLE) so already-hidden rows don't pile up in
+   *  the working queue; pass status: 'HIDDEN' for the resolved view. `limit` is clamped to
+   *  [1, MAX] so a caller can page smaller but never unbounded. Read-gated by the route. */
+  async listReported(
+    options: {
+      readonly limit?: number | undefined
+      readonly status?: ReviewModerationStatus | undefined
+      readonly cursor?: ReportedQueueCursor | undefined
+    } = {},
+  ): Promise<ReportedReviewPage> {
+    const limit = Math.min(
+      Math.max(Math.trunc(options.limit ?? DEFAULT_MODERATION_QUEUE_LIMIT), 1),
+      MAX_MODERATION_QUEUE_LIMIT,
+    )
+    const status = options.status ?? 'VISIBLE'
+    return this.reviewRepo.listReported({ limit, status, cursor: options.cursor })
   }
 
   /** Daily backstop: publish window-elapsed reviews that no read has settled. Bounded

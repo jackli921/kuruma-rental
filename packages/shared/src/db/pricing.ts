@@ -5,6 +5,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -13,6 +14,8 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { FEE_SCHEDULE_STATUSES, FEE_TYPES, FEE_UNITS, INSURANCE_STATUSES } from '../enums'
+import type { LocalizedText, LocalizedTextOverride } from '../i18n/localized-text'
+import { catalogTemplateStatusEnum } from './add-on'
 import { operators } from './auth'
 import { vehicleClasses } from './fleet'
 import { locations } from './location'
@@ -37,6 +40,18 @@ export const insuranceOptions = pgTable(
       .references(() => operators.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
     description: text('description'),
+    // Catalog i18n (slice 3): the platform template this insurance option
+    // instances — the template supplies the localized name. Nullable through PR1
+    // (the backfill sets every active row); NOT NULL in PR2 (slice 5). onDelete
+    // 'restrict' matches the operators FK convention — a referenced template
+    // can't vanish. Mirrors add_on_options.templateId exactly.
+    templateId: text('templateId').references(() => insuranceTemplates.id, {
+      onDelete: 'restrict',
+    }),
+    // Operator's reworded description as a PARTIAL locale bag (P1-a override type,
+    // NOT LocalizedText — an operator may author one locale only; deferred MT
+    // fills the remaining keys in place). Nullable: most rows keep the template's.
+    descriptionOverride: jsonb('descriptionOverride').$type<LocalizedTextOverride>(),
     dailyPriceJpy: integer('dailyPriceJpy').notNull(),
     // null = no deductible (full cover).
     deductibleJpy: integer('deductibleJpy'),
@@ -55,12 +70,52 @@ export const insuranceOptions = pgTable(
     uniqueIndex('insurance_options_active_name_unique')
       .on(table.operatorId, table.name)
       .where(sql`status = 'ACTIVE'`),
+    // Leading FK-cover index (lint-fk-indexes counts only the LEADING column of an
+    // index; PR2's composite would leave templateId trailing and uncounted).
+    index('idx_insurance_options_templateId').on(table.templateId),
+    // Catalog i18n (P1-b): an operator can't hold the same template twice while
+    // ACTIVE. The WHERE predicate is the OPERATOR ROW status (insurance_status),
+    // NOT the template status (which gates picker visibility, a separate axis).
+    // Kept ALONGSIDE active_name_unique through PR1 (expand-contract): a partial
+    // unique on templateId does not catch duplicate NULLs, so null-templateId rows
+    // in the migration-before-code window stay guarded by the name index;
+    // active_name_unique drops with the name column in PR2 (slice 5).
+    uniqueIndex('insurance_options_active_template_unique')
+      .on(table.operatorId, table.templateId)
+      .where(sql`status = 'ACTIVE'`),
     check('insurance_options_daily_price_non_negative', sql`${table.dailyPriceJpy} >= 0`),
     check(
       'insurance_options_deductible_non_negative',
       sql`${table.deductibleJpy} IS NULL OR ${table.deductibleJpy} >= 0`,
     ),
   ],
+)
+
+// Platform-owned, pre-translated insurance TEMPLATES (catalog i18n, slice 3). An
+// operator picks a template instead of typing a raw name, so a renter reading in
+// ja/zh sees a translated insurance-tier name rather than the operator's English
+// string. name and description are LocalizedText JSONB {en, ja?, zh?} bundles
+// resolved to the caller locale in the service layer. NO operatorId — the catalog
+// is global, shared across every tenant (a picker, not tenant data). key =
+// slugify(canonical English name); the curated seed and the slice-3 backfill both
+// derive it, so it is the stable join handle between an operator's legacy name and
+// its template. Mirrors add_on_templates exactly, reusing catalogTemplateStatusEnum
+// (one CREATE TYPE for both catalog tables).
+export const insuranceTemplates = pgTable(
+  'insurance_templates',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    key: text('key').notNull(),
+    name: jsonb('name').$type<LocalizedText>().notNull(),
+    // Nullable: not every template ships a curated description bundle.
+    description: jsonb('description').$type<LocalizedText>(),
+    status: catalogTemplateStatusEnum('status').notNull().default('ACTIVE'),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('insurance_templates_key_unique').on(table.key)],
 )
 
 // Operator-owned fee schedules (epic #385, slice 4b / #405). Per-operator,

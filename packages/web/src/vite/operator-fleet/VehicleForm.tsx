@@ -59,6 +59,8 @@ interface VehicleFormProps {
   readonly onSaved: () => void
   /** Called when the user cancels without saving. */
   readonly onCancel: () => void
+  /** When a bypass admin has picked an operator, the create body carries it (#1264). */
+  readonly pickedOperatorId?: string | undefined
 }
 
 // Blank numeric inputs must submit `null` (not NaN/undefined) so the nullish
@@ -131,6 +133,7 @@ export function VehicleForm({
   locationOptions,
   onSaved,
   onCancel,
+  pickedOperatorId,
 }: VehicleFormProps) {
   const t = useTranslations('business.vehicles.form')
   // Luggage-size option labels live under the top-level `luggageSize.*` namespace.
@@ -182,8 +185,17 @@ export function VehicleForm({
   })
 
   const mutation = useMutation({
+    // A picked bypass admin carries the operator in the create body (#1264). Unlike
+    // the sibling locations/insurance forms (which wrap `WithOperatorId<...>`), the
+    // shared CreateVehicleInput already declares `operatorId` optional, so we spread
+    // it in conditionally — an operator session's body never gets an operatorId key.
     mutationFn: (data: CreateVehicleInput) =>
-      isEditMode ? updateVehicle(vehicle.id, data, csrfToken) : createVehicle(data, csrfToken),
+      isEditMode
+        ? updateVehicle(vehicle.id, data, csrfToken, pickedOperatorId)
+        : createVehicle(
+            pickedOperatorId ? { ...data, operatorId: pickedOperatorId } : data,
+            csrfToken,
+          ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: FLEET_QUERY_KEY })
       onSaved()

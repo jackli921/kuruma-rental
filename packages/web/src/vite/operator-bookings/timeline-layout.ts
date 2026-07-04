@@ -1,4 +1,6 @@
 import type { CalendarBookingRow, OperatorBookingStatus } from '@/vite/operator-bookings/api'
+import type { BlockCalendarEvent } from '@/vite/operator-bookings/calendar-events'
+import type { VehicleBlockKind } from '@kuruma/shared/enums'
 
 // #1100 fleet timeline: pure transforms turning the operator's calendar rows into
 // the groups (vehicle rows) + items (bars) react-calendar-timeline consumes. Kept
@@ -33,17 +35,40 @@ export interface TimelineGroup {
   title: string
 }
 
-/** One bar. Times are epoch ms already clamped to the visible window. */
-export interface TimelineItem {
+/** Fields every bar shares. Times are epoch ms already clamped to the window. */
+interface TimelineItemCommon {
   id: string
-  bookingId: string
   group: string
   title: string
   start: number
   end: number
+  /** #1349 a11y: whether this bar is the keyboard/screen-reader stop for its subject.
+   *  A booking is exactly ONE stop — the booked band when it renders, otherwise its
+   *  lone-surviving turnaround tail. A suppressed tail (booked sibling present) is
+   *  `false` so the shell can aria-hide it and drop it from the tab order. Blocks are
+   *  always their own stop. */
+  interactive: boolean
+}
+
+/** A booking bar — status-colored, click-decodes back to its booking. */
+export type TimelineBookingItem = TimelineItemCommon & {
+  type: 'booking'
+  bookingId: string
   band: TimelineBand
   status: OperatorBookingStatus
 }
+
+/** A scheduled-block bar — kind-colored, opens the block detail dialog. Carries a
+ *  `kind` (never a `status`), mirroring the calendar's `BlockCalendarEvent` (#1244). */
+export type TimelineBlockItem = TimelineItemCommon & {
+  type: 'block'
+  blockId: string
+  kind: VehicleBlockKind
+}
+
+/** One bar: a booking or a scheduled block. Consumers switch on `type` at the
+ *  boundary (styling, click) so a block never reads as a booking (#1101 P1.2). */
+export type TimelineItem = TimelineBookingItem | TimelineBlockItem
 
 export interface TimelineLayout {
   groups: TimelineGroup[]
@@ -53,6 +78,10 @@ export interface TimelineLayout {
 export interface BuildTimelineArgs {
   readonly rows: readonly CalendarBookingRow[]
   readonly vehicles: readonly { id: string; name: string }[]
+  /** Scheduled maintenance/hold bands, keyed to a fleet vehicle by `resourceId`.
+   *  A block on a vehicle absent from `vehicles` is dropped (never Unassigned —
+   *  blocks are always car-specific, unlike class-only booking floats). */
+  readonly blocks: readonly BlockCalendarEvent[]
   /** Visible window, epoch ms. Bars are clamped to `[from, to]`. */
   readonly from: number
   readonly to: number
@@ -76,6 +105,7 @@ function clampBand(
 export function buildTimelineLayout({
   rows,
   vehicles,
+  blocks,
   from,
   to,
   unassignedLabel,
@@ -97,6 +127,7 @@ export function buildTimelineLayout({
     const booked = clampBand(startMs, endMs, from, to)
     if (booked) {
       items.push({
+        type: 'booking',
         id: r.id,
         bookingId: r.id,
         group,
@@ -105,6 +136,7 @@ export function buildTimelineLayout({
         end: booked.end,
         band: 'booked',
         status: r.status,
+        interactive: true,
       })
       if (group === UNASSIGNED_GROUP_ID) hasUnassignedRow = true
     }
@@ -116,6 +148,7 @@ export function buildTimelineLayout({
       const tail = clampBand(endMs, effEndMs, from, to)
       if (tail) {
         items.push({
+          type: 'booking',
           id: `${r.id}${TURNAROUND_SUFFIX}`,
           bookingId: r.id,
           group,
@@ -124,10 +157,36 @@ export function buildTimelineLayout({
           end: tail.end,
           band: 'turnaround',
           status: r.status,
+          // #1349: the tail is a keyboard/SR stop ONLY when its booked band did not
+          // render (clipped out before the window) — otherwise the booked band is the
+          // single stop and this redundant tail is suppressed. `booked` is truthy iff
+          // that band was pushed above.
+          interactive: !booked,
         })
         if (group === UNASSIGNED_GROUP_ID) hasUnassignedRow = true
       }
     }
+  }
+
+  // Scheduled blocks are bound to a specific car. A block on a vehicle not in the
+  // fleet list is dropped (not routed to Unassigned like a class-only booking float)
+  // — a block has no meaning without its column. Its own window is clamped so a band
+  // straddling the edge still shows its in-window slice.
+  for (const b of blocks) {
+    if (!fleetIds.has(b.resourceId)) continue
+    const band = clampBand(b.start.getTime(), b.end.getTime(), from, to)
+    if (!band) continue
+    items.push({
+      type: 'block',
+      id: b.id,
+      blockId: b.id,
+      group: b.resourceId,
+      title: b.title,
+      start: band.start,
+      end: band.end,
+      kind: b.kind,
+      interactive: true,
+    })
   }
 
   const groups: TimelineGroup[] = vehicles.map((v) => ({ id: v.id, title: v.name }))

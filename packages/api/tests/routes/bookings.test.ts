@@ -84,8 +84,11 @@ function validBookingInput(overrides: Record<string, unknown> = {}) {
   }
 }
 
+// The default app is a PLATFORM_ADMIN (bypassScope). #1260 binds every booking
+// write to the operator the admin acts as, so a create must name it via
+// ?operatorId= — exactly as the status/cancel calls in this file already do.
 async function createBooking(input: Record<string, unknown> = validBookingInput()) {
-  return app.request('/bookings', {
+  return app.request(`/bookings?operatorId=${OPERATOR}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -443,7 +446,9 @@ describe('Booking Routes', () => {
       // Cancel one
       const listRes = await app.request('/bookings')
       const allBookings = await listRes.json()
-      await app.request(`/bookings/${allBookings.data[0].id}/cancel`, { method: 'POST' })
+      await app.request(`/bookings/${allBookings.data[0].id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       const from = futureDate(20)
       const to = futureDate(50)
@@ -679,7 +684,7 @@ describe('Booking Routes', () => {
     async function createNBookings(n: number) {
       const ids: string[] = []
       for (let i = 0; i < n; i++) {
-        const res = await app.request('/bookings', {
+        const res = await app.request(`/bookings?operatorId=${OPERATOR}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(
@@ -749,7 +754,7 @@ describe('Booking Routes', () => {
       const allRes = await app.request('/bookings')
       const allBody = await allRes.json()
       const firstId = allBody.data[0].id
-      await app.request(`/bookings/${firstId}/cancel`, { method: 'POST' })
+      await app.request(`/bookings/${firstId}/cancel?operatorId=${OPERATOR}`, { method: 'POST' })
 
       const res = await app.request('/bookings?status=CONFIRMED&limit=10')
       const body = await res.json()
@@ -792,6 +797,31 @@ describe('Booking Routes', () => {
       expect(body.data.totalPrice).toBe(8000)
       expect(typeof body.data.bookingCode).toBe('string')
       expect(body.data.bookingCode.length).toBeGreaterThan(0)
+    })
+
+    // #1440 (MED-2): POST /bookings has no MANAGEMENT_READ_ROLES gate (renters
+    // self-serve), so a PARTNER (Trip.com) reaches the service. Its create is only
+    // *accidentally* safe in prod — resolveBookingActor forces the synthetic
+    // 'partner:api-key' userId as renterId (no user row -> renter FK fails), and the
+    // inventory bind passes partners through unclamped (bookingReadScope = 'partner',
+    // never 'all'). This harness seeds USER2 as a real user, so WITHOUT an explicit
+    // gate the create would succeed (201) — proving the safety is not designed. Gate
+    // it: a partner books through its channel integration, not manual-create.
+    it('forbids a PARTNER from creating a booking (403) (#1440)', async () => {
+      const partnerApp = new Hono()
+      partnerApp.use('*', testAuthMiddleware(USER2, 'PARTNER'))
+      partnerApp.route('/', createBookingRoutes(service, inertConsentGate))
+
+      const res = await partnerApp.request('/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validBookingInput()),
+      })
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('Partners cannot create bookings')
     })
 
     // #464 slice 2d.4: parallel CLASS_COMBO submits on the same (operator,
@@ -1066,7 +1096,9 @@ describe('Booking Routes', () => {
       const first = await createBooking(validBookingInput())
       const created = await first.json()
 
-      await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       const res = await createBooking(validBookingInput())
       expect(res.status).toBe(201)
@@ -1322,7 +1354,9 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/status`, {
+      // #1260: the default app is a PLATFORM_ADMIN (bypass); it must bind the
+      // write to the booking's operator via ?operatorId= or the guard 422s it.
+      const res = await app.request(`/bookings/${created.data.id}/status?operatorId=${OPERATOR}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'ACTIVE' }),
@@ -1336,11 +1370,52 @@ describe('Booking Routes', () => {
       expect(body.data.id).toBe(created.data.id)
     })
 
-    it('rejects invalid transition CONFIRMED to COMPLETED', async () => {
+    // #1260: the route reads ?operatorId= and passes it as the acting operator; a
+    // bypass admin that names none is refused BEFORE the transition, carrying the
+    // OPERATOR_REQUIRED code so the web can prompt "pick an operator".
+    it('rejects a bypass admin that named no acting operator with 422 OPERATOR_REQUIRED', async () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
       const res = await app.request(`/bookings/${created.data.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ACTIVE' }),
+      })
+
+      expect(res.status).toBe(422)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.code).toBe('OPERATOR_REQUIRED')
+    })
+
+    // Acting as the WRONG operator is a 404 with the same 'Booking not found'
+    // message a truly-unknown id returns — no cross-tenant existence oracle.
+    it('returns 404 (no oracle) when the admin acts as an operator that does not own the booking', async () => {
+      const WRONG_OPERATOR = '00000000-0000-4000-8000-0000000000c2'
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(
+        `/bookings/${created.data.id}/status?operatorId=${WRONG_OPERATOR}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'ACTIVE' }),
+        },
+      )
+
+      expect(res.status).toBe(404)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('Booking not found')
+    })
+
+    it('rejects invalid transition CONFIRMED to COMPLETED', async () => {
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/status?operatorId=${OPERATOR}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'COMPLETED' }),
@@ -1357,9 +1432,11 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
-      const res = await app.request(`/bookings/${created.data.id}/status`, {
+      const res = await app.request(`/bookings/${created.data.id}/status?operatorId=${OPERATOR}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'ACTIVE' }),
@@ -1419,7 +1496,11 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      // #1260: the default app is a PLATFORM_ADMIN (bypass); /cancel now binds the
+      // write to the booking's operator via ?operatorId= just like /status.
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       expect(res.status).toBe(200)
 
@@ -1433,7 +1514,7 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: { code: 'TRIP_CANCELLED', note: 'flight cancelled' } }),
@@ -1448,7 +1529,7 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: { code: 'CHANGE_OF_PLANS', note: null } }),
@@ -1462,7 +1543,7 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: { code: 'OTHER', note: '   ' } }),
@@ -1498,18 +1579,20 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      await app.request(`/bookings/${created.data.id}/status`, {
+      await app.request(`/bookings/${created.data.id}/status?operatorId=${OPERATOR}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'ACTIVE' }),
       })
-      await app.request(`/bookings/${created.data.id}/status`, {
+      await app.request(`/bookings/${created.data.id}/status?operatorId=${OPERATOR}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'COMPLETED' }),
       })
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       expect(res.status).toBe(409)
 
@@ -1528,6 +1611,77 @@ describe('Booking Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(false)
       expect(body.error).toBe('Booking not found')
+    })
+
+    // #1260: /cancel has no route gate, so the bypass admin must name the operator
+    // it acts as — otherwise it could cancel any tenant's booking (refund-moving).
+    it('rejects a bypass admin that named no acting operator with 422 OPERATOR_REQUIRED', async () => {
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+
+      expect(res.status).toBe(422)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.code).toBe('OPERATOR_REQUIRED')
+    })
+
+    it('returns 404 (no oracle) when the admin acts as an operator that does not own it', async () => {
+      const WRONG_OPERATOR = '00000000-0000-4000-8000-0000000000c2'
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(
+        `/bookings/${created.data.id}/cancel?operatorId=${WRONG_OPERATOR}`,
+        { method: 'POST' },
+      )
+
+      expect(res.status).toBe(404)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('Booking not found')
+    })
+
+    // The regression guard for expanding the fix to /cancel: a renter self-cancel
+    // is renter-scoped, so the booking guard clears it — no ?operatorId= required.
+    it('still lets a renter self-cancel their own booking without naming an operator', async () => {
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const renterApp = new Hono()
+      renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
+
+      const res = await renterApp.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      expect(body.data.status).toBe('CANCELLED')
+    })
+
+    // #1367: a PARTNER (Trip.com) books but does not MANAGE the order — it is
+    // excluded from /status, /substitute and /events for the same reason. /cancel
+    // has no role gate (renters must self-cancel), so a PARTNER's `partner` read
+    // scope would otherwise let it cancel any TRIP_COM-sourced booking across
+    // operators. Rejected at the route, before it can resolve any booking.
+    it('forbids a PARTNER from cancelling (403)', async () => {
+      const partnerApp = new Hono()
+      partnerApp.use('*', testAuthMiddleware(USER2, 'PARTNER'))
+      partnerApp.route('/', createBookingRoutes(service, inertConsentGate))
+
+      const res = await partnerApp.request(
+        '/bookings/00000000-0000-4000-8000-00000000abcd/cancel',
+        {
+          method: 'POST',
+        },
+      )
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('Partners cannot cancel bookings')
     })
 
     // Cancellation fee tiers. The vehicle's 10,000 JPY/day rate gives the 24h
@@ -1557,7 +1711,9 @@ describe('Booking Routes', () => {
       )
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -1577,7 +1733,9 @@ describe('Booking Routes', () => {
       )
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -1593,7 +1751,9 @@ describe('Booking Routes', () => {
       )
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      const res = await app.request(`/bookings/${created.data.id}/cancel?operatorId=${OPERATOR}`, {
+        method: 'POST',
+      })
 
       expect(res.status).toBe(200)
       const body = await res.json()

@@ -19,15 +19,22 @@ interface AddFeeDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   classes: readonly FeeClassOption[]
+  /** #1442: a picker admin stamps the chosen operatorId into the create body; an
+   *  operator session omits it (the server auto-scopes the tenant). */
+  pickedOperatorId?: string | undefined
 }
 
-export function AddFeeDialog({ open, onOpenChange, classes }: AddFeeDialogProps) {
+export function AddFeeDialog({ open, onOpenChange, classes, pickedOperatorId }: AddFeeDialogProps) {
   const t = useTranslations('business.fees')
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
 
   const { mutateAsync, isPending, error, reset } = useMutation({
-    mutationFn: (data: CreateFeeScheduleInput) => createFeeSchedule(data, csrfToken),
+    mutationFn: (data: CreateFeeScheduleInput) =>
+      createFeeSchedule(
+        pickedOperatorId ? { ...data, operatorId: pickedOperatorId } : data,
+        csrfToken,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: FEE_QUERY_KEY })
       onOpenChange(false)

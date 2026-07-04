@@ -2,7 +2,7 @@ import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
 import { Hono } from 'hono'
 import { PUBLIC_CONTEXT } from '../middleware/auth'
 import type { FlatSearchService } from '../services/flat-search'
-import { cachePublic, fail, ok, parseDateRange, parseLimit } from './helpers'
+import { cachePublic, failResult, ok, parseDateRange, parseLimit } from './helpers'
 import { rateLimitByIp } from './rate-limit'
 
 const DEFAULT_LIMIT = 25
@@ -53,7 +53,7 @@ export function createFlatSearchRoutes(
       ...(classes && classes.length > 0 ? { classes } : {}),
       ...(cursor ? { cursor } : {}),
     })
-    if (!result.ok) return fail(c, result.error, result.status)
+    if (!result.ok) return failResult(c, result)
     cachePublic(c, CACHE_SECONDS)
     return ok(c, result.data)
   })

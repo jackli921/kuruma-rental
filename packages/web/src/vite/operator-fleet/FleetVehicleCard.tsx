@@ -1,3 +1,4 @@
+import { OperatorBadge } from '@/vite/operator-context'
 import { FleetEditButton } from '@/vite/operator-fleet/FleetEditButton'
 import { FleetRowActions } from '@/vite/operator-fleet/FleetRowActions'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
@@ -17,6 +18,10 @@ interface FleetVehicleCardProps {
   readonly todayIso: string
   // For the name → detail link (#527). An anchor, rendered for read-only roles too.
   readonly locale: string
+  /** All-mode only: resolves the per-vehicle operator label; undefined ⇒ no badge (#1264). */
+  readonly operatorNameFor?: ((vehicle: OperatorFleetVehicle) => string | undefined) | undefined
+  /** #1260: the operator a picker-admin picked, bound onto each write; undefined for operator sessions. */
+  readonly pickedOperatorId?: string | undefined
 }
 
 // Grid-mode card for one fleet vehicle (#561). Carries the same per-row
@@ -32,6 +37,8 @@ export function FleetVehicleCard({
   canWrite,
   todayIso,
   locale,
+  operatorNameFor,
+  pickedOperatorId,
 }: FleetVehicleCardProps) {
   const t = useTranslations('business.vehicles.fleet')
   const tBulk = useTranslations('business.vehicles.bulk')
@@ -67,13 +74,16 @@ export function FleetVehicleCard({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <Link
-            to="/$locale/manage/fleet/$vehicleId"
-            params={{ locale, vehicleId: vehicle.id }}
-            className="block truncate font-medium hover:underline"
-          >
-            {vehicle.name}
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/$locale/manage/fleet/$vehicleId"
+              params={{ locale, vehicleId: vehicle.id }}
+              className="block truncate font-medium hover:underline"
+            >
+              {vehicle.name}
+            </Link>
+            <OperatorBadge name={operatorNameFor?.(vehicle)} />
+          </div>
           <div className="truncate text-xs text-muted-foreground">
             {vehicle.licensePlate ?? t('none')}
           </div>
@@ -84,7 +94,11 @@ export function FleetVehicleCard({
         {canWrite && (
           <div className="inline-flex shrink-0 items-start gap-1">
             <FleetEditButton onEdit={onEdit} />
-            <FleetRowActions vehicle={vehicle} onEdit={onEdit} />
+            <FleetRowActions
+              vehicle={vehicle}
+              onEdit={onEdit}
+              pickedOperatorId={pickedOperatorId}
+            />
           </div>
         )}
       </div>

@@ -6,8 +6,16 @@ import { STORAGE_STATE } from './e2e/real-db/constants'
 // branch, with a minted Auth.js session cookie. Own ports so it never collides
 // with the mock track's servers (web 3001 / mock-api 8787).
 const WEB_PORT = 3002
+// #1423: a SECOND Vite server, identical to the one above but with
+// VITE_SEARCH_MAP_ENABLED baked ON, so /search renders the map+list view and its
+// CLASS_COMBO `ComboRow` card. It exists so the one spec that needs the in-search
+// class-deal card can run WITHOUT flipping the flag for the whole lane — which would
+// swap every other spec's store-grid view out from under it and, worse, stop testing
+// the actual default beta view (the store grid).
+const MAP_WEB_PORT = 3003
 const API_PORT = 8788
 const BASE_URL = `http://localhost:${WEB_PORT}`
+const MAP_BASE_URL = `http://localhost:${MAP_WEB_PORT}`
 const API_URL = `http://localhost:${API_PORT}`
 
 // knip (lint:deps) imports this module to resolve its entry points (webServer
@@ -23,6 +31,26 @@ if (AUTH_SECRET === undefined || DATABASE_URL === undefined) {
       'Run: AUTH_SECRET=<secret> DATABASE_URL=<neon-branch-url> bun run test:e2e:real-db',
   )
 }
+
+// These real-DB specs exercise features the beta demo gates OFF — cancellation
+// (#868), operator manual booking (#589), team (#904), settings (#903), reviews
+// (#1083-1086), the fleet timeline (#1100), multi-currency indicative display
+// (#1070), the operator Today panel (#1102) and the calendar booking quick-view
+// (#1282). Enable them here so e2e covers the FULL product; the beta Pages build
+// (deploy.yml) sets none of these, so the demo still hides them. Fail-safe-OFF
+// default lives in vite/config/features.ts. Shared by both Vite servers below.
+const VITE_FEATURE_ENV = {
+  VITE_FEATURE_CANCELLATION: 'true',
+  VITE_FEATURE_OPERATOR_MANUAL_BOOKING: 'true',
+  VITE_FEATURE_OPERATOR_TEAM: 'true',
+  VITE_FEATURE_OPERATOR_SETTINGS: 'true',
+  VITE_FEATURE_RENTER_DOCUMENTS: 'true',
+  VITE_FEATURE_REVIEWS: 'true',
+  VITE_FEATURE_FLEET_TIMELINE: 'true',
+  VITE_FEATURE_MULTI_CURRENCY: 'true',
+  VITE_FEATURE_OPERATOR_TODAY: 'true',
+  VITE_FEATURE_CALENDAR_QUICKVIEW: 'true',
+} as const
 
 export default defineConfig({
   testDir: './e2e/real-db',
@@ -45,6 +73,17 @@ export default defineConfig({
       testMatch: /.*\.auth\.spec\.ts/,
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'], storageState: STORAGE_STATE },
+    },
+    {
+      // #1423: the CLASS_COMBO in-search discovery spec. Runs against the map-enabled
+      // Vite server (MAP_BASE_URL) so /search renders the map+list view + ComboRow.
+      // Its own `*.map.spec.ts` suffix keeps it out of the store-grid project above
+      // (whose `/.*\.auth\.spec\.ts/` never matches it) and vice-versa, so each view
+      // is exercised only by the specs written for it.
+      name: 'authenticated-real-db-map',
+      testMatch: /.*\.map\.spec\.ts/,
+      dependencies: ['setup'],
+      use: { ...devices['Desktop Chrome'], storageState: STORAGE_STATE, baseURL: MAP_BASE_URL },
     },
   ],
 
@@ -73,24 +112,23 @@ export default defineConfig({
       timeout: 120_000,
       env: {
         VITE_DEV_API_PROXY: API_URL,
-        // These real-DB specs exercise features the beta demo gates OFF —
-        // cancellation (#868), operator manual booking (#589), team (#904),
-        // settings (#903), reviews (#1083-1086), the fleet timeline (#1100),
-        // multi-currency indicative display (#1070), the operator Today panel
-        // (#1102) and the calendar booking quick-view (#1282). Enable them here so
-        // e2e covers the FULL product; the beta Pages build (deploy.yml) sets none
-        // of these, so the demo still hides them. Fail-safe-OFF default lives in
-        // vite/config/features.ts.
-        VITE_FEATURE_CANCELLATION: 'true',
-        VITE_FEATURE_OPERATOR_MANUAL_BOOKING: 'true',
-        VITE_FEATURE_OPERATOR_TEAM: 'true',
-        VITE_FEATURE_OPERATOR_SETTINGS: 'true',
-        VITE_FEATURE_RENTER_DOCUMENTS: 'true',
-        VITE_FEATURE_REVIEWS: 'true',
-        VITE_FEATURE_FLEET_TIMELINE: 'true',
-        VITE_FEATURE_MULTI_CURRENCY: 'true',
-        VITE_FEATURE_OPERATOR_TODAY: 'true',
-        VITE_FEATURE_CALENDAR_QUICKVIEW: 'true',
+        ...VITE_FEATURE_ENV,
+      },
+    },
+    {
+      // #1423: map-enabled twin of the Vite server above. Same real API + proxy +
+      // feature flags; the ONLY delta is VITE_SEARCH_MAP_ENABLED, which flips
+      // /search to the map+list view so the CLASS_COMBO ComboRow renders for the
+      // `authenticated-real-db-map` project's `*.map.spec.ts`.
+      command: 'bunx vite --port 3003',
+      cwd: 'packages/web',
+      url: MAP_BASE_URL,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      env: {
+        VITE_DEV_API_PROXY: API_URL,
+        ...VITE_FEATURE_ENV,
+        VITE_SEARCH_MAP_ENABLED: 'true',
       },
     },
   ],

@@ -31,9 +31,12 @@ import { createAddOnRoutes } from './routes/add-ons'
 import { createAdminRoutes } from './routes/admin'
 import { createAdminBookingRoutes } from './routes/admin-bookings'
 import { createAdminConsentRoutes } from './routes/admin-consent'
+import { createAdminOperatorApplicationRoutes } from './routes/admin-operator-applications'
 import { createAdminOperatorRoutes } from './routes/admin-operators'
 import { createAdminOverviewRoutes } from './routes/admin-overview'
 import { createAdminRevenueRoutes } from './routes/admin-revenue'
+import { createAdminReviewRoutes } from './routes/admin-reviews'
+import { createAdminTemplateRoutes } from './routes/admin-templates'
 import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
@@ -50,15 +53,17 @@ import { createLocationRoutes } from './routes/locations'
 import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
 import { createNotificationRoutes } from './routes/notifications'
+import { createOperatorApplicationRoutes } from './routes/operator-applications'
 import { createOperatorTeamRoutes } from './routes/operator-team'
 import { createOperatorRoutes } from './routes/operators'
 import { createOverviewRoutes } from './routes/overview'
 import { createPaymentAnomalyRoutes } from './routes/payment-anomalies'
 import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
-import { rateLimitByIp } from './routes/rate-limit'
+import { rateLimitByIpExcept } from './routes/rate-limit'
 import { createRegionRoutes } from './routes/regions'
 import { createReviewAggregateRoutes } from './routes/review-aggregates'
+import { createReviewListRoutes } from './routes/review-list'
 import { createReviewRoutes } from './routes/reviews'
 import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
@@ -79,6 +84,7 @@ import { type RecordAuditEvent, toAuditRow } from './services/audit'
 import { AvailabilityService } from './services/availability'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
+import { ClassOfferingService } from './services/class-offering'
 import { ComplianceDigestService } from './services/compliance-digest'
 import { ConsentService } from './services/consent'
 import { ConsentEvidenceService } from './services/consent-evidence'
@@ -102,6 +108,7 @@ import { NotificationService } from './services/notification'
 import { NotificationDispatcher } from './services/notification-dispatcher'
 import { NotificationRetryService } from './services/notification-retry'
 import { OperatorService } from './services/operator'
+import { OperatorApplicationService } from './services/operator-application'
 import { createOperatorGrantService } from './services/operator-grant'
 import {
   makeResolveOperatorRecipients,
@@ -117,8 +124,10 @@ import { ProviderInviteService } from './services/provider-invite'
 import { RenterDocumentService } from './services/renter-document'
 import { ReviewService } from './services/review'
 import { ReviewAggregateService } from './services/review-aggregate'
+import { ReviewListService } from './services/review-list'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
+import { TemplateLibraryService } from './services/template-library'
 import { createTranslationProvider } from './services/translation-provider-factory'
 import { UserDirectoryService } from './services/user-directory'
 import { VehicleService } from './services/vehicle'
@@ -159,6 +168,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     insuranceOptionRepo,
     addOnRepo,
     addOnTemplateRepo,
+    insuranceTemplateRepo,
     feeScheduleRepo,
     notificationLogRepo,
     storefrontRepo,
@@ -168,6 +178,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     paymentAnomalyRepo,
     providerInviteRepo,
     operatorMembershipRepo,
+    operatorApplicationRepo,
     auditLogRepo,
     bookingEventRepo,
     reviewRepo,
@@ -177,6 +188,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     complianceAlertLogRepo,
     runInTransaction,
     runOperatorGrant,
+    runOperatorApproval,
     photosPublicUrl,
     googleAuthRuntime,
   } = repos
@@ -191,6 +203,11 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const publicCatalogLimiter =
     overrides?.publicCatalogLimiter ??
     ((globalThis as Record<string, unknown>).PUBLIC_CATALOG_LIMITER as RateLimitBinding | undefined)
+  const operatorApplicationLimiter =
+    overrides?.operatorApplicationLimiter ??
+    ((globalThis as Record<string, unknown>).OPERATOR_APPLICATION_LIMITER as
+      | RateLimitBinding
+      | undefined)
 
   const translationProvider = createTranslationProvider()
 
@@ -237,6 +254,12 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorRepo,
     { webBaseUrl },
     recordAudit,
+  )
+  const operatorApplicationService = new OperatorApplicationService(
+    operatorApplicationRepo,
+    recordAudit,
+    runOperatorApproval,
+    { webBaseUrl },
   )
   // #904: operator self-service team page. Reuses providerInviteService to mint
   // (so the audit trail + TTL stay single-sourced); reads invites + members
@@ -293,12 +316,14 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // Rate limiting via Cloudflare's native rate limit binding. Atomic counters
   // with sub-ms latency, no KV race conditions. Gracefully skipped in local
   // dev (binding absent). When present it fails closed on an unresolvable IP
-  // (#580) rather than bypassing via a shared "" key.
+  // (#580) rather than bypassing via a shared "" key. The Stripe webhook is
+  // EXEMPT (#1377): it is signature-gated and would share one per-IP bucket
+  // across all of Stripe's source IPs, so a budget there could drop payments.
   const rateLimiter = (globalThis as Record<string, unknown>).RATE_LIMITER as
     | RateLimitBinding
     | undefined
   if (rateLimiter) {
-    app.use('*', rateLimitByIp(rateLimiter))
+    app.use('*', rateLimitByIpExcept(rateLimiter))
   }
 
   // CSRF guard for the cookie session (design spec §5.4). Must run before the
@@ -461,8 +486,21 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const vehicleService = new VehicleService(vehicleRepo, resolveWriteOperatorId, photosPublicUrl)
   const locationService = new LocationService(locationRepo, bookingRepo, cachedGeocoder, regionRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
-  const addOnService = new AddOnService(addOnRepo, addOnTemplateRepo)
-  const addOnTemplateService = new AddOnTemplateService(addOnTemplateRepo, addOnRepo)
+  const featureFlagsService = new FeatureFlagsService(featureFlagRepo)
+  // #1437: SHARED_CATALOG is server-enforced. Both the operator picker read (empty when
+  // off) and the add-on create path (reject a templateId when off) gate on ONE narrow
+  // thunk (ISP) rather than the whole FeatureFlagsService.
+  const isSharedCatalogEnabled = () => featureFlagsService.isEnabled('SHARED_CATALOG')
+  const addOnService = new AddOnService(addOnRepo, addOnTemplateRepo, isSharedCatalogEnabled)
+  const addOnTemplateService = new AddOnTemplateService(
+    addOnTemplateRepo,
+    addOnRepo,
+    isSharedCatalogEnabled,
+  )
+  const templateLibraryService = new TemplateLibraryService(
+    addOnTemplateRepo,
+    insuranceTemplateRepo,
+  )
   const feeScheduleService = new FeeScheduleService(feeScheduleRepo)
   const storefrontSearchService = new StorefrontSearchService(
     storefrontRepo,
@@ -470,19 +508,21 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     vehicleClassRepo,
     regionRepo,
   )
+  const classOfferingService = new ClassOfferingService(classRatePlanRepo, availabilityRepo)
   const storefrontDetailService = new StorefrontDetailService(
     storefrontRepo,
     availabilityRepo,
     vehicleClassRepo,
     insuranceOptionRepo,
     addOnRepo,
+    classOfferingService,
   )
   const flatSearchService = new FlatSearchService(
     storefrontRepo,
     availabilityRepo,
     vehicleClassRepo,
     regionRepo,
-    classRatePlanRepo,
+    classOfferingService,
   )
   const reviewService = new ReviewService(
     reviewRepo,
@@ -492,7 +532,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorMembershipRepo,
   )
   const reviewAggregateService = new ReviewAggregateService(reviewRepo)
-  const featureFlagsService = new FeatureFlagsService(featureFlagRepo)
+  const reviewListService = new ReviewListService(reviewRepo, userRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
@@ -528,6 +568,10 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     )
     .route('/', createFlatSearchRoutes(flatSearchService, publicCatalogLimiter))
     .route('/', createProviderInviteRoutes(providerInviteService, publicCatalogLimiter))
+    .route(
+      '/',
+      createOperatorApplicationRoutes(operatorApplicationService, operatorApplicationLimiter),
+    )
     .route('/', createRegionRoutes(regionRepo))
     .route('/', createFxRoutes(fxRateProvider))
     .route('/', createVehicleRoutes(vehicleService, maintenanceService))
@@ -543,7 +587,9 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createVehicleBlockRoutes(vehicleBlockService))
     .route('/', createBookingRoutes(bookingService, consentGate))
     .route('/', createReviewRoutes(reviewService))
+    .route('/', createAdminReviewRoutes(reviewService))
     .route('/', createReviewAggregateRoutes(reviewAggregateService, publicCatalogLimiter))
+    .route('/', createReviewListRoutes(reviewListService, publicCatalogLimiter))
     .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityService))
     .route('/', createStatsRoutes(statsRepo))
@@ -551,6 +597,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createAdminRevenueRoutes(adminRevenueService))
     .route('/', createAdminBookingRoutes(adminBookingService))
     .route('/', createAdminOperatorRoutes(operatorService, operatorSummaryService))
+    .route('/', createAdminOperatorApplicationRoutes(operatorApplicationService))
     .route('/', createFeatureFlagsRoutes(featureFlagsService))
     .route('/', createAdminOverviewRoutes(adminOverviewService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
@@ -568,6 +615,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))
     .route('/', createAddOnRoutes(addOnService, resolveWriteOperatorId))
     .route('/', createAddOnTemplateRoutes(addOnTemplateService))
+    .route('/', createAdminTemplateRoutes(templateLibraryService))
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))
     .route('/', createNotificationRoutes(notificationService))
     .route('/', createOperatorRoutes(operatorService))

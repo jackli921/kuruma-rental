@@ -125,12 +125,20 @@ export function createLocation(
   return writeJson('/locations', 'POST', data, csrfToken)
 }
 
+// #1456: PATCH/DELETE bind to the picked operator via `?operatorId=` (the API 422s a
+// bypass admin who names none, 404s a mismatch). An operator session omits it.
+function operatorQuery(pickedOperatorId?: string): string {
+  return pickedOperatorId ? `?operatorId=${encodeURIComponent(pickedOperatorId)}` : ''
+}
+
 export function updateLocation(
   id: string,
   data: UpdateLocationInput,
   csrfToken: string,
+  pickedOperatorId?: string,
 ): Promise<OperatorLocation> {
-  return writeJson(`/locations/${encodeURIComponent(id)}`, 'PATCH', data, csrfToken)
+  const path = `/locations/${encodeURIComponent(id)}${operatorQuery(pickedOperatorId)}`
+  return writeJson(path, 'PATCH', data, csrfToken)
 }
 
 /**
@@ -154,8 +162,13 @@ export class LocationArchiveBlockedError extends Error {
 // else collapses to the generic ApiError (same contract as `unwrap`). The CSRF
 // header still rides along because a cookie-authed DELETE is a mutation the guard
 // protects.
-export async function archiveLocation(id: string, csrfToken: string): Promise<OperatorLocation> {
-  const res = await fetch(`${getApiBaseUrl()}/locations/${encodeURIComponent(id)}`, {
+export async function archiveLocation(
+  id: string,
+  csrfToken: string,
+  pickedOperatorId?: string,
+): Promise<OperatorLocation> {
+  const path = `/locations/${encodeURIComponent(id)}${operatorQuery(pickedOperatorId)}`
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: { 'X-CSRF-Token': csrfToken },

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { ConflictError } from '../../src/auth/guards'
+import { ConflictError, NotFoundError } from '../../src/auth/guards'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
 import { InMemoryProviderInviteRepository } from '../../src/repositories/in-memory/provider-invite'
 import {
@@ -79,6 +79,12 @@ describe('ProviderInviteService.createInvite', () => {
     ).rejects.toThrow(OperatorNotFoundError)
     // The guard runs before the insert + audit — no partial side effects leak out.
     expect(audits).toEqual([])
+  })
+
+  it('OperatorNotFoundError is a NotFoundError so the global handler maps it to 404, not 500 (c1)', () => {
+    const err = new OperatorNotFoundError('op_missing')
+    expect(err).toBeInstanceOf(NotFoundError)
+    expect(err.operatorId).toBe('op_missing')
   })
 
   it('emits a privilege-grant audit event that does not leak the token', async () => {
