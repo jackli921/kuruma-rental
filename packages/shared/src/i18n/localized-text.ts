@@ -69,3 +69,18 @@ export function resolveDescription(
 ): string | null {
   return override?.[locale] ?? template?.[locale] ?? template?.en ?? null
 }
+
+/**
+ * Self-authored description (#1437): resolve an operator-OWNED description bag that
+ * has NO template floor behind it. Unlike `resolveDescription`, floor to ANY present
+ * locale (`[locale] -> en -> ja -> zh -> null`) so a single-locale bag never renders
+ * blank to another locale's reader while text exists. Returns null only when the
+ * operator authored no description. Used on the self-authored branch only; the picked
+ * path keeps `resolveDescription`'s per-locale-then-template-en fall-through.
+ */
+export function resolveOwnDescription(
+  bundle: LocalizedTextOverride | null,
+  locale: Locale,
+): string | null {
+  return bundle?.[locale] ?? bundle?.en ?? bundle?.ja ?? bundle?.zh ?? null
+}

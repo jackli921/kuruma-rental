@@ -1,6 +1,6 @@
 {
-  "id": "2f63e9cf-aa40-42c7-a48a-e5648aac0dc6",
-  "prevId": "422de279-fd24-4976-b81f-dcc94a8ebff0",
+  "id": "e5b2b234-5ef3-40dd-94d5-fc16ff20fff0",
+  "prevId": "2f63e9cf-aa40-42c7-a48a-e5648aac0dc6",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5737,6 +5737,114 @@
           "value": "\"reviews\".\"subjectClassId\" IS NULL OR \"reviews\".\"subject\" = 'VEHICLE'"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.review_reports": {
+      "name": "review_reports",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "reviewId": {
+          "name": "reviewId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reporterUserId": {
+          "name": "reporterUserId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "review_reports_one_per_reporter": {
+          "name": "review_reports_one_per_reporter",
+          "columns": [
+            {
+              "expression": "reviewId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "reporterUserId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_review_reports_reporterUserId": {
+          "name": "idx_review_reports_reporterUserId",
+          "columns": [
+            {
+              "expression": "reporterUserId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "review_reports_reviewId_reviews_id_fk": {
+          "name": "review_reports_reviewId_reviews_id_fk",
+          "tableFrom": "review_reports",
+          "tableTo": "reviews",
+          "columnsFrom": [
+            "reviewId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "review_reports_reporterUserId_users_id_fk": {
+          "name": "review_reports_reporterUserId_users_id_fk",
+          "tableFrom": "review_reports",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reporterUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.feature_flags": {

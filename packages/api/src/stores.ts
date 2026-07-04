@@ -426,9 +426,10 @@ export interface AddOn {
   description: string | null
   /**
    * Catalog i18n (slice 2): the platform template this add-on instances — the
-   * template supplies the localized name. Nullable through PR1 (the backfill
-   * stamps every active row; NOT NULL in PR2/slice 5). Legacy null-templateId
-   * rows fall back to the `name` column at resolution.
+   * template supplies the localized name. STAYS nullable (#1437 cancelled the
+   * PR2/slice-5 NOT-NULL flip): a SELF-AUTHORED row is legitimately null here and
+   * carries `nameI18n` instead. Legacy null-both rows fall back to the `name`
+   * column at resolution.
    */
   templateId: string | null
   /**
@@ -436,6 +437,13 @@ export interface AddOn {
    * LocalizedText — one locale may be authored alone). Null keeps the template's.
    */
   descriptionOverride: LocalizedTextOverride | null
+  /**
+   * SELF-AUTHORED name bundle (#1437): a full LocalizedText the operator owns for
+   * an item that does NOT pick a shared template. Null for a PICKED row (the
+   * template supplies the name) and for a legacy row. A row is picked XOR
+   * self-authored — the DB `add_on_options_not_both_identities` CHECK seals it.
+   */
+  nameI18n: LocalizedText | null
   priceJpy: number
   status: AddOnStatus
   createdAt: Date

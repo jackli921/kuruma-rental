@@ -775,6 +775,13 @@
         "price": "{price} per booking"
       },
       "form": {
+        "identityLegend": "How do you want to add this?",
+        "identityTemplate": "Pick from catalog",
+        "identityCustom": "Create your own",
+        "nameEn": "Name (English)",
+        "nameJa": "Name (Japanese)",
+        "nameZh": "Name (Chinese)",
+        "customNameNudge": "Tourists see English wherever Japanese or Chinese is blank. Fill both to reach more renters.",
         "template": "Add-on",
         "templatePlaceholder": "Select an add-on",
         "description": "Description",

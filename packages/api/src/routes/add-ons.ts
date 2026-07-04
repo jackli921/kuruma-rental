@@ -89,7 +89,10 @@ export function createAddOnRoutes(
         ctx,
         {
           operatorId,
+          // Exactly one of templateId / nameI18n is set (createAddOnSchema refine);
+          // forward both so the service branches picked vs self-authored (#1437).
           templateId: d.templateId,
+          nameI18n: d.nameI18n,
           descriptionOverride: d.descriptionOverride ?? null,
           priceJpy: d.priceJpy,
         },

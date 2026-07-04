@@ -17,19 +17,25 @@
  */
 
 import type { AddOnStatus } from '../enums'
-import type { LocalizedTextOverride } from '../i18n/localized-text'
+import type { LocalizedText, LocalizedTextOverride } from '../i18n/localized-text'
 
 export interface OperatorAddOnData {
   id: string
   operatorId: string
-  /** Picked platform template; null only for legacy rows (PR1 nullable window). */
+  /** Picked platform template; null for a self-authored row or a legacy row. */
   templateId: string | null
-  /** Template name resolved to the caller locale (English fallback). */
+  /** Template or self-authored name resolved to the caller locale (English fallback). */
   resolvedName: string
   /** override[locale] -> template[locale] -> template.en -> legacy column -> null. */
   resolvedDescription: string | null
   /** The operator's RAW authored description bag, for the edit form's locale slot. */
   descriptionOverride: LocalizedTextOverride | null
+  /**
+   * SELF-AUTHORED name bundle (#1437), returned RAW so the edit form can add ja/zh
+   * or fix en later (D5). Null for a PICKED row (the template owns the name) and
+   * for a legacy row — mutually exclusive with a non-null `templateId`.
+   */
+  nameI18n: LocalizedText | null
   priceJpy: number
   status: AddOnStatus
 }

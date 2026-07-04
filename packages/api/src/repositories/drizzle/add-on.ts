@@ -122,6 +122,7 @@ export class DrizzleAddOnRepository implements AddOnRepository {
         description: data.description,
         templateId: data.templateId,
         descriptionOverride: data.descriptionOverride,
+        nameI18n: data.nameI18n,
         priceJpy: data.priceJpy,
         status: data.status,
       })
