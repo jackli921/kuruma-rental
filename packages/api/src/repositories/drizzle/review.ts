@@ -148,14 +148,28 @@ export class DrizzleReviewRepository implements ReviewRepository {
     // unactioned (VISIBLE) and never accumulates HIDDEN rows (#1451) — and (b) keyset-
     // paginate on (lastReportedAt DESC, reviewId DESC). reportCount === distinct reporters
     // (the one-per-reporter unique seal), so the join to reviews doesn't fan out the count.
-    const lastReportedAt = max(reviewReports.createdAt)
+    // Sort key, truncated to MILLISECONDS so the DB-side precision equals the cursor's:
+    // review_reports.createdAt is defaultNow() (MICROSECONDS), but the cursor round-trips
+    // through Date.toISOString() (ms). Comparing a µs aggregate against an ms cursor silently
+    // drops a same-ms/different-µs neighbour on the far side of a page boundary — a reported
+    // review the moderator never sees, so it is never hidden and keeps counting in the public
+    // aggregate. Truncating both sides to ms makes the boundary exact — the lossless round-trip
+    // #1449 gets for free from its JS-Date-written publishedAt. (InMemory can't catch the gap:
+    // its reports stamp ms JS Dates, so it is already lossless.)
+    // `.mapWith` reattaches the createdAt column's date decoder that the raw `date_trunc`
+    // wrapper drops, so the SELECT still returns a JS Date for the cursor (not a raw string).
+    const lastReportedAt = sql`date_trunc('milliseconds', ${max(reviewReports.createdAt)})`.mapWith(
+      reviewReports.createdAt,
+    )
     // Keyset in HAVING (the sort key is an aggregate): strictly past the previous page's
-    // (lastReportedAt, reviewId) boundary in the DESC ordering. The boundary instant is
-    // bound as an explicitly-cast timestamptz STRING, never a raw Date: the left side is an
+    // (lastReportedAt, reviewId) boundary in the DESC ordering. The boundary instant is bound
+    // as an explicitly-cast timestamptz STRING (ms), never a raw Date: the left side is an
     // aggregate expression, not a Column, so drizzle has no column mapper to encode a Date
     // param here — postgres-js rejects the raw Date ("must be of type string"), and neon-http
     // would lean on undocumented Date coercion. `${iso}::timestamptz` binds a string both
-    // drivers serialize identically. (`reviewId` is already text, so it needs no cast.)
+    // drivers serialize identically, and now matches the ms-truncated left side. The reviewId
+    // tiebreak compares under COLLATE "C" so its byte order matches the InMemory JS `<` (mirrors
+    // #1449) — load-bearing here because the ms truncation deliberately increases exact ties.
     const cursorTs = cursor
       ? sql`${cursor.lastReportedAt.toISOString()}::timestamptz`
       : undefined
@@ -163,7 +177,10 @@ export class DrizzleReviewRepository implements ReviewRepository {
       cursor && cursorTs
         ? or(
             lt(lastReportedAt, cursorTs),
-            and(eq(lastReportedAt, cursorTs), lt(reviewReports.reviewId, cursor.reviewId)),
+            and(
+              eq(lastReportedAt, cursorTs),
+              sql`${reviewReports.reviewId} COLLATE "C" < ${cursor.reviewId}`,
+            ),
           )
         : undefined
     const grouped = await this.db
@@ -180,7 +197,7 @@ export class DrizzleReviewRepository implements ReviewRepository {
       .where(eq(reviews.moderationStatus, status))
       .groupBy(reviewReports.reviewId)
       .having(keyset)
-      .orderBy(desc(lastReportedAt), desc(reviewReports.reviewId))
+      .orderBy(desc(lastReportedAt), sql`${reviewReports.reviewId} COLLATE "C" DESC`)
       // Peek one past the page so `nextCursor` is precise (null exactly when exhausted),
       // never handing back a cursor that resolves to an empty page.
       .limit(limit + 1)
