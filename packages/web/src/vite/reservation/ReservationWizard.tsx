@@ -1,7 +1,10 @@
 import { Button } from '@/components/ui/button'
 import { formatJstDateTimeLocal } from '@/lib/datetime'
 import type { CreateBookingDraft } from '@/vite/bookings/api'
+import { useFeatureFlag } from '@/vite/config'
+import { ReviewList, vehicleReviewsInfiniteQueryOptions } from '@/vite/reviews'
 import { carryForwardFilters } from '@/vite/storefronts/params'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
@@ -57,12 +60,28 @@ export function ReservationWizard({
   region,
 }: ReservationWizardProps) {
   const t = useTranslations('reservation')
+  const reviewsEnabled = useFeatureFlag('REVIEWS')
   const [stepIndex, setStepIndex] = useState(0)
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>([])
   const [insuranceOptionId, setInsuranceOptionId] = useState<string | null>(null)
   // One key per wizard mount so a double-tap on Reserve replays the same booking
   // (server idempotency) instead of racing the exclusion constraint into a 409.
   const [idempotencyKey] = useState(() => crypto.randomUUID())
+
+  // #1448: a concrete car has published reviews to show; a class-combo has no car
+  // assigned yet, so there is nothing to review. The query stays disabled (never
+  // fetches) unless the subject is SPECIFIC and the REVIEWS flag is on.
+  const vehicleId = subject.kind === 'SPECIFIC' ? subject.vehicle.id : null
+  const {
+    data: reviewPages,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    ...vehicleReviewsInfiniteQueryOptions(vehicleId ?? ''),
+    enabled: reviewsEnabled && vehicleId !== null,
+  })
+  const vehicleReviews = reviewPages?.pages.flatMap((page) => page.reviews)
 
   const step: Step = STEPS[stepIndex] ?? 'dates'
   const display = subjectDisplay(subject)
@@ -134,7 +153,24 @@ export function ReservationWizard({
       </header>
 
       {step === 'dates' ? (
-        <DateRangeStep locale={locale} vehicleName={display.label} from={from} to={to} />
+        <>
+          <DateRangeStep locale={locale} vehicleName={display.label} from={from} to={to} />
+          {/* #1448: the picked car's public reviews, on the orient step only — hidden
+              once the renter moves on to extras/insurance/payment. ReviewList also
+              self-gates on the REVIEWS flag, so this is double-sealed. Skipped entirely
+              when the car has no reviews yet: the storefront browse page shows an empty
+              state, but a "No reviews yet" placeholder is just noise mid-checkout. */}
+          {vehicleId !== null && vehicleReviews !== undefined && vehicleReviews.length > 0 ? (
+            <ReviewList
+              reviews={vehicleReviews}
+              hasMore={hasNextPage}
+              onLoadMore={() => {
+                void fetchNextPage()
+              }}
+              isLoadingMore={isFetchingNextPage}
+            />
+          ) : null}
+        </>
       ) : null}
       {step === 'addOns' ? (
         <AddOnsStep addOns={addOns} selectedIds={selectedAddOnIds} onToggle={toggleAddOn} />
