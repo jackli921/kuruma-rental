@@ -47,9 +47,11 @@ export function setupAuthEnv(): void {
   process.env.AUTH_SECRET = TEST_AUTH_SECRET
 }
 
-export async function authHeaders(payload?: { sub: string; role?: string }): Promise<
-  Record<string, string>
-> {
+export async function authHeaders(payload?: {
+  sub: string
+  role?: string
+  operatorId?: string
+}): Promise<Record<string, string>> {
   const token = await signTestJwt(payload)
   return { Authorization: `Bearer ${token}` }
 }
