@@ -1,5 +1,11 @@
+import { ParseError } from '@/lib/api-error'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchAggregates, reviewAggregatesQueryOptions } from './api'
+import {
+  fetchAggregates,
+  fetchOperatorReviews,
+  operatorReviewsQueryOptions,
+  reviewAggregatesQueryOptions,
+} from './api'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return {
@@ -54,6 +60,36 @@ describe('fetchAggregates (#1085 slice 5)', () => {
       // forks on this exact value, so a regression to `{}` or {count:0} matters.
       op_unrated: null,
     })
+  })
+})
+
+describe('fetchOperatorReviews', () => {
+  it('parses the published-review list from the {data:{reviews}} envelope', async () => {
+    const reviews = [
+      {
+        id: 'r1',
+        overall: 5,
+        subRatings: { cleanliness: 5 },
+        comment: 'great',
+        publishedAt: '2026-06-02T03:00:00.000Z',
+      },
+    ]
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: { reviews } }))
+    const result = await fetchOperatorReviews('op1')
+    expect(result).toEqual(reviews)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/reviews/for/operators/op1')
+  })
+
+  it('throws ParseError when a field is dropped (seam parse)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: { reviews: [{ id: 'r1' }] } }))
+    await expect(fetchOperatorReviews('op1')).rejects.toThrow(ParseError)
+  })
+})
+
+describe('operatorReviewsQueryOptions', () => {
+  it('keys the cache with the operator id so a refactor cannot silently bust the entry', () => {
+    const opts = operatorReviewsQueryOptions('op_abc')
+    expect(opts.queryKey).toEqual(['reviews', 'list', 'operators', 'op_abc'])
   })
 })
 
