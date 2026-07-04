@@ -2,179 +2,226 @@ import { reviewReports, reviews } from '@kuruma/shared/db/schema'
 import { inArray } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { DrizzleReviewRepository } from '../../src/repositories/drizzle/review'
+import type { ReportedQueueCursor } from '../../src/repositories/types-review'
 import { type SeededBooking, createSeededBooking, seedRenter } from './booking-factory'
 import { cleanupUsers, db } from './setup'
 
-// #1451 / #1454: pin the moderation-queue read + audit write on real Postgres. The
-// InMemory mirror proves the pagination logic; this proves the Drizzle lowering renders
-// the SAME semantics against a live schema. The one surface only real pg can validate:
-// `listReported`'s keyset lives in a HAVING over max(review_reports.createdAt) — an
-// aggregate the query planner treats differently from a WHERE — plus the innerJoin
-// status partition, the array_agg reason ordering, and the limit+1 peek → nextCursor.
-// And that migration 0101 actually created reviews.moderatedBy / moderatedAt (a bad
-// migration would 500 with "column does not exist"; setModerationStatus round-trips them).
+// #1451 / #1454 real-pg gate for the review moderation surface. The InMemory mirror proves
+// the pagination + audit logic; this proves the Drizzle lowering renders the SAME semantics
+// against a live schema — the surfaces neither the mirror nor tsc can exercise:
+//   - listReported's keyset lives in a HAVING over `max(review_reports.createdAt)` INNER
+//     JOINed to `reviews` for the status partition (#1451). Under the real driver this pins
+//     (lastReportedAt DESC, reviewId DESC) ordering with reportCount = distinct reporters and
+//     reasons newest-report-first, the VISIBLE/HIDDEN partition, the limit+1 peek producing a
+//     precise cursor (no dup / no gap across a page boundary), and the same-instant reviewId
+//     tiebreak with the cursor `lt` boundary. The keyset binds its boundary instant as an
+//     explicitly-cast timestamptz string, which only a real driver validates (a raw Date
+//     throws under postgres-js) — see DrizzleReviewRepository.listReported.
+//   - setModerationStatus stamps reviews.moderatedBy / moderatedAt (#1454). This proves
+//     migration 0101 actually created those columns (a bad migration would 500 with "column
+//     does not exist") and that the audit write round-trips through the real column types.
 //
-// Parallel-safety: `listReported` is a PLATFORM-wide query (no operator scope). Two
-// facts keep the assertions deterministic under concurrent files:
-//   - The HIDDEN partition is populated only by a file that BOTH hides AND reports a
-//     review; this is the only such file, so the HIDDEN queue is exactly our rows —
-//     letting us assert the full page + a precise null cursor.
-//   - The VISIBLE partition is shared (review-constraints.test.ts reports VISIBLE rows),
-//     so those cases id-scope their assertions and date reports far in the future so our
-//     rows sort to the top of the newest-first order regardless of what else is present.
+// Collation note: the reviewId tiebreak is compared without an explicit COLLATE, yet stays
+// stable across C and en_US.utf8 because every reviewId is a fixed-format lowercase UUID —
+// hyphens sit at identical positions, so the first differing character is always hex-vs-hex,
+// which both collations order identically. (A non-UUID id format would break that; the tie
+// case below uses canonical UUIDs deliberately.)
+//
+// listReported scans EVERY reported review of the requested status (it is NOT operator-
+// scoped), and integration files run in parallel, so foreign rows may interleave. Two
+// defenses keep the assertions deterministic: (a) this file stamps its reports far in the
+// future (2099) so its rows lead the DESC queue ahead of any concurrent ~2026 row, and
+// (b) assertions filter the result down to this file's own review ids.
 
 const repo = new DrizzleReviewRepository(db)
 
-// One FK-valid booking per queue row (the (bookingId, subject) reseal admits a single
-// OPERATOR review per booking), pooled and reused: afterEach clears the reviews (their
-// reports cascade), the bookings survive, so we pay the heavy booking seed once.
-let pool: [SeededBooking, SeededBooking, SeededBooking, SeededBooking]
-let reporterA: string
-let reporterB: string
+let b0: SeededBooking
+let b1: SeededBooking
+let b2: SeededBooking
+let b3: SeededBooking
+let poolBookingIds: string[]
+// A second reporter (for the distinct-reporter count) and the acting admin (moderatedBy FK),
+// seeded once and cleaned in afterAll so review_reports / reviews.moderatedBy never dangle.
+let extraReporter: string
 let admin: string
 
 beforeAll(async () => {
-  pool = await Promise.all([
-    createSeededBooking({ prefix: 'mq-1' }),
-    createSeededBooking({ prefix: 'mq-2' }),
-    createSeededBooking({ prefix: 'mq-3' }),
-    createSeededBooking({ prefix: 'mq-4' }),
+  ;[b0, b1, b2, b3] = await Promise.all([
+    createSeededBooking({ prefix: 'reported-q-0' }),
+    createSeededBooking({ prefix: 'reported-q-1' }),
+    createSeededBooking({ prefix: 'reported-q-2' }),
+    createSeededBooking({ prefix: 'reported-q-3' }),
   ])
-  reporterA = await seedRenter('mq-reporter-a')
-  reporterB = await seedRenter('mq-reporter-b')
-  admin = await seedRenter('mq-admin')
+  poolBookingIds = [b0.booking.id, b1.booking.id, b2.booking.id, b3.booking.id]
+  extraReporter = await seedRenter('reported-q-extra')
+  admin = await seedRenter('reported-q-admin')
 })
 
-const poolBookingIds = (): string[] => pool.map((p) => p.booking.id)
-
 afterEach(async () => {
-  // review_reports is ON DELETE cascade, so deleting the reviews clears their reports.
-  await db.delete(reviews).where(inArray(reviews.bookingId, poolBookingIds()))
+  // review_reports cascade-delete with their review (onDelete cascade on reviewId),
+  // so clearing the reviews resets the queue between cases.
+  await db.delete(reviews).where(inArray(reviews.bookingId, poolBookingIds))
 })
 
 afterAll(async () => {
-  await db.delete(reviews).where(inArray(reviews.bookingId, poolBookingIds()))
-  await Promise.all(pool.map((p) => p.cleanup()))
-  // Safe only after every review (and its cascading report) is gone: review_reports
+  await db.delete(reviews).where(inArray(reviews.bookingId, poolBookingIds))
+  for (const b of [b0, b1, b2, b3]) await b.cleanup()
+  // Safe only after every review (+ cascading report) is gone: review_reports.reporterUserId
   // and reviews.moderatedBy both restrict-reference these users.
-  await cleanupUsers([reporterA, reporterB, admin])
+  await cleanupUsers([extraReporter, admin])
 })
 
-const FAR_FUTURE_DEADLINE = new Date('2099-01-21T09:00:00Z')
-
-/** Insert one OPERATOR review on a pooled booking; returns its id. */
-function insertReview(
-  booking: SeededBooking,
-  opts: { id?: string; moderationStatus?: 'VISIBLE' | 'HIDDEN' } = {},
-): Promise<string> {
-  const id = opts.id ?? crypto.randomUUID()
-  return db
-    .insert(reviews)
-    .values({
-      id,
-      bookingId: booking.booking.id,
-      operatorId: booking.operatorId,
-      authorUserId: booking.renterId,
-      authorRole: 'RENTER',
-      subject: 'OPERATOR',
-      overall: 4,
-      moderationStatus: opts.moderationStatus ?? 'VISIBLE',
-      revealDeadlineAt: FAR_FUTURE_DEADLINE,
-    })
-    .then(() => id)
+interface ReportSpec {
+  reporter: string
+  at: Date
+  reason?: string
 }
 
-/** File a report with an explicit createdAt (the queue's sort key is max(createdAt)). */
-function report(
-  reviewId: string,
-  reporterUserId: string,
-  createdAt: Date,
-  reason: string,
-): Promise<unknown> {
-  return db
-    .insert(reviewReports)
-    .values({ id: crypto.randomUUID(), reviewId, reporterUserId, reason, createdAt })
+/** Insert one OPERATOR review on `booking` plus its reports (report createdAt controls the
+ *  queue's sort key). Returns the review id. */
+async function seedReportedReview(
+  booking: SeededBooking,
+  opts: { id?: string; status?: 'VISIBLE' | 'HIDDEN'; reports: ReportSpec[] },
+): Promise<string> {
+  const id = opts.id ?? crypto.randomUUID()
+  await db.insert(reviews).values({
+    id,
+    bookingId: booking.booking.id,
+    operatorId: booking.operatorId,
+    authorUserId: booking.renterId,
+    authorRole: 'RENTER',
+    subject: 'OPERATOR',
+    overall: 4,
+    moderationStatus: opts.status ?? 'VISIBLE',
+    revealDeadlineAt: new Date('2027-01-21T09:00:00Z'),
+  })
+  for (const r of opts.reports) {
+    await db.insert(reviewReports).values({
+      id: crypto.randomUUID(),
+      reviewId: id,
+      reporterUserId: r.reporter,
+      reason: r.reason ?? 'inappropriate',
+      createdAt: r.at,
+    })
+  }
+  return id
 }
 
 describe('DrizzleReviewRepository.listReported (#1451, real pg)', () => {
-  it('orders by latest report, counts distinct reporters, and aggregates reasons newest-first', async () => {
-    const [b0, b1, b2] = pool
-    const h1 = await insertReview(b0, { moderationStatus: 'HIDDEN' })
-    const h2 = await insertReview(b1, { moderationStatus: 'HIDDEN' })
-    const h3 = await insertReview(b2, { moderationStatus: 'HIDDEN' })
-    // h1: two DISTINCT reporters; its latest report is the newest in the queue, so it
-    // sorts first, and its reasons come back ordered by report recency (newest first).
-    await report(h1, reporterA, new Date('2099-03-03T00:00:00Z'), 'spam')
-    await report(h1, reporterB, new Date('2099-03-03T00:01:00Z'), 'offensive')
-    await report(h2, reporterA, new Date('2099-03-02T00:00:00Z'), 'harassment')
-    await report(h3, reporterA, new Date('2099-03-01T00:00:00Z'), 'other')
-
-    const page = await repo.listReported({ limit: 20, status: 'HIDDEN' })
-
-    // Isolated partition: the page IS exactly our three rows, newest-reported first.
-    expect(page.items.map((i) => i.review.id)).toEqual([h1, h2, h3])
-    expect(page.nextCursor).toBeNull()
-    expect(page.items[0]?.reportCount).toBe(2)
-    expect(page.items[0]?.reasons).toEqual(['offensive', 'spam'])
-    expect(page.items[1]?.reportCount).toBe(1)
-  })
-
-  it('keyset-paginates newest-first with a (report recency, review id) tiebreak', async () => {
-    const [b0, b1, b2, b3] = pool
-    const uniq = crypto.randomUUID()
-    // Controlled ids so the same-instant tiebreak is deterministic: identical prefix,
-    // differing only in the trailing rank char ('2' < '3' under every collation).
-    const rHi = await insertReview(b0, { id: `mq-${uniq}-hi`, moderationStatus: 'HIDDEN' })
-    const rMid3 = await insertReview(b1, { id: `mq-${uniq}-3`, moderationStatus: 'HIDDEN' })
-    const rMid2 = await insertReview(b2, { id: `mq-${uniq}-2`, moderationStatus: 'HIDDEN' })
-    const rLo = await insertReview(b3, { id: `mq-${uniq}-lo`, moderationStatus: 'HIDDEN' })
-    const MID = new Date('2099-05-02T00:00:00Z')
-    await report(rHi, reporterA, new Date('2099-05-03T00:00:00Z'), 'spam')
-    await report(rMid3, reporterA, MID, 'spam') // tie with rMid2, larger id -> comes first
-    await report(rMid2, reporterA, MID, 'spam') // tie with rMid3, smaller id -> comes after
-    await report(rLo, reporterA, new Date('2099-05-01T00:00:00Z'), 'spam')
-
-    const page1 = await repo.listReported({ limit: 2, status: 'HIDDEN' })
-    expect(page1.items.map((i) => i.review.id)).toEqual([rHi, rMid3])
-    // The peek past the page yields a precise cursor pointing at the page's last row.
-    expect(page1.nextCursor?.reviewId).toBe(rMid3)
-    expect(page1.nextCursor?.lastReportedAt.getTime()).toBe(MID.getTime())
-
-    const page2 = await repo.listReported({
-      limit: 2,
-      status: 'HIDDEN',
-      cursor: page1.nextCursor ?? undefined,
+  it('orders reports newest-first with distinct-reporter count and reasons', async () => {
+    const r0 = await seedReportedReview(b0, {
+      reports: [{ reporter: b0.renterId, at: new Date('2099-01-01T00:00:00Z'), reason: 'spam' }],
     })
-    // rMid2 (same instant, smaller id) resumes strictly past the cursor, then rLo (older).
-    expect(page2.items.map((i) => i.review.id)).toEqual([rMid2, rLo])
-    expect(page2.nextCursor).toBeNull()
+    // r1 is reported by two DISTINCT reporters -> reportCount 2, reasons newest-first.
+    const r1 = await seedReportedReview(b1, {
+      reports: [
+        { reporter: b1.renterId, at: new Date('2099-01-02T00:00:00Z'), reason: 'offensive' },
+        { reporter: extraReporter, at: new Date('2099-02-01T00:00:00Z'), reason: 'harassment' },
+      ],
+    })
+    const r2 = await seedReportedReview(b2, {
+      reports: [{ reporter: b2.renterId, at: new Date('2099-03-01T00:00:00Z'), reason: 'spam' }],
+    })
+
+    const page = await repo.listReported({ limit: 50, status: 'VISIBLE' })
+    const mine = page.items.filter((i) => [r0, r1, r2].includes(i.review.id))
+
+    // lastReportedAt = max(createdAt): r2 (2099-03) > r1 (2099-02) > r0 (2099-01).
+    expect(mine.map((i) => i.review.id)).toEqual([r2, r1, r0])
+    const r1row = mine.find((i) => i.review.id === r1)
+    expect(r1row?.reportCount).toBe(2)
+    expect(r1row?.reasons).toEqual(['harassment', 'offensive'])
   })
 
-  it('partitions the queue by moderationStatus (VISIBLE vs HIDDEN)', async () => {
-    const [b0, b1] = pool
-    const visible = await insertReview(b0, { moderationStatus: 'VISIBLE' })
-    const hidden = await insertReview(b1, { moderationStatus: 'HIDDEN' })
-    // Far-future reports sort our rows to the top of each newest-first partition.
-    await report(visible, reporterA, new Date('2099-07-01T00:00:00Z'), 'spam')
-    await report(hidden, reporterA, new Date('2099-07-01T00:00:00Z'), 'spam')
+  it('partitions by moderationStatus: VISIBLE excludes HIDDEN and vice versa', async () => {
+    const visible = await seedReportedReview(b0, {
+      status: 'VISIBLE',
+      reports: [{ reporter: b0.renterId, at: new Date('2099-01-05T00:00:00Z') }],
+    })
+    const hidden = await seedReportedReview(b1, {
+      status: 'HIDDEN',
+      reports: [{ reporter: b1.renterId, at: new Date('2099-01-06T00:00:00Z') }],
+    })
 
-    const mine = new Set([visible, hidden])
-    // The VISIBLE partition is shared with other files; scope to our two rows. The
-    // innerJoin + moderationStatus filter must surface the visible row, never the hidden.
-    const visiblePage = await repo.listReported({ limit: 50, status: 'VISIBLE' })
-    expect(visiblePage.items.map((i) => i.review.id).filter((id) => mine.has(id))).toEqual([
-      visible,
-    ])
+    const visibleIds = (await repo.listReported({ limit: 50, status: 'VISIBLE' })).items.map(
+      (i) => i.review.id,
+    )
+    expect(visibleIds).toContain(visible)
+    expect(visibleIds).not.toContain(hidden)
 
-    const hiddenPage = await repo.listReported({ limit: 50, status: 'HIDDEN' })
-    expect(hiddenPage.items.map((i) => i.review.id).filter((id) => mine.has(id))).toEqual([hidden])
+    const hiddenIds = (await repo.listReported({ limit: 50, status: 'HIDDEN' })).items.map(
+      (i) => i.review.id,
+    )
+    expect(hiddenIds).toContain(hidden)
+    expect(hiddenIds).not.toContain(visible)
+  })
+
+  it('paginates with a precise cursor: no dup or gap across pages walked at limit=2', async () => {
+    // Four rows at strictly-increasing recency; 2099 keeps them ahead of any concurrent
+    // ~2026 row so they lead the DESC queue and are collected within the first pages.
+    const seeded = [
+      await seedReportedReview(b0, {
+        reports: [{ reporter: b0.renterId, at: new Date('2099-05-01T00:00:00Z') }],
+      }),
+      await seedReportedReview(b1, {
+        reports: [{ reporter: b1.renterId, at: new Date('2099-05-02T00:00:00Z') }],
+      }),
+      await seedReportedReview(b2, {
+        reports: [{ reporter: b2.renterId, at: new Date('2099-05-03T00:00:00Z') }],
+      }),
+      await seedReportedReview(b3, {
+        reports: [{ reporter: b3.renterId, at: new Date('2099-05-04T00:00:00Z') }],
+      }),
+    ]
+    const mineSet = new Set(seeded)
+    const expectedDesc = [...seeded].reverse()
+
+    // Walk pages following nextCursor until every seeded id has been seen. The keyset must
+    // visit each exactly once in recency-DESC order — a lte boundary would repeat a row, a
+    // gt-only boundary would drop one.
+    const collected: string[] = []
+    let cursor: ReportedQueueCursor | undefined
+    for (let guard = 0; guard < 50 && collected.length < seeded.length; guard++) {
+      const listPage = await repo.listReported({ limit: 2, status: 'VISIBLE', cursor })
+      for (const item of listPage.items) {
+        if (mineSet.has(item.review.id)) collected.push(item.review.id)
+      }
+      if (!listPage.nextCursor) break
+      cursor = listPage.nextCursor
+    }
+
+    expect(collected).toEqual(expectedDesc)
+  })
+
+  it('breaks a same-instant report tie by reviewId DESC and the cursor excludes the boundary', async () => {
+    const TIE = new Date('2099-06-01T00:00:00.000Z')
+    const idLo = '11111111-1111-1111-1111-111111111111'
+    const idHi = '99999999-9999-9999-9999-999999999999'
+    await seedReportedReview(b0, { id: idLo, reports: [{ reporter: b0.renterId, at: TIE }] })
+    await seedReportedReview(b1, { id: idHi, reports: [{ reporter: b1.renterId, at: TIE }] })
+
+    const page = await repo.listReported({ limit: 50, status: 'VISIBLE' })
+    const mine = page.items.map((i) => i.review.id).filter((id) => id === idLo || id === idHi)
+    // Same lastReportedAt -> reviewId DESC decides: idHi before idLo.
+    expect(mine).toEqual([idHi, idLo])
+
+    // A cursor AT idHi's boundary excludes idHi (not < itself) and still yields idLo.
+    const after = await repo.listReported({
+      limit: 50,
+      status: 'VISIBLE',
+      cursor: { lastReportedAt: TIE, reviewId: idHi },
+    })
+    const afterMine = after.items.map((i) => i.review.id).filter((id) => id === idLo || id === idHi)
+    expect(afterMine).toEqual([idLo])
   })
 })
 
 describe('DrizzleReviewRepository.setModerationStatus (#1454, real pg)', () => {
   it('stamps the moderation audit trail (moderatedBy + moderatedAt) and persists it', async () => {
-    const [b0] = pool
-    const id = await insertReview(b0, { moderationStatus: 'VISIBLE' })
+    const id = await seedReportedReview(b0, {
+      status: 'VISIBLE',
+      reports: [{ reporter: b0.renterId, at: new Date('2099-08-01T00:00:00Z') }],
+    })
     const moderatedAt = new Date('2099-08-15T12:34:56.000Z')
 
     const updated = await repo.setModerationStatus(id, 'HIDDEN', admin, moderatedAt)
