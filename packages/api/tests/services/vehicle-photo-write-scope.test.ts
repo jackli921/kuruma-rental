@@ -1,10 +1,13 @@
-// #1260 slice 4: bind photo writes (POST/DELETE /vehicles/:id/photos ->
-// VehiclePhotoService.uploadPhotos / deletePhoto) to the picked operator. The
-// route gate is STAFF_ROLES = PLATFORM_ROLES = {PLATFORM_ADMIN}, so only a
-// platform admin is route-reachable (legacy STAFF/ADMIN and operators are 403'd
-// upstream) — hence no legacy-STAFF case here, unlike the BUSINESS_ROLES-gated
-// maintenance/trio writes. The guard still keys on `!isOperatorRole` at the
-// service level so a future non-platform reuse fails closed.
+// #1260 slice 4 + #1406: bind photo writes (POST/DELETE /vehicles/:id/photos ->
+// VehiclePhotoService.uploadPhotos / deletePhoto) to the picked operator. These
+// are SERVICE-level guard tests, exercising both caller classes the route gate
+// admits: all-scope callers (`admin`, !isOperatorRole -> must name the owning
+// operator or 422/404) and tenant operators (`opA` -> auto-clamped by read scope;
+// a stray acting id is ignored). #1406 widened the route gate from STAFF_ROLES to
+// FLEET_WRITE_ROLES, so operators and legacy STAFF/ADMIN are now route-reachable;
+// legacy STAFF/ADMIN need no separate case here because they are all-scope
+// (!isOperatorRole), behaving identically to the `admin` cases. The guard keys on
+// `!isOperatorRole`, so any admitted non-operator fails closed without an operator.
 
 import { beforeEach, describe, expect, it } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
