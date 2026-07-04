@@ -19,6 +19,9 @@ const TEMPLATE_LABEL = en.business.addOns.form.template
 const TEMPLATE_ID = '11111111-1111-4111-8111-111111111111'
 const templates = [{ id: TEMPLATE_ID, key: 'child_seat', resolvedName: 'Child seat' }]
 
+// A picked row's own name bundle is null (its name comes from the template) — the
+// API always emits nameI18n, so the mock must too or the create-response parse
+// (addOnSchema, .nullable() not .optional()) rejects as an unhandled ParseError.
 const createdRow = {
   id: 'a1',
   operatorId: 'op_9',
@@ -26,6 +29,7 @@ const createdRow = {
   resolvedName: 'Child seat',
   resolvedDescription: null,
   descriptionOverride: null,
+  nameI18n: null,
   priceJpy: 0,
   status: 'ACTIVE',
 }

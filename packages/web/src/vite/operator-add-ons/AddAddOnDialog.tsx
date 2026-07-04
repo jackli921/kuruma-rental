@@ -9,6 +9,7 @@ import { DEFAULT_LOCALE, isLocale } from '@/vite/i18n/locale'
 import { AddOnForm } from '@/vite/operator-add-ons/AddOnForm'
 import { ADDON_QUERY_KEY, type CreateAddOnInput, createAddOn } from '@/vite/operator-add-ons/api'
 import { setLocaleSlot } from '@/vite/operator-add-ons/description-override'
+import { buildNameBundle } from '@/vite/operator-add-ons/name-bundle'
 import { addOnTemplatesQueryOptions } from '@/vite/operator-add-ons/templates-api'
 import type { WithOperatorId } from '@/vite/operator-context'
 import { useSession } from '@/vite/session'
@@ -68,11 +69,17 @@ export function AddAddOnDialog({ open, onOpenChange, pickedOperatorId }: AddAddO
           mode="create"
           templates={templates ?? []}
           onSubmit={async (data) => {
-            const body: CreateAddOnInput = {
-              templateId: data.templateId,
-              priceJpy: data.priceJpy,
-              descriptionOverride: setLocaleSlot(null, locale, data.description),
-            }
+            const descriptionOverride = setLocaleSlot(null, locale, data.description)
+            // Exactly one identity: a custom item sends its own name bundle; a picked
+            // one sends the template id. The server refine enforces the same rule.
+            const body: CreateAddOnInput =
+              data.identityMode === 'custom'
+                ? {
+                    nameI18n: buildNameBundle(data.nameEn, data.nameJa, data.nameZh),
+                    priceJpy: data.priceJpy,
+                    descriptionOverride,
+                  }
+                : { templateId: data.templateId, priceJpy: data.priceJpy, descriptionOverride }
             await mutateAsync(pickedOperatorId ? { ...body, operatorId: pickedOperatorId } : body)
           }}
           onCancel={() => handleOpenChange(false)}

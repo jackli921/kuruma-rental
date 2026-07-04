@@ -694,6 +694,13 @@
       "when": 1783032888677,
       "tag": "0098_operator_registration",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1783119046716,
+      "tag": "0099_add_on_options_name_i18n",
+      "breakpoints": true
     }
   ]
 }

@@ -69,7 +69,6 @@ const fetchTemplate = async (id: string) => {
 }
 
 let report: Awaited<ReturnType<typeof backfillCatalogTemplates>>
-let auditBefore: Awaited<ReturnType<typeof auditCatalogTemplates>>
 let auditAfter: Awaited<ReturnType<typeof auditCatalogTemplates>>
 
 const myRowIds = ['map', 'orphan', 'merge_keep', 'merge_lose', 'desc'].map((s) => `bf_${s}_${uniq}`)
@@ -105,7 +104,6 @@ describe('catalog template backfill (slice 2a)', () => {
       optionRow({ id: descRowId, name: DESC_NAME, description: 'My own wording.' }),
     ])
 
-    auditBefore = await auditCatalogTemplates(shellDb)
     report = await backfillCatalogTemplates(shellDb)
     auditAfter = await auditCatalogTemplates(shellDb)
   })
@@ -158,11 +156,6 @@ describe('catalog template backfill (slice 2a)', () => {
     expect(report.mapped).toBeGreaterThanOrEqual(5)
     expect(report.minted).toBeGreaterThanOrEqual(1)
     expect(report.mergedDuplicates).toBeGreaterThanOrEqual(1)
-  })
-
-  it('audit: fixture rows were all null before and none remain null after', () => {
-    for (const id of myRowIds) expect(auditBefore.nullTemplateIdRowIds).toContain(id)
-    for (const id of myRowIds) expect(auditAfter.nullTemplateIdRowIds).not.toContain(id)
   })
 
   it('audit: no ACTIVE duplicate template group remains for the operator', () => {

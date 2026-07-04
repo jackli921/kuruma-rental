@@ -775,6 +775,13 @@
         "price": "1予約あたり {price}"
       },
       "form": {
+        "identityLegend": "追加方法を選択",
+        "identityTemplate": "カタログから選ぶ",
+        "identityCustom": "自分で作成",
+        "nameEn": "名称（英語）",
+        "nameJa": "名称（日本語）",
+        "nameZh": "名称（中国語）",
+        "customNameNudge": "日本語・中国語が空欄の場合、旅行者には英語が表示されます。両方入力するとより多くの利用者に届きます。",
         "template": "オプション",
         "templatePlaceholder": "オプションを選択",
         "description": "説明",

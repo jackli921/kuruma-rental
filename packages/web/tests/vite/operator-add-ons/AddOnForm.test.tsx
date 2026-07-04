@@ -75,6 +75,106 @@ describe('AddOnForm', () => {
     })
   })
 
+  describe('create mode — self-authored (#1437)', () => {
+    it('shows a template/custom toggle, defaulting to the template picker', () => {
+      render(<AddOnForm mode="create" templates={templates} onSubmit={vi.fn()} />)
+      expect(screen.getByRole('radio', { name: 'form.identityTemplate' })).toBeChecked()
+      expect(screen.getByRole('radio', { name: 'form.identityCustom' })).not.toBeChecked()
+      expect(screen.getByLabelText('form.template')).toBeInTheDocument()
+    })
+
+    it('switching to custom reveals the multi-locale name fields and hides the picker', async () => {
+      const user = userEvent.setup()
+      render(<AddOnForm mode="create" templates={templates} onSubmit={vi.fn()} />)
+
+      await user.click(screen.getByRole('radio', { name: 'form.identityCustom' }))
+
+      expect(screen.getByLabelText('form.nameEn')).toBeInTheDocument()
+      expect(screen.getByLabelText('form.nameJa')).toBeInTheDocument()
+      expect(screen.getByLabelText('form.nameZh')).toBeInTheDocument()
+      expect(screen.queryByLabelText('form.template')).not.toBeInTheDocument()
+    })
+
+    it('submits a custom item with identityMode custom and the three name slots', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      const user = userEvent.setup()
+      render(<AddOnForm mode="create" templates={templates} onSubmit={onSubmit} />)
+
+      await user.click(screen.getByRole('radio', { name: 'form.identityCustom' }))
+      await user.type(screen.getByLabelText('form.nameEn'), 'GPS unit')
+      await user.type(screen.getByLabelText('form.nameJa'), 'GPS ユニット')
+      await user.clear(screen.getByLabelText('form.price'))
+      await user.type(screen.getByLabelText('form.price'), '1500')
+      await user.click(screen.getByRole('button', { name: 'form.save' }))
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0]).toMatchObject({
+        identityMode: 'custom',
+        nameEn: 'GPS unit',
+        nameJa: 'GPS ユニット',
+        nameZh: '',
+        priceJpy: 1500,
+      })
+    })
+
+    it('blocks a custom submit when the English name is empty', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      const user = userEvent.setup()
+      render(<AddOnForm mode="create" templates={templates} onSubmit={onSubmit} />)
+
+      await user.click(screen.getByRole('radio', { name: 'form.identityCustom' }))
+      await user.type(screen.getByLabelText('form.nameJa'), 'ジャパン限定')
+      await user.click(screen.getByRole('button', { name: 'form.save' }))
+
+      await waitFor(() => expect(screen.getByText('Enter an English name')).toBeInTheDocument())
+      expect(onSubmit).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('edit mode — self-authored (#1437)', () => {
+    it('shows editable name fields (no picker) for a self-authored row', () => {
+      render(
+        <AddOnForm
+          mode="edit"
+          editIdentity="custom"
+          onSubmit={vi.fn()}
+          defaultValues={{
+            identityMode: 'custom',
+            nameEn: 'GPS unit',
+            nameJa: 'GPS ユニット',
+            priceJpy: 1500,
+          }}
+        />,
+      )
+      expect(screen.getByLabelText('form.nameEn')).toHaveValue('GPS unit')
+      expect(screen.getByLabelText('form.nameJa')).toHaveValue('GPS ユニット')
+      expect(screen.queryByLabelText('form.template')).not.toBeInTheDocument()
+    })
+
+    it('submits an edited custom name (D5 — adds a locale later)', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      const user = userEvent.setup()
+      render(
+        <AddOnForm
+          mode="edit"
+          editIdentity="custom"
+          onSubmit={onSubmit}
+          defaultValues={{ identityMode: 'custom', nameEn: 'GPS unit', priceJpy: 1500 }}
+        />,
+      )
+
+      await user.type(screen.getByLabelText('form.nameZh'), 'GPS 装置')
+      await user.click(screen.getByRole('button', { name: 'form.save' }))
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0]).toMatchObject({
+        identityMode: 'custom',
+        nameEn: 'GPS unit',
+        nameZh: 'GPS 装置',
+      })
+    })
+  })
+
   describe('edit mode', () => {
     it('shows the template name read-only (no picker) and pre-fills price + description', () => {
       render(

@@ -775,6 +775,13 @@
         "price": "每次预订 {price}"
       },
       "form": {
+        "identityLegend": "选择添加方式",
+        "identityTemplate": "从目录中选择",
+        "identityCustom": "自行创建",
+        "nameEn": "名称（英文）",
+        "nameJa": "名称（日文）",
+        "nameZh": "名称（中文）",
+        "customNameNudge": "日文或中文留空时，游客将看到英文。填写两者可覆盖更多租客。",
         "template": "附加项目",
         "templatePlaceholder": "选择附加项目",
         "description": "描述",

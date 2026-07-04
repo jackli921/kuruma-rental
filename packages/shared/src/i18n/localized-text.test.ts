@@ -6,6 +6,7 @@ import {
   localizedTextSchema,
   resolveDescription,
   resolveLocalized,
+  resolveOwnDescription,
 } from './localized-text'
 
 /**
@@ -112,5 +113,35 @@ describe('resolveDescription', () => {
 
   test('returns null when both override and template are null', () => {
     expect(resolveDescription(null, null, 'ja')).toBeNull()
+  })
+})
+
+/**
+ * Self-authored description (#1437): a self-authored add-on has NO template floor,
+ * and its bag is a LocalizedTextOverride where even `en` is optional. So resolution
+ * must floor to ANY present locale — never render blank while the operator authored
+ * text — rather than terminate at a specific-locale miss like `resolveDescription`.
+ */
+describe('resolveOwnDescription', () => {
+  const bundle = { en: 'Own copy', ja: '自分の説明', zh: '自己的描述' }
+
+  test('returns the requested locale when present', () => {
+    expect(resolveOwnDescription(bundle, 'ja')).toBe('自分の説明')
+  })
+
+  test('floors a ja-only bag to ja for a zh reader (any present locale, no blank)', () => {
+    expect(resolveOwnDescription({ ja: '自分の説明' }, 'zh')).toBe('自分の説明')
+  })
+
+  test('prefers en over ja/zh when the requested locale is absent', () => {
+    expect(resolveOwnDescription({ en: 'Own copy', zh: '自己的描述' }, 'ja')).toBe('Own copy')
+  })
+
+  test('floors a zh-only bag to zh for an en reader', () => {
+    expect(resolveOwnDescription({ zh: '自己的描述' }, 'en')).toBe('自己的描述')
+  })
+
+  test('returns null when no description was authored', () => {
+    expect(resolveOwnDescription(null, 'ja')).toBeNull()
   })
 })
