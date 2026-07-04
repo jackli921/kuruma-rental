@@ -187,25 +187,45 @@ export type PublicReviewDto = z.infer<typeof publicReviewDtoSchema>
 
 // One page of reviews + the opaque keyset cursor for the next (#1449). `nextCursor` is
 // required (null on the last page) so a dropped field fails at the seam, not as a silent
-// "no more pages" that would truncate the list.
-const operatorReviewPageSchema = z.object({
+// "no more pages" that would truncate the list. Subject-agnostic: the operator (#1449) and
+// vehicle (#1448) lists share this exact wire shape — only the URL segment + cache key differ.
+const reviewPageSchema = z.object({
   reviews: z.array(publicReviewDtoSchema),
   nextCursor: z.string().nullable(),
 })
 
-/** A page of the public operator review list. */
-export type OperatorReviewPage = z.infer<typeof operatorReviewPageSchema>
+/** A page of a public review list (operator or vehicle subject). */
+export type ReviewPage = z.infer<typeof reviewPageSchema>
 
 /** GET /reviews/for/operators/:id[?after=cursor] — public, anonymous (no credentials).
  *  `after` is the opaque token from a previous page's nextCursor; omit for the first page. */
 export async function fetchOperatorReviews(
   operatorId: string,
   after?: string | null,
-): Promise<OperatorReviewPage> {
-  const base = `${getApiBaseUrl()}/reviews/for/operators/${encodeURIComponent(operatorId)}`
+): Promise<ReviewPage> {
+  return fetchSubjectReviews('operators', operatorId, after)
+}
+
+/** GET /reviews/for/vehicles/:id[?after=cursor] — public, anonymous (#1448). Mirrors the
+ *  operator reader against the VEHICLE subject path the API already serves. */
+export async function fetchVehicleReviews(
+  vehicleId: string,
+  after?: string | null,
+): Promise<ReviewPage> {
+  return fetchSubjectReviews('vehicles', vehicleId, after)
+}
+
+/** Shared fetch for the public per-subject review list. The subject is a fixed URL
+ *  segment (`operators` | `vehicles`), never user input, so it needs no encoding. */
+async function fetchSubjectReviews(
+  subject: 'operators' | 'vehicles',
+  id: string,
+  after?: string | null,
+): Promise<ReviewPage> {
+  const base = `${getApiBaseUrl()}/reviews/for/${subject}/${encodeURIComponent(id)}`
   const url = after ? `${base}?after=${encodeURIComponent(after)}` : base
   const res = await fetch(url)
-  return unwrap(res, operatorReviewPageSchema)
+  return unwrap(res, reviewPageSchema)
 }
 
 /** Infinite ("load more") query over the operator review list (#1449). The page param IS
@@ -215,6 +235,17 @@ export function operatorReviewsInfiniteQueryOptions(operatorId: string) {
   return infiniteQueryOptions({
     queryKey: ['reviews', 'list', 'operators', operatorId] as const,
     queryFn: ({ pageParam }) => fetchOperatorReviews(operatorId, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
+}
+
+/** Infinite ("load more") query over a vehicle's review list (#1448). Keyed under the
+ *  `vehicles` subject so it can never collide with the same-shaped operator list. */
+export function vehicleReviewsInfiniteQueryOptions(vehicleId: string) {
+  return infiniteQueryOptions({
+    queryKey: ['reviews', 'list', 'vehicles', vehicleId] as const,
+    queryFn: ({ pageParam }) => fetchVehicleReviews(vehicleId, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
   })

@@ -10,9 +10,10 @@ export {
   type AggregateMap,
   type AggregateSubjectKind,
   operatorReviewsInfiniteQueryOptions,
-  type OperatorReviewPage,
   type PublicReviewDto,
   renterReviewedSubjects,
+  type ReviewPage,
   reviewAggregatesQueryOptions,
   reviewsForBookingQueryOptions,
+  vehicleReviewsInfiniteQueryOptions,
 } from './api'
