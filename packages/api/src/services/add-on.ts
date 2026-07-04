@@ -118,9 +118,11 @@ export class AddOnService {
     if (data.templateId) {
       // Kill-switch: picking from the shared catalog is server-enforced. When off, the
       // operator must self-author (the escape hatch above stays open). Checked here, so
-      // a client that bypasses the hidden picker still cannot pick a template.
+      // a client that bypasses the hidden picker still cannot pick a template. 422 (not
+      // 403): the request is well-formed and the caller is authorized — the catalog is
+      // just disabled — so this is a state, not an authz denial (surfacing != authz).
       if (!(await this.isSharedCatalogEnabled())) {
-        return { ok: false, error: CATALOG_DISABLED_MESSAGE, status: 403 }
+        return { ok: false, error: CATALOG_DISABLED_MESSAGE, status: 422 }
       }
       return this.createFromTemplate(data, data.templateId, locale)
     }

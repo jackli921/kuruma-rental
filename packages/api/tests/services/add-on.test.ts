@@ -158,7 +158,7 @@ describe('AddOnService', () => {
       const result = await off.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
       expect(result.ok).toBe(false)
       if (!result.ok) {
-        expect(result.status).toBe(403)
+        expect(result.status).toBe(422)
         expect(result.error).toBe('The shared catalog is disabled; create a custom add-on instead')
       }
     })

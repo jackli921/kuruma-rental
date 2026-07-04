@@ -24,6 +24,10 @@ export class FeatureFlagsService {
    * NO row in the normal state). Single-sources the default from the registry with
    * the web flooring (feature-flags-runtime.ts), so server enforcement and the web
    * surface cannot drift. Used to server-enforce SHARED_CATALOG (#1437).
+   *
+   * Meaningful ONLY for `serverOnly` flags: a plain web flag has no `serverDefault`
+   * (its real default is a `VITE_*` env the API can't read), so this floors it to
+   * `false` — which is not that flag's build-time default. Do not call it for one.
    */
   async isEnabled(key: FeatureFlagKey): Promise<boolean> {
     const overrides = await this.repo.getOverrides()
