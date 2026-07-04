@@ -1,7 +1,7 @@
 import { OperatorAddOnsView } from '@/vite/operator-add-ons/OperatorAddOnsView'
 import type { OperatorScope } from '@/vite/operator-context'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -140,5 +140,66 @@ describe('OperatorAddOnsView', () => {
     render(<OperatorAddOnsView addOns={[addOn]} scope={readOnlyScope} />, { wrapper })
     expect(screen.queryByRole('button', { name: 'editOption' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'archiveAction' })).not.toBeInTheDocument()
+  })
+})
+
+// #1456 seam guard: the view threads `scope.pickedOperatorId` into the Edit/Archive
+// dialogs so a picker admin's update/archive binds to the chosen tenant via
+// ?operatorId=. Drop the prop on any of view -> dialog -> api and the write loses
+// its binding (a silent 422 / wrong-tenant write in prod) -- these drive the real
+// fetch to catch that. Mirrors the locations seam guard (#1456) and fees (#1442).
+describe('OperatorAddOnsView picker threading (#1456)', () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+  afterEach(() => fetchSpy.mockReset())
+
+  // Faithful schema-complete response (nameI18n: null): a response missing a
+  // required field would float an unhandled rejection through unwrap and turn CI red.
+  function stubWrite() {
+    const data = { ...addOn, operatorId: 'op_9', nameI18n: null, status: 'ARCHIVED' as const }
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data }), { status: 200 }),
+    )
+  }
+
+  function writeCall(method: string) {
+    return fetchSpy.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === method,
+    )
+  }
+
+  it('binds the edit PATCH to the picked operator via ?operatorId=', async () => {
+    stubWrite()
+    const user = userEvent.setup()
+    render(<OperatorAddOnsView addOns={[addOn]} scope={scopedWriteScope} />, { wrapper })
+
+    await user.click(screen.getByRole('button', { name: 'editOption' }))
+    await user.click(await screen.findByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => expect(writeCall('PATCH')).toBeDefined())
+    expect(String(writeCall('PATCH')?.[0])).toContain('operatorId=op_9')
+  })
+
+  it('binds the archive DELETE to the picked operator via ?operatorId=', async () => {
+    stubWrite()
+    const user = userEvent.setup()
+    render(<OperatorAddOnsView addOns={[addOn]} scope={scopedWriteScope} />, { wrapper })
+
+    await user.click(screen.getByRole('button', { name: 'archiveAction' }))
+    await user.click(await screen.findByRole('button', { name: 'archiveConfirm' }))
+
+    await waitFor(() => expect(writeCall('DELETE')).toBeDefined())
+    expect(String(writeCall('DELETE')?.[0])).toContain('operatorId=op_9')
+  })
+
+  it('omits operatorId when no operator is picked (operator session auto-scopes)', async () => {
+    stubWrite()
+    const user = userEvent.setup()
+    render(<OperatorAddOnsView addOns={[addOn]} scope={writeScope} />, { wrapper })
+
+    await user.click(screen.getByRole('button', { name: 'archiveAction' }))
+    await user.click(await screen.findByRole('button', { name: 'archiveConfirm' }))
+
+    await waitFor(() => expect(writeCall('DELETE')).toBeDefined())
+    expect(String(writeCall('DELETE')?.[0])).not.toContain('operatorId=')
   })
 })
