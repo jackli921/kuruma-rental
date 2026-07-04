@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { formatJstTime } from '@/lib/datetime'
-import { isOperatorSession } from '@/vite/guards'
+import { canWriteAsOperator } from '@/vite/guards'
 import {
   type OperatorBookingStatus,
   invalidateBookingCaches,
@@ -23,6 +23,9 @@ interface TodayPanelProps {
   readonly vehicles: readonly Pick<OperatorFleetVehicle, 'id' | 'name'>[]
   readonly session: Session | null
   readonly locale: string
+  // #1433: a picker admin (#1260) acting as a chosen operator binds each status
+  // write to that operator via ?operatorId=; a tenant operator leaves it undefined.
+  readonly pickedOperatorId?: string | undefined
 }
 
 type BucketKey = 'pickups' | 'returns' | 'overdue'
@@ -44,18 +47,25 @@ interface SectionSpec {
 // overdue vehicles, each a clickable row (deep-links to the trip detail) with a
 // one-click advance (mark picked-up / returned). Presentational: buckets + fleet
 // arrive as props from the dashboard route; only the status mutation is owned here
-// (mirrors BookingActionsPanel). Operator-only: a bypass admin reads the overview
-// cross-tenant (a meaningless platform-wide "today") and cannot act on a single
-// tenant, so the whole panel is gated on an operator session like the other
-// operator-portal write affordances (#581/#583/#598).
-export function TodayPanel({ today, vehicles, session, locale }: TodayPanelProps) {
+// (mirrors BookingActionsPanel). Gated on `canWriteAsOperator`: a real operator, OR
+// a picker admin (#1260/#1433) who has chosen an operator to act as — the same write
+// gate BookingActionsPanel uses, so the trip-detail and dashboard status surfaces no
+// longer diverge. A bypass admin with no pick reads a meaningless platform-wide
+// "today" and cannot act on a single tenant, so the panel stays hidden for it.
+export function TodayPanel({
+  today,
+  vehicles,
+  session,
+  locale,
+  pickedOperatorId,
+}: TodayPanelProps) {
   const t = useTranslations('business.today')
   const queryClient = useQueryClient()
   const csrfToken = session?.csrfToken ?? ''
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: OperatorBookingStatus }) =>
-      updateBookingStatus(id, status, csrfToken),
+      updateBookingStatus(id, status, csrfToken, pickedOperatorId),
     // The advance changes a booking's lifecycle status, so refresh both the
     // dashboard overview (today buckets + counts) and the operator-bookings prefix
     // — whose documented cascade (#616) covers the calendar, list and detail
@@ -65,7 +75,7 @@ export function TodayPanel({ today, vehicles, session, locale }: TodayPanelProps
 
   const vehicleNamesById = useMemo(() => new Map(vehicles.map((v) => [v.id, v.name])), [vehicles])
 
-  if (!isOperatorSession(session)) return null
+  if (!canWriteAsOperator(session, pickedOperatorId)) return null
 
   const isRowPending = (id: string) =>
     statusMutation.isPending && statusMutation.variables?.id === id

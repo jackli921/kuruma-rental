@@ -75,7 +75,7 @@ function renderWizard(over: Partial<WizardProps> = {}) {
       <IntlProvider locale="en" messages={en}>
         <ReservationWizard
           locale="en"
-          vehicle={vehicle}
+          subject={{ kind: 'SPECIFIC', vehicle }}
           locationId="loc1"
           addOns={addOns}
           insuranceOptions={insuranceOptions}

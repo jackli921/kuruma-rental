@@ -49,3 +49,49 @@
   opacity: 0.55;
   border-style: dashed !important;
 }
+
+/* #1244 scheduled-block bands — mirror calendar-theme.css so the timeline reads
+   identically to the day/week views: a diagonal hatch + dashed border marks "not a
+   booking", the per-kind hue distinguishes maintenance / out-of-service / manual. The
+   lib's inline background is overridden with !important, as the booking rules above. */
+.rct-item.rbc-event--block-maintenance,
+.rct-item.rbc-event--block-out-of-service,
+.rct-item.rbc-event--block-manual {
+  border-style: dashed !important;
+  color: oklch(0.32 0.01 286) !important;
+  background-color: oklch(0.95 0.004 286) !important;
+}
+
+.rct-item.rbc-event--block-maintenance {
+  border-color: oklch(0.62 0.13 75) !important;
+  background-image: repeating-linear-gradient(
+    45deg,
+    oklch(0.92 0.06 80) 0,
+    oklch(0.92 0.06 80) 6px,
+    transparent 6px,
+    transparent 12px
+  ) !important;
+}
+
+.rct-item.rbc-event--block-out-of-service {
+  border-color: oklch(0.58 0.16 28) !important;
+  color: oklch(0.32 0.09 28) !important;
+  background-image: repeating-linear-gradient(
+    45deg,
+    oklch(0.9 0.06 28) 0,
+    oklch(0.9 0.06 28) 6px,
+    transparent 6px,
+    transparent 12px
+  ) !important;
+}
+
+.rct-item.rbc-event--block-manual {
+  border-color: oklch(0.55 0.02 286) !important;
+  background-image: repeating-linear-gradient(
+    45deg,
+    oklch(0.88 0.005 286) 0,
+    oklch(0.88 0.005 286) 6px,
+    transparent 6px,
+    transparent 12px
+  ) !important;
+}
