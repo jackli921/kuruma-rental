@@ -94,6 +94,31 @@ export class InMemoryReviewRepository implements ReviewRepository {
     return this.aggregate(classIds, (r) => r.subjectClassId)
   }
 
+  async listPublishedForSubject(
+    subject: 'OPERATOR' | 'VEHICLE',
+    subjectId: string,
+    limit: number,
+  ): Promise<Review[]> {
+    const keyOf = (r: Review) => (subject === 'OPERATOR' ? r.operatorId : r.subjectVehicleId)
+    return [...this.store.values()]
+      .filter(
+        (r): r is Review & { publishedAt: Date } =>
+          r.subject === subject &&
+          r.publishedAt !== null &&
+          r.moderationStatus === 'VISIBLE' &&
+          keyOf(r) === subjectId,
+      )
+      .sort((a, b) => {
+        // Newest-first, with an id tiebreak: the reveal sweep stamps a whole batch with
+        // ONE identical publishedAt, so date alone is an unstable order (and the keyset
+        // pagination follow-up needs a unique tiebreak anyway). Mirror the Drizzle
+        // orderBy(desc(publishedAt), desc(id)).
+        const byDate = b.publishedAt.getTime() - a.publishedAt.getTime()
+        return byDate !== 0 ? byDate : a.id < b.id ? 1 : a.id > b.id ? -1 : 0
+      })
+      .slice(0, limit)
+  }
+
   // Shared predicate (#1085): only published+visible reviews enter aggregates, so a
   // hidden or still-double-blind row never skews a public storefront rating.
   // Ids that match no published+visible row stay absent from the result Map.
