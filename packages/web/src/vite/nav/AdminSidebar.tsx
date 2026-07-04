@@ -37,9 +37,12 @@ export const SIDEBAR_ITEMS = [
 
 // Sidebar items hidden unless a runtime feature flag is on (keyed by `to`); an
 // item absent here is always shown. Review moderation only matters once reviews
-// are enabled (#1086) — dark-launched, so the link stays hidden by default.
+// are enabled (#1086) — dark-launched, so the link stays hidden by default. The
+// template library follows the SHARED_CATALOG kill-switch (#1437): default-ON, so
+// it shows unless a platform admin switches the shared catalog off.
 const FLAG_GATED_ITEMS: Partial<Record<(typeof SIDEBAR_ITEMS)[number]['to'], FeatureFlagKey>> = {
   '/$locale/admin/reviews': 'REVIEWS',
+  '/$locale/admin/templates': 'SHARED_CATALOG',
 }
 
 // Single static className; active state is the `aria-current="page"` attribute
@@ -55,7 +58,10 @@ export function AdminSidebar() {
   const t = useTranslations('admin')
   const locale = useLocale()
   // One lookup per gated flag; the map fail-closes (an unknown flag → hidden).
-  const flags: Partial<Record<FeatureFlagKey, boolean>> = { REVIEWS: useFeatureFlag('REVIEWS') }
+  const flags: Partial<Record<FeatureFlagKey, boolean>> = {
+    REVIEWS: useFeatureFlag('REVIEWS'),
+    SHARED_CATALOG: useFeatureFlag('SHARED_CATALOG'),
+  }
   const visibleItems = SIDEBAR_ITEMS.filter((item) => {
     const flag = FLAG_GATED_ITEMS[item.to]
     return flag === undefined || flags[flag] === true

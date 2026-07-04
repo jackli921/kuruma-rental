@@ -2,11 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { FEATURE_FLAGS, FEATURE_FLAG_KEYS, isFeatureFlagKey } from './registry'
 
 describe('feature flag registry', () => {
-  it('gives every flag a VITE_FEATURE_ env name and a non-empty label', () => {
+  it('gives every web flag a VITE_FEATURE_ env name and every flag a non-empty label', () => {
     for (const key of FEATURE_FLAG_KEYS) {
       const entry = FEATURE_FLAGS[key]
-      expect(entry.env).toMatch(/^VITE_FEATURE_[A-Z_]+$/)
       expect(entry.label.length).toBeGreaterThan(0)
+      // A serverOnly flag has no web build-time env; its default lives in code
+      // (serverDefault). Every other flag pins a VITE_FEATURE_ env.
+      if (entry.serverOnly) {
+        expect(entry.env).toBeUndefined()
+      } else {
+        expect(entry.env).toMatch(/^VITE_FEATURE_[A-Z_]+$/)
+      }
     }
   })
 
@@ -20,9 +26,28 @@ describe('feature flag registry', () => {
     )
   })
 
-  it('maps each flag to a distinct env var', () => {
-    const envs = FEATURE_FLAG_KEYS.map((k) => FEATURE_FLAGS[k].env)
+  it('maps each web flag to a distinct env var', () => {
+    // serverOnly flags carry no env, so exclude them before the distinctness check.
+    const envs = FEATURE_FLAG_KEYS.filter((k) => !FEATURE_FLAGS[k].serverOnly).map(
+      (k) => FEATURE_FLAGS[k].env,
+    )
     expect(new Set(envs).size).toBe(envs.length)
+  })
+
+  it('registers SHARED_CATALOG as a server-only flag (default ON in code, no env)', () => {
+    const entry = FEATURE_FLAGS.SHARED_CATALOG
+    expect(entry.serverOnly).toBe(true)
+    expect(entry.serverDefault).toBe(true)
+    expect(entry.env).toBeUndefined()
+    expect(entry.runtimeControlled).toBe(true)
+  })
+
+  it('gives every server-only flag an explicit boolean serverDefault (fail-safe floor)', () => {
+    for (const key of FEATURE_FLAG_KEYS) {
+      if (FEATURE_FLAGS[key].serverOnly) {
+        expect(typeof FEATURE_FLAGS[key].serverDefault).toBe('boolean')
+      }
+    }
   })
 
   it('marks exactly the runtime-migrated flags as runtimeControlled', () => {
@@ -44,6 +69,9 @@ describe('feature flag registry', () => {
         'OPERATOR_SETTINGS',
         'RENTER_DOCUMENTS',
         'MESSAGING',
+        // Server-only, but the web reads it via useFeatureFlag() to hide the
+        // operator picker + admin template library live, so it is runtimeControlled.
+        'SHARED_CATALOG',
       ]),
     )
   })

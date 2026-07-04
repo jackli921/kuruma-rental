@@ -18,15 +18,24 @@ import type { AddOnRepository, AddOnTemplateRepository } from '../repositories/t
  * enumeration.
  */
 export class AddOnTemplateService {
+  // #1437: the SHARED_CATALOG kill-switch. Defaults to ON, mirroring the registry
+  // serverDefault (and the whole feature's fail-OPEN stance) so existing callers and
+  // tests need no change; the composition root injects the real flag-backed thunk.
   constructor(
     private readonly repo: AddOnTemplateRepository,
     private readonly addOnRepo: AddOnRepository,
+    private readonly isSharedCatalogEnabled: () => Promise<boolean> = () => Promise.resolve(true),
   ) {}
 
   async listForPicker(
     locale: Locale,
     excludeOfferedByOperatorId?: string,
   ): Promise<AddOnTemplatePickerData[]> {
+    // Kill-switch: when the shared catalog is off, the operator picker shows nothing
+    // (they must self-author). Existing picked items still resolve elsewhere - only
+    // the picker read is gated here.
+    if (!(await this.isSharedCatalogEnabled())) return []
+
     const templates = await this.repo.findActive()
     const offered = excludeOfferedByOperatorId
       ? await this.offeredTemplateIds(excludeOfferedByOperatorId)
