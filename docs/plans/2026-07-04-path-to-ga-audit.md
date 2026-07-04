@@ -37,7 +37,7 @@ A build-time-only flag needs either a deploy that sets its `VITE_FEATURE_*=true`
 | **0** | Already on | `SHARED_CATALOG` |
 | **1** | Complete, runtime-controlled — **flip on now, zero code** (a go-live decision, not engineering) | `REVIEWS`, `CANCELLATION`, `OPERATOR_BLOCKS`, `OPERATOR_TEAM`, `OPERATOR_SETTINGS`, `MULTI_CURRENCY`, `OPERATOR_MANUAL_BOOKING` (polish-later) |
 | **2** | Complete but **build-time only** — ~2h migration to the runtime hook (#1322), then flip | `OPERATOR_TODAY`, `CALENDAR_QUICKVIEW` |
-| **3** | Complete but **one real engineering gate** | `FLEET_TIMELINE` → #1349 a11y |
+| **3** | Complete but **one real engineering gate** — now in-flight (PR #1469) | `FLEET_TIMELINE` → #1349 a11y |
 | **4** | **Product decision or larger build** before it can go on | `RENTER_DOCUMENTS`, `MESSAGING`, `VITE_SEARCH_MAP_ENABLED` |
 
 ## Per-flag detail
@@ -73,8 +73,8 @@ Both are complete and correct but read a **build-time** function, so an admin to
 
 - **`FLEET_TIMELINE`** — Vehicle-row planning board (the fleet-ops centerpiece). Fully built and code-split.
   **Gate: #1349 (open).** The board is built on a pinned pre-release `react-calendar-timeline@0.30.0-beta.18` whose bars are **mouse-only** — no keyboard nav, no ARIA. There is no React-19-compatible stable upgrade (#1330).
-  Two documented paths (`docs/2026-07-02-fleet-timeline-lib-pin.md`): (1) add keyboard + ARIA to the bars (medium effort, upstream unmaintained), or (2) document + test the quick-view calendar (#1282) as the accessible fallback for keyboard/SR users (lower effort, owner-preferred). Work is currently stalled/unclaimed.
-  **This is the single most concrete, high-impact open gate.**
+  Two documented paths (`docs/2026-07-02-fleet-timeline-lib-pin.md`): (1) add keyboard + ARIA to the bars (medium effort, upstream unmaintained), or (2) document + test the quick-view calendar (#1282) as the accessible fallback for keyboard/SR users (lower effort, owner-preferred).
+  **Now in-flight:** a session took path (1) — **PR #1469** (open) adds keyboard + ARIA to the bars. Once it merges, `FLEET_TIMELINE`'s only gate closes and it joins Tier 1 (flip-on). No new work needed unless #1469 stalls.
 
 ### Tier 4 — product decision or larger build
 
@@ -86,7 +86,7 @@ Both are complete and correct but read a **build-time** function, so an admin to
 
 1. **Tier 1 go-live** — the owner decides which complete features to switch on (admin switchboard, no deploy). Optional: a smoke pass per feature before flipping. Biggest ROI by far — up to 7 finished features light up.
 2. **Tier 2 migrations** — fold `OPERATOR_TODAY` + `CALENDAR_QUICKVIEW` into the #1322 build-time→runtime batch (~half a day total), then flip.
-3. **Tier 3 — #1349** — pick a path for the fleet-timeline a11y gate (recommend the documented quick-view fallback), then flip `FLEET_TIMELINE` on.
+3. **Tier 3 — #1349** — already in-flight via **PR #1469** (keyboard + ARIA on the bars); once it merges, flip `FLEET_TIMELINE` on. No new work unless #1469 stalls.
 4. **Tier 4** — resolve `RENTER_DOCUMENTS` (product call) and scope `MESSAGING` operator side if wanted; treat `SEARCH_MAP` as a build-config decision for paid tiers.
 
 ## Open questions for the owner
