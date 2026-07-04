@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { createEvent, fireEvent, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
@@ -138,5 +138,69 @@ describe('FleetTimeline', () => {
     fireEvent.mouseUp(bar as Element)
     expect(onSelectBlock).toHaveBeenCalledWith(blk)
     expect(onSelectEvent).not.toHaveBeenCalled()
+  })
+})
+
+// #1349: the board was mouse-only (no keyboard/ARIA on bars), gating the GA flag
+// flip. Each interactive bar is now a focusable, screen-reader-labelled button that
+// opens the same detail on Enter/Space that a click opens; the whole board is a
+// labelled region. The pure timeline-layout tests pin WHICH bars are interactive
+// (one stop per booking); these pin how the shell renders that.
+describe('FleetTimeline keyboard + ARIA (#1349)', () => {
+  it('exposes a booking bar as a button naming the vehicle, renter, and status', () => {
+    renderTimeline([row({ id: 'b1', renterName: 'Alice' })])
+    expect(
+      screen.getByRole('button', { name: /Corolla\. Booking: Alice, Confirmed/ }),
+    ).toBeInTheDocument()
+  })
+
+  it('opens the booking on Enter — keyboard parity with click', () => {
+    const onSelectEvent = vi.fn()
+    renderTimeline([row({ id: 'b1', renterName: 'Alice' })], { onSelectEvent })
+    fireEvent.keyDown(screen.getByRole('button', { name: /Booking: Alice/ }), { key: 'Enter' })
+    expect(onSelectEvent).toHaveBeenCalledWith('b1')
+  })
+
+  it('activates on Space and prevents the default page scroll', () => {
+    const onSelectEvent = vi.fn()
+    renderTimeline([row({ id: 'b1', renterName: 'Alice' })], { onSelectEvent })
+    const bar = screen.getByRole('button', { name: /Booking: Alice/ })
+    const ev = createEvent.keyDown(bar, { key: ' ' })
+    fireEvent(bar, ev)
+    expect(ev.defaultPrevented).toBe(true)
+    expect(onSelectEvent).toHaveBeenCalledWith('b1')
+  })
+
+  it('exposes a scheduled block as a button and opens the block (not a trip) on Enter', () => {
+    const onSelectEvent = vi.fn()
+    const onSelectBlock = vi.fn()
+    const blk = block({ id: 'blk7', title: 'Bodywork', reason: 'Bodywork', kind: 'MAINTENANCE' })
+    renderTimeline([], { blocks: [blk], onSelectEvent, onSelectBlock })
+    fireEvent.keyDown(
+      screen.getByRole('button', { name: /Corolla\. Maintenance block: Bodywork/ }),
+      { key: 'Enter' },
+    )
+    expect(onSelectBlock).toHaveBeenCalledWith(blk)
+    expect(onSelectEvent).not.toHaveBeenCalled()
+  })
+
+  it('makes a booking exactly one keyboard stop, aria-hiding the redundant turnaround tail', () => {
+    // Booked + tail both in-window: the booked band is the sole button; the tail bar
+    // still renders for mouse users but is removed from the a11y tree (no second stop).
+    renderTimeline([
+      row({
+        id: 'b1',
+        renterName: 'Alice',
+        endAt: '2026-07-04T09:00:00.000Z',
+        effectiveEndAt: '2026-07-04T15:00:00.000Z',
+      }),
+    ])
+    expect(screen.getAllByRole('button', { name: /Booking: Alice/ })).toHaveLength(1)
+    expect(document.querySelector('.rct-item[aria-hidden="true"]')).not.toBeNull()
+  })
+
+  it('labels the whole board as a region for screen-reader navigation', () => {
+    renderTimeline([row({ id: 'b1', renterName: 'Alice' })])
+    expect(screen.getByRole('region', { name: /Fleet planning board/ })).toBeInTheDocument()
   })
 })

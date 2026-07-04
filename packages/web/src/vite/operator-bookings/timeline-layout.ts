@@ -42,6 +42,12 @@ interface TimelineItemCommon {
   title: string
   start: number
   end: number
+  /** #1349 a11y: whether this bar is the keyboard/screen-reader stop for its subject.
+   *  A booking is exactly ONE stop — the booked band when it renders, otherwise its
+   *  lone-surviving turnaround tail. A suppressed tail (booked sibling present) is
+   *  `false` so the shell can aria-hide it and drop it from the tab order. Blocks are
+   *  always their own stop. */
+  interactive: boolean
 }
 
 /** A booking bar — status-colored, click-decodes back to its booking. */
@@ -130,6 +136,7 @@ export function buildTimelineLayout({
         end: booked.end,
         band: 'booked',
         status: r.status,
+        interactive: true,
       })
       if (group === UNASSIGNED_GROUP_ID) hasUnassignedRow = true
     }
@@ -150,6 +157,11 @@ export function buildTimelineLayout({
           end: tail.end,
           band: 'turnaround',
           status: r.status,
+          // #1349: the tail is a keyboard/SR stop ONLY when its booked band did not
+          // render (clipped out before the window) — otherwise the booked band is the
+          // single stop and this redundant tail is suppressed. `booked` is truthy iff
+          // that band was pushed above.
+          interactive: !booked,
         })
         if (group === UNASSIGNED_GROUP_ID) hasUnassignedRow = true
       }
@@ -173,6 +185,7 @@ export function buildTimelineLayout({
       start: band.start,
       end: band.end,
       kind: b.kind,
+      interactive: true,
     })
   }
 

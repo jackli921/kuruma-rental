@@ -293,6 +293,11 @@
             "empty": "未割当のフロート予約はありません",
             "overflowLabel": "少なくとも{limit}件が割当待ち（先頭{limit}件を表示）"
           }
+        },
+        "board": {
+          "label": "配車ボード、{range}",
+          "bookingBar": "{vehicle}。予約: {renter}、{status}、{range}",
+          "blockBar": "{vehicle}。{kind}ブロック: {title}、{range}"
         }
       },
       "detail": {
