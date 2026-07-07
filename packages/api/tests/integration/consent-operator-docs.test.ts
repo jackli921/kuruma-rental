@@ -1,6 +1,6 @@
 import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { consentDocuments } from '@kuruma/shared/db/schema'
-import { inArray } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -60,5 +60,35 @@ describe('consent_documents partial uniques (§4.3)', () => {
     const dupe = await insert(doc({ operatorId: BEST_CAR_RENTAL_OPERATOR_ID }))
     expect(pgErrorCode(dupe)).toBe('23505')
     expect(pgConstraintName(dupe)).toBe('consent_documents_operator_tvl_unique')
+  })
+})
+
+describe('consent_documents PUBLISHED immutability trigger (§5.1)', () => {
+  it('rejects content mutation of a PUBLISHED row but allows PUBLISHED→ARCHIVED', async () => {
+    const base = doc({
+      status: 'PUBLISHED',
+      version: 'v-imm',
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+    })
+    await db.insert(consentDocuments).values(base)
+
+    let err: unknown = null
+    try {
+      await db
+        .update(consentDocuments)
+        .set({ body: 'tampered' })
+        .where(eq(consentDocuments.id, base.id))
+    } catch (e) {
+      err = e
+    }
+    expect(pgErrorCode(err)).toBe('23514')
+
+    // status-only transition to ARCHIVED is allowed
+    await db
+      .update(consentDocuments)
+      .set({ status: 'ARCHIVED' })
+      .where(eq(consentDocuments.id, base.id))
+    const [row] = await db.select().from(consentDocuments).where(eq(consentDocuments.id, base.id))
+    expect(row?.status).toBe('ARCHIVED')
   })
 })
