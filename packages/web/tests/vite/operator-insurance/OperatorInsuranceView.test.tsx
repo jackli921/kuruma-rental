@@ -60,6 +60,8 @@ const option = {
   id: 'ins_1',
   operatorId: 'op_1',
   name: 'Full cover',
+  // 3a: the row renders from the `name` mirror; a legacy null bundle is valid.
+  nameI18n: null,
   description: 'Everything covered',
   dailyPriceJpy: 2000,
   deductibleJpy: null,
@@ -97,13 +99,13 @@ describe('OperatorInsuranceView', () => {
     const user = userEvent.setup()
     render(<OperatorInsuranceView options={[]} scope={writeScope} />, { wrapper })
 
-    expect(screen.queryByLabelText('form.name')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('form.nameEn')).not.toBeInTheDocument()
     // The page Add button and the dialog title share the 'addOption' key; click
     // the button (the only one before the dialog opens).
     await user.click(screen.getByRole('button', { name: 'addOption' }))
 
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByLabelText('form.name')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('form.nameEn')).toBeInTheDocument()
   })
 
   it('disables the archive action for an already-archived option', () => {

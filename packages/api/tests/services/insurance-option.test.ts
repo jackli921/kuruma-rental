@@ -19,14 +19,15 @@ const ctxFor = (operatorId: string): CallerContext => ({
   bypassScope: false,
 })
 
-function createInput(operatorId: string, name: string) {
+// #1437 slice 3: insurance is purely self-authored — the create DTO carries a
+// nameI18n bundle (en required) and the service derives the `name` mirror = en.
+function createInput(operatorId: string, en: string, extra?: { ja?: string; zh?: string }) {
   return {
     operatorId,
-    name,
+    nameI18n: { en, ...extra },
     description: null,
     dailyPriceJpy: 1500,
     deductibleJpy: 150000,
-    status: 'ACTIVE' as const,
   }
 }
 
@@ -46,6 +47,19 @@ describe('InsuranceOptionService', () => {
       if (result.ok) {
         expect(result.option.name).toBe('Premium')
         expect(result.option.operatorId).toBe(opA)
+      }
+    })
+
+    it('persists the nameI18n bundle and mirrors name = nameI18n.en', async () => {
+      const result = await service.create(
+        ctxFor(opA),
+        createInput(opA, 'Premium', { ja: 'プレミアム', zh: '高级' }),
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.option.nameI18n).toEqual({ en: 'Premium', ja: 'プレミアム', zh: '高级' })
+        // The `name` column is the en mirror — the unique seal + booking snapshot source.
+        expect(result.option.name).toBe('Premium')
       }
     })
 
@@ -86,7 +100,9 @@ describe('InsuranceOptionService', () => {
     it('returns 404 (not 403) when the id belongs to another operator', async () => {
       const created = await service.create(ctxFor(opA), createInput(opA, 'Premium'))
       if (!created.ok) throw new Error('seed failed')
-      const result = await service.update(ctxFor(opB), created.option.id, { name: 'Hijack' })
+      const result = await service.update(ctxFor(opB), created.option.id, {
+        nameI18n: { en: 'Hijack' },
+      })
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.status).toBe(404)
     })
@@ -95,7 +111,7 @@ describe('InsuranceOptionService', () => {
       const created = await service.create(ctxFor(opA), createInput(opA, 'Premium'))
       if (!created.ok) throw new Error('seed failed')
       const updateSpy = vi.spyOn(repo, 'update')
-      await service.update(ctxFor(opB), created.option.id, { name: 'Hijack' })
+      await service.update(ctxFor(opB), created.option.id, { nameI18n: { en: 'Hijack' } })
       expect(updateSpy).not.toHaveBeenCalled()
     })
 
@@ -103,7 +119,9 @@ describe('InsuranceOptionService', () => {
       await service.create(ctxFor(opA), createInput(opA, 'Premium'))
       const standard = await service.create(ctxFor(opA), createInput(opA, 'Standard'))
       if (!standard.ok) throw new Error('seed failed')
-      const result = await service.update(ctxFor(opA), standard.option.id, { name: 'Premium' })
+      const result = await service.update(ctxFor(opA), standard.option.id, {
+        nameI18n: { en: 'Premium' },
+      })
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.status).toBe(409)
     })
@@ -113,11 +131,24 @@ describe('InsuranceOptionService', () => {
       if (!created.ok) throw new Error('seed failed')
       // Patch the same name back plus a price change — must not 409 on itself.
       const result = await service.update(ctxFor(opA), created.option.id, {
-        name: 'Premium',
+        nameI18n: { en: 'Premium' },
         dailyPriceJpy: 1800,
       })
       expect(result.ok).toBe(true)
       if (result.ok) expect(result.option.dailyPriceJpy).toBe(1800)
+    })
+
+    it('keeps the name mirror in lockstep when nameI18n.en changes', async () => {
+      const created = await service.create(ctxFor(opA), createInput(opA, 'Premium'))
+      if (!created.ok) throw new Error('seed failed')
+      const result = await service.update(ctxFor(opA), created.option.id, {
+        nameI18n: { en: 'Platinum', ja: 'プラチナ' },
+      })
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.option.name).toBe('Platinum')
+        expect(result.option.nameI18n).toEqual({ en: 'Platinum', ja: 'プラチナ' })
+      }
     })
 
     it('maps a unique-violation on rename that slips past the pre-check to 409', async () => {
@@ -125,7 +156,9 @@ describe('InsuranceOptionService', () => {
       if (!created.ok) throw new Error('seed failed')
       vi.spyOn(repo, 'findActiveByOperatorAndName').mockResolvedValue(undefined)
       vi.spyOn(repo, 'update').mockRejectedValue(uniqueViolation())
-      const result = await service.update(ctxFor(opA), created.option.id, { name: 'Standard' })
+      const result = await service.update(ctxFor(opA), created.option.id, {
+        nameI18n: { en: 'Standard' },
+      })
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.status).toBe(409)
     })

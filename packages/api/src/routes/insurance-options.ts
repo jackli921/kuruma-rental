@@ -77,11 +77,10 @@ export function createInsuranceOptionRoutes(
 
       const result = await service.create(ctx, {
         operatorId,
-        name: d.name,
+        nameI18n: d.nameI18n,
         description: d.description ?? null,
         dailyPriceJpy: d.dailyPriceJpy,
         deductibleJpy: d.deductibleJpy ?? null,
-        status: 'ACTIVE',
       })
       if (!result.ok) return failResult(c, result)
       return ok(c, result.option, 201)

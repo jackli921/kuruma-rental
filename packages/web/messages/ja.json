@@ -744,8 +744,10 @@
         "noDeductible": "免責なし（フルカバー）"
       },
       "form": {
-        "name": "オプション名",
-        "namePlaceholder": "例：標準補償",
+        "nameEn": "名称（英語）",
+        "nameJa": "名称（日本語）",
+        "nameZh": "名称（中国語）",
+        "customNameNudge": "日本語・中国語が空欄の場合、旅行者には英語が表示されます。両方入力するとより多くの利用者に届きます。",
         "description": "説明",
         "descriptionPlaceholder": "例：車両損害補償（CDW）を含みます。",
         "dailyPrice": "1日あたりの料金（円）",

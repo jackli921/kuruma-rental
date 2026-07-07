@@ -1,0 +1,1 @@
+ALTER TABLE "insurance_options" ADD COLUMN "nameI18n" jsonb;
