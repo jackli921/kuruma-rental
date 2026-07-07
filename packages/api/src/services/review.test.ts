@@ -382,6 +382,22 @@ describe('ReviewService — double-blind reveal on read', () => {
       status: 403,
     })
   })
+
+  it('projects the participant read to an allowlist so moderation internals never cross the wire', async () => {
+    const { service } = makeHarness()
+    await service.submit(renterCtx, submitInput(), NOW)
+
+    const view = await service.getForBooking(renterCtx, BOOKING_ID, NOW)
+    if (!view.ok) throw new Error('expected ok')
+    const row = view.reviews[0]
+    // Exactly the participant-facing fields. The raw entity would also carry moderatedBy (a
+    // platform admin's userId — a #1086 leak to the very author who was moderated),
+    // moderationStatus, moderatedAt, authorUserId, operatorId, subRatings and the internal
+    // reveal deadline. Pinning the exact key set fails if any of those leak back in.
+    expect(row && Object.keys(row).sort()).toEqual(
+      ['authorRole', 'bookingId', 'comment', 'id', 'overall', 'publishedAt', 'subject'].sort(),
+    )
+  })
 })
 
 describe('ReviewService.submit — reveal on write (#1195)', () => {

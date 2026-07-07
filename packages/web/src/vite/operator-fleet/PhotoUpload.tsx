@@ -22,8 +22,10 @@ interface PhotoUploadProps {
   readonly vehicleId: string | null
   /** Current photo URLs, passed down from the fleet read model. Defaults to []. */
   readonly photos?: readonly string[]
-  // #1260: a picker-admin binds photo writes to the operator it picked; undefined
-  // for an operator session (the API scopes those by the session cookie).
+  // #1260/#1406: a picker-admin binds photo writes to the operator it picked; an
+  // operator session names no tenant and manages its own vehicles' photos, scoped
+  // server-side by the session cookie (photo writes admit operators as of #1406,
+  // matching every other fleet write).
   readonly pickedOperatorId?: string | undefined
 }
 
