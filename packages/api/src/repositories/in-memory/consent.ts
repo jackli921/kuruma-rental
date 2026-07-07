@@ -1,4 +1,4 @@
-import type { ConsentType } from '@kuruma/shared/enums'
+import type { ConsentDocStatus, ConsentType } from '@kuruma/shared/enums'
 import { PG_ERROR } from '../../pg-errors'
 import type { ConsentAcceptance, ConsentDocument } from '../../stores'
 import type {
@@ -6,6 +6,7 @@ import type {
   ConsentAcceptanceQuery,
   ConsentRepository,
   NewConsentAcceptance,
+  NewConsentDocument,
 } from '../types'
 import { CONSENT_ACCEPTANCE_LIST_LIMIT } from '../types-consent'
 
@@ -136,6 +137,102 @@ export class InMemoryConsentRepository implements ConsentRepository {
     }
     this.acceptances.push(row)
     return row
+  }
+
+  async findLatestPublishedVersionForOperator(
+    operatorId: string,
+    type: ConsentType,
+    now: Date,
+  ): Promise<string | undefined> {
+    return [...this.docs.values()]
+      .filter(
+        (d) =>
+          d.operatorId === operatorId &&
+          d.type === type &&
+          d.status === 'PUBLISHED' &&
+          d.effectiveFrom <= now,
+      )
+      .map((d) => d.version)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .at(-1)
+  }
+
+  async findPublishedOperatorDocument(
+    operatorId: string,
+    type: ConsentType,
+    version: string,
+    locale: string,
+  ): Promise<ConsentDocument | undefined> {
+    return [...this.docs.values()].find(
+      (d) =>
+        d.operatorId === operatorId &&
+        d.type === type &&
+        d.version === version &&
+        d.locale === locale &&
+        d.status === 'PUBLISHED',
+    )
+  }
+
+  async findOperatorDocuments(operatorId: string, type: ConsentType): Promise<ConsentDocument[]> {
+    return [...this.docs.values()].filter((d) => d.operatorId === operatorId && d.type === type)
+  }
+
+  async createOperatorDocuments(rows: NewConsentDocument[]): Promise<ConsentDocument[]> {
+    const created: ConsentDocument[] = rows.map((r) => ({
+      ...r,
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }))
+    for (const d of created) this.docs.set(d.id, d)
+    return created
+  }
+
+  async deleteOperatorDraftRows(
+    operatorId: string,
+    type: ConsentType,
+    version: string,
+  ): Promise<void> {
+    for (const [id, d] of this.docs) {
+      if (
+        d.operatorId === operatorId &&
+        d.type === type &&
+        d.version === version &&
+        d.status === 'DRAFT'
+      ) {
+        this.docs.delete(id)
+      }
+    }
+  }
+
+  async setOperatorVersionStatus(p: {
+    operatorId: string
+    type: ConsentType
+    version: string
+    from: ConsentDocStatus
+    to: ConsentDocStatus
+    publishedAt: Date | null
+    now: Date
+  }): Promise<ConsentDocument[]> {
+    const updated: ConsentDocument[] = []
+    for (const [id, d] of this.docs) {
+      if (
+        d.operatorId === p.operatorId &&
+        d.type === p.type &&
+        d.version === p.version &&
+        d.status === p.from
+      ) {
+        const next: ConsentDocument = {
+          ...d,
+          status: p.to,
+          updatedAt: p.now,
+          publishedAt: p.publishedAt ?? d.publishedAt,
+        }
+        this.docs.set(id, next)
+        updated.push(next)
+      }
+    }
+    return updated
   }
 
   // Priority early-returns are correct ONLY because the DB CHECK constraints

@@ -1,4 +1,4 @@
-import type { ConsentType } from '@kuruma/shared/enums'
+import type { ConsentDocStatus, ConsentType } from '@kuruma/shared/enums'
 import { consentAcceptances, consentDocuments } from '@kuruma/shared/db/schema'
 import { type SQL, and, desc, eq, gte, inArray, isNull, lte } from 'drizzle-orm'
 import type { ConsentAcceptance, ConsentDocument } from '../../stores'
@@ -7,6 +7,7 @@ import type {
   ConsentAcceptanceQuery,
   ConsentRepository,
   NewConsentAcceptance,
+  NewConsentDocument,
 } from '../types'
 import { CONSENT_ACCEPTANCE_LIST_LIMIT } from '../types-consent'
 import type { Db } from './shared'
@@ -228,5 +229,110 @@ export class DrizzleConsentRepository implements ConsentRepository {
       .returning()
     if (!row) throw new Error('Failed to insert consent acceptance')
     return toAcceptance(row)
+  }
+
+  async findLatestPublishedVersionForOperator(
+    operatorId: string,
+    type: ConsentType,
+    now: Date,
+  ): Promise<string | undefined> {
+    const rows = await this.db
+      .select({ version: consentDocuments.version, effectiveFrom: consentDocuments.effectiveFrom })
+      .from(consentDocuments)
+      .where(
+        and(
+          eq(consentDocuments.operatorId, operatorId),
+          eq(consentDocuments.type, type),
+          eq(consentDocuments.status, 'PUBLISHED'),
+        ),
+      )
+    return rows
+      .filter((r) => r.effectiveFrom <= now)
+      .map((r) => r.version)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .at(-1)
+  }
+
+  async findPublishedOperatorDocument(
+    operatorId: string,
+    type: ConsentType,
+    version: string,
+    locale: string,
+  ): Promise<ConsentDocument | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(consentDocuments)
+      .where(
+        and(
+          eq(consentDocuments.operatorId, operatorId),
+          eq(consentDocuments.type, type),
+          eq(consentDocuments.version, version),
+          eq(consentDocuments.locale, locale),
+          eq(consentDocuments.status, 'PUBLISHED'),
+        ),
+      )
+      .limit(1)
+    return row ? toDocument(row) : undefined
+  }
+
+  async findOperatorDocuments(
+    operatorId: string,
+    type: ConsentType,
+  ): Promise<ConsentDocument[]> {
+    const rows = await this.db
+      .select()
+      .from(consentDocuments)
+      .where(and(eq(consentDocuments.operatorId, operatorId), eq(consentDocuments.type, type)))
+    return rows.map(toDocument)
+  }
+
+  async createOperatorDocuments(rows: NewConsentDocument[]): Promise<ConsentDocument[]> {
+    if (rows.length === 0) return []
+    const inserted = await this.db
+      .insert(consentDocuments)
+      .values(rows.map((r) => ({ ...r, id: crypto.randomUUID() })))
+      .returning()
+    return inserted.map(toDocument)
+  }
+
+  async deleteOperatorDraftRows(
+    operatorId: string,
+    type: ConsentType,
+    version: string,
+  ): Promise<void> {
+    await this.db.delete(consentDocuments).where(
+      and(
+        eq(consentDocuments.operatorId, operatorId),
+        eq(consentDocuments.type, type),
+        eq(consentDocuments.version, version),
+        eq(consentDocuments.status, 'DRAFT'),
+      ),
+    )
+  }
+
+  async setOperatorVersionStatus(p: {
+    operatorId: string
+    type: ConsentType
+    version: string
+    from: ConsentDocStatus
+    to: ConsentDocStatus
+    publishedAt: Date | null
+    now: Date
+  }): Promise<ConsentDocument[]> {
+    const set: Partial<typeof consentDocuments.$inferInsert> = { status: p.to, updatedAt: p.now }
+    if (p.publishedAt !== null) set.publishedAt = p.publishedAt
+    const rows = await this.db
+      .update(consentDocuments)
+      .set(set)
+      .where(
+        and(
+          eq(consentDocuments.operatorId, p.operatorId),
+          eq(consentDocuments.type, p.type),
+          eq(consentDocuments.version, p.version),
+          eq(consentDocuments.status, p.from),
+        ),
+      )
+      .returning()
+    return rows.map(toDocument)
   }
 }

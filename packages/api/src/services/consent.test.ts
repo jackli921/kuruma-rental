@@ -211,6 +211,13 @@ describe('ConsentService.recordAcceptance — concurrent-race catch path', () =>
       findAcceptancesByUser: (...args) => realRepo.findAcceptancesByUser(...args),
       findAcceptancesByBooking: (...args) => realRepo.findAcceptancesByBooking(...args),
       findAcceptances: (...args) => realRepo.findAcceptances(...args),
+      findLatestPublishedVersionForOperator: (...args) =>
+        realRepo.findLatestPublishedVersionForOperator(...args),
+      findPublishedOperatorDocument: (...args) => realRepo.findPublishedOperatorDocument(...args),
+      findOperatorDocuments: (...args) => realRepo.findOperatorDocuments(...args),
+      createOperatorDocuments: (...args) => realRepo.createOperatorDocuments(...args),
+      deleteOperatorDraftRows: (...args) => realRepo.deleteOperatorDraftRows(...args),
+      setOperatorVersionStatus: (...args) => realRepo.setOperatorVersionStatus(...args),
     }
 
     const svc = new ConsentService(wrappedRepo, () => KEY)
