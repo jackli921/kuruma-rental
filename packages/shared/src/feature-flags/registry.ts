@@ -88,7 +88,7 @@ const REGISTRY = {
   CALENDAR_QUICKVIEW: {
     env: 'VITE_FEATURE_CALENDAR_QUICKVIEW',
     label: 'Calendar quick-view',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   // #1437: platform kill-switch for the shared add-on template catalog. Default ON
   // in CODE (serverDefault) - the feature_flags table is override-only, so no seed
