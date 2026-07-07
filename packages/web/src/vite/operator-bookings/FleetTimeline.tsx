@@ -16,7 +16,13 @@ import {
   buildTimelineLayout,
 } from '@/vite/operator-bookings/timeline-layout'
 import { addDays, startOfDay } from 'date-fns'
-import { type KeyboardEvent as ReactKeyboardEvent, useCallback, useMemo } from 'react'
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react'
 import Timeline, {
   type Id,
   type TimelineGroupBase,
@@ -78,6 +84,22 @@ export function FleetTimeline({
   // Shares the switcher with BookingsCalendar; the Timeline option follows the same
   // runtime-toggleable flag (#1322) so both views agree on the offered set.
   const timelineEnabled = useFeatureFlag('FLEET_TIMELINE')
+
+  // #1471: a date-range nav rebuilds every bar. If keyboard/screen-reader focus sat on a
+  // booking bar that the new window drops, React unmounts that node and the browser lets
+  // focus fall to <body>, stranding a screen-reader user at the top of the page. When that
+  // happens, return focus to the labelled board region — a stable anchor that always
+  // exists. If focus is still on a live control (the toolbar's Next drove the nav, as in
+  // Chromium where a click focuses the button first), it is left untouched so repeat
+  // navigation keeps working.
+  const regionRef = useRef<HTMLElement>(null)
+  const prevDateMsRef = useRef(date.getTime())
+  useEffect(() => {
+    const ms = date.getTime()
+    if (prevDateMsRef.current === ms) return
+    prevDateMsRef.current = ms
+    if (document.activeElement === document.body) regionRef.current?.focus()
+  }, [date])
 
   // The visible window is the SAME range the loader fetched (calendarRange), so the
   // board shows exactly the rows that were loaded — no off-by-one against the fetch.
@@ -267,7 +289,7 @@ export function FleetTimeline({
       />
       {/* #1349: name the whole board as a region so a screen-reader user gets a
           landmark to jump to and a label for the mouse-only canvas the lib renders. */}
-      <section aria-label={t('board.label', { range: toolbarLabel })}>
+      <section ref={regionRef} tabIndex={-1} aria-label={t('board.label', { range: toolbarLabel })}>
         <Timeline
           groups={groups}
           items={items}
