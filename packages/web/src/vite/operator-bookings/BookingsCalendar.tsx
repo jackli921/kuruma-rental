@@ -1,6 +1,6 @@
 import { instantToJstFauxLocal, jstWallClockToInstant, todayInJst } from '@/lib/datetime'
 import { localizer } from '@/lib/rbc-localizer'
-import { isCalendarQuickViewEnabled, useFeatureFlag } from '@/vite/config'
+import { useFeatureFlag } from '@/vite/config'
 import { CalendarEventChip } from '@/vite/operator-bookings/CalendarEventChip'
 import { CalendarToolbar } from '@/vite/operator-bookings/CalendarToolbar'
 import {
@@ -62,10 +62,10 @@ export function BookingsCalendar({
   // The Timeline option in the switcher follows the runtime-toggleable flag (#1322):
   // a dashboard override flips it live, falling back to the build-time default.
   const timelineEnabled = useFeatureFlag('FLEET_TIMELINE')
-  // The booking quick-view chip (#1282) is gated OFF for the beta MVP (#1329);
-  // when off, a booking renders as a plain band like a block. Build-time flag for
-  // now (runtime migration tracked by #1322).
-  const quickViewEnabled = isCalendarQuickViewEnabled()
+  // The booking quick-view chip (#1282) is gated OFF for the beta MVP (#1329); when
+  // off, a booking renders as a plain band like a block. Read via the runtime hook
+  // (#1479) so the admin switchboard flips it live, falling back to the build-time default.
+  const quickViewEnabled = useFeatureFlag('CALENDAR_QUICKVIEW')
 
   const toolbarLabel = useMemo(() => {
     const fmt = (opts: Intl.DateTimeFormatOptions) =>

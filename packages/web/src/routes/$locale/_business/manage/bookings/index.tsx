@@ -2,7 +2,6 @@ import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import {
   featureFlagsQueryOptions,
-  isCalendarQuickViewEnabled,
   isVisibleToViewer,
   resolveFeatureFlag,
   useFeatureFlag,
@@ -146,8 +145,9 @@ export function OperatorBookingsRoute() {
 
   // The booking quick-view chip (#1282) is gated OFF for the beta MVP (#1329). When
   // off, a booking band is a plain link-less span, so booking navigation moves back
-  // to the rbc event-click (handleSelectEvent) — the pre-#1282 baseline.
-  const quickViewEnabled = isCalendarQuickViewEnabled()
+  // to the rbc event-click (handleSelectEvent) — the pre-#1282 baseline. Read via the
+  // runtime hook (#1479) so the /admin switchboard toggles it live.
+  const quickViewEnabled = useFeatureFlag('CALENDAR_QUICKVIEW')
 
   // Block dialogs (#1101): a schedule (create) form with an optional slot prefill,
   // and a click-to-view detail keyed on the selected block.
