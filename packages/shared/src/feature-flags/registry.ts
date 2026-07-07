@@ -83,7 +83,7 @@ const REGISTRY = {
   OPERATOR_TODAY: {
     env: 'VITE_FEATURE_OPERATOR_TODAY',
     label: 'Operator today panel',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   CALENDAR_QUICKVIEW: {
     env: 'VITE_FEATURE_CALENDAR_QUICKVIEW',

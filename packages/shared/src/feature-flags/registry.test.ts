@@ -69,6 +69,9 @@ describe('feature flag registry', () => {
         'OPERATOR_SETTINGS',
         'RENTER_DOCUMENTS',
         'MESSAGING',
+        // #1479 (Tier 2, path-to-GA #1476): the last two build-time-only flags,
+        // migrated to useFeatureFlag() so the admin switchboard flips them live.
+        'OPERATOR_TODAY',
         // Server-only, but the web reads it via useFeatureFlag() to hide the
         // operator picker + admin template library live, so it is runtimeControlled.
         'SHARED_CATALOG',

@@ -1,4 +1,4 @@
-import { isOperatorTodayEnabled } from '@/vite/config'
+import { useFeatureFlag } from '@/vite/config'
 import { TodayPanel } from '@/vite/operator-dashboard/TodayPanel'
 import { ComplianceBanner } from '@/vite/operator-fleet/ComplianceBanner'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
@@ -35,6 +35,9 @@ export function OperatorDashboardView({
   pickedOperatorId,
 }: OperatorDashboardViewProps) {
   const t = useTranslations('business')
+  // #1479 (Tier 2, path-to-GA #1476): read via the runtime hook so the admin switchboard
+  // can flip the Today panel live; falls back to the build-time default outside the provider.
+  const operatorTodayEnabled = useFeatureFlag('OPERATOR_TODAY')
 
   const tiles = [
     { label: t('stats.totalBookings'), icon: CalendarDays, value: overview.totalBookings },
@@ -52,7 +55,7 @@ export function OperatorDashboardView({
 
         {/* #1102 Today panel, gated OFF for the beta MVP (#1329). The panel also
             self-gates to an operator session; this flag hides it entirely otherwise. */}
-        {isOperatorTodayEnabled() && (
+        {operatorTodayEnabled && (
           <TodayPanel
             today={overview.today}
             vehicles={vehicles}
