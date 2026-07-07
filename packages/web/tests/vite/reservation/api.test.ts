@@ -98,6 +98,19 @@ describe('fetchInsuranceOptions', () => {
       credentials: 'include',
     })
   })
+
+  // Catalog i18n (#1437 slice 3b): insurance names are now self-authored + resolved
+  // server-side to `?locale=`, so the renter wizard threads its route locale.
+  it('appends the caller locale so the server resolves insurance names to it', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchInsuranceOptions('loc-1', 'ja')
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/storefronts/loc-1/insurance-options?locale=ja', {
+      credentials: 'include',
+    })
+  })
 })
 
 // #711: validate the response body at the network seam. A renamed/dropped field

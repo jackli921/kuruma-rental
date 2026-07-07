@@ -175,19 +175,24 @@ describe('cross-operator insurance-option WRITE denial (service seal, #404)', ()
   })
 
   it('operator B cannot update operator A option (404, row untouched)', async () => {
-    const res = await service.update(ctxFor(opBId), optionA.id, { nameI18n: { en: 'hijacked' } })
+    const res = await service.update(
+      ctxFor(opBId),
+      optionA.id,
+      { nameI18n: { en: 'hijacked' } },
+      'en',
+    )
     expect(res).toMatchObject({ ok: false, status: 404, error: 'Insurance option not found' })
     expect(await repo.findById(SYSTEM_CONTEXT, optionA.id)).toMatchObject({ name: 'Premium' })
   })
 
   it('operator B cannot archive operator A option (404, still ACTIVE)', async () => {
-    const res = await service.archive(ctxFor(opBId), optionA.id)
+    const res = await service.archive(ctxFor(opBId), optionA.id, 'en')
     expect(res).toMatchObject({ ok: false, status: 404 })
     expect(await repo.findById(SYSTEM_CONTEXT, optionA.id)).toMatchObject({ status: 'ACTIVE' })
   })
 
   it('operator A can update its own option', async () => {
-    const res = await service.update(ctxFor(opAId), optionA.id, { dailyPriceJpy: 2000 })
+    const res = await service.update(ctxFor(opAId), optionA.id, { dailyPriceJpy: 2000 }, 'en')
     expect(res).toMatchObject({ ok: true, option: { dailyPriceJpy: 2000 } })
   })
 
@@ -195,13 +200,17 @@ describe('cross-operator insurance-option WRITE denial (service seal, #404)', ()
   // column persists null in Postgres while the in-memory repo keeps it (spreads
   // ...data), so this round-trip is the ONLY layer that catches the regression.
   it('[#1437] service create round-trips nameI18n through Postgres and mirrors name = en', async () => {
-    const res = await service.create(ctxFor(opAId), {
-      operatorId: opAId,
-      nameI18n: { en: 'Gold', ja: 'ゴールド', zh: '黄金' },
-      description: null,
-      dailyPriceJpy: 1500,
-      deductibleJpy: null,
-    })
+    const res = await service.create(
+      ctxFor(opAId),
+      {
+        operatorId: opAId,
+        nameI18n: { en: 'Gold', ja: 'ゴールド', zh: '黄金' },
+        description: null,
+        dailyPriceJpy: 1500,
+        deductibleJpy: null,
+      },
+      'en',
+    )
     expect(res.ok).toBe(true)
     if (!res.ok) return
     // Read back with a FRESH SELECT (not the create return) to prove Postgres stored it.

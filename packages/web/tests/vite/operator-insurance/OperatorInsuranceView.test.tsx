@@ -59,8 +59,9 @@ function wrapper({ children }: { children: ReactNode }) {
 const option = {
   id: 'ins_1',
   operatorId: 'op_1',
-  name: 'Full cover',
-  // 3a: the row renders from the `name` mirror; a legacy null bundle is valid.
+  // 3b: the row renders from the server-resolved `resolvedName`; a legacy null
+  // bundle is valid (the server resolved it from the `name` mirror).
+  resolvedName: 'Full cover',
   nameI18n: null,
   description: 'Everything covered',
   dailyPriceJpy: 2000,
@@ -88,8 +89,8 @@ describe('OperatorInsuranceView', () => {
   })
 
   it('sorts options by name ascending', () => {
-    const b = { ...option, id: 'b', name: 'Basic' }
-    const z = { ...option, id: 'z', name: 'Zen' }
+    const b = { ...option, id: 'b', resolvedName: 'Basic' }
+    const z = { ...option, id: 'z', resolvedName: 'Zen' }
     render(<OperatorInsuranceView options={[z, b]} scope={writeScope} />, { wrapper })
     const headings = screen.getAllByRole('heading').map((h) => h.textContent)
     expect(headings).toEqual(['Basic', 'Zen'])
@@ -109,7 +110,12 @@ describe('OperatorInsuranceView', () => {
   })
 
   it('disables the archive action for an already-archived option', () => {
-    const archived = { ...option, id: 'arch', name: 'Old plan', status: 'ARCHIVED' as const }
+    const archived = {
+      ...option,
+      id: 'arch',
+      resolvedName: 'Old plan',
+      status: 'ARCHIVED' as const,
+    }
     render(<OperatorInsuranceView options={[archived]} scope={writeScope} />, { wrapper })
     expect(screen.getByRole('button', { name: 'archiveAction' })).toBeDisabled()
   })

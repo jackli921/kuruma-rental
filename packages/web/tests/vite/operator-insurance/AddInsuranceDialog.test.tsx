@@ -19,7 +19,7 @@ const NAME_LABEL = en.business.insurance.form.nameEn
 const createdRow = {
   id: 'ins1',
   operatorId: 'op_9',
-  name: 'Full cover',
+  resolvedName: 'Full cover',
   nameI18n: { en: 'Full cover' },
   description: null,
   dailyPriceJpy: 0,
