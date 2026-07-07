@@ -720,7 +720,7 @@ describe('getInsuranceOptions', () => {
       deductibleJpy: 50000,
     })
 
-    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id)
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id, 'en')
 
     if (!result.ok) throw new Error('expected ok result')
     expect(result.data).toEqual([
@@ -734,6 +734,24 @@ describe('getInsuranceOptions', () => {
     ])
   })
 
+  it('resolves a self-authored insurance name to the renter locale (#1437 slice 3b)', async () => {
+    const op = await makeOperator('Op A', 'op-a')
+    const loc = await makeLocation({ operatorId: op.id })
+    await makeInsurance({
+      operatorId: op.id,
+      name: 'Full Cover', // en mirror — must NOT win over the ja bundle
+      nameI18n: { en: 'Full Cover', ja: 'フルカバー' },
+      dailyPriceJpy: 1500,
+    })
+
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id, 'ja')
+
+    if (!result.ok) throw new Error('expected ok result')
+    // The RENTER wire keeps the field name `name` (unlike the operator rename);
+    // its value is the ja-resolved label.
+    expect(result.data[0]?.name).toBe('フルカバー')
+  })
+
   it('excludes ARCHIVED options', async () => {
     const op = await makeOperator('Op A', 'op-a')
     const loc = await makeLocation({ operatorId: op.id })
@@ -741,7 +759,7 @@ describe('getInsuranceOptions', () => {
     const archived = await makeInsurance({ operatorId: op.id, name: 'Old CDW', dailyPriceJpy: 800 })
     await insuranceRepo.archive(SYSTEM_CONTEXT, archived.id)
 
-    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id)
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id, 'en')
 
     if (!result.ok) throw new Error('expected ok result')
     expect(result.data.map((o) => o.name)).toEqual(['Active CDW'])
@@ -754,7 +772,7 @@ describe('getInsuranceOptions', () => {
     await makeInsurance({ operatorId: opA.id, name: 'A-CDW', dailyPriceJpy: 1000 })
     await makeInsurance({ operatorId: opB.id, name: 'B-CDW', dailyPriceJpy: 2000 })
 
-    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, locA.id)
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, locA.id, 'en')
 
     if (!result.ok) throw new Error('expected ok result')
     expect(result.data.map((o) => o.name)).toEqual(['A-CDW'])
@@ -764,14 +782,14 @@ describe('getInsuranceOptions', () => {
     const op = await makeOperator('Op A', 'op-a')
     const loc = await makeLocation({ operatorId: op.id })
 
-    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id)
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id, 'en')
 
     if (!result.ok) throw new Error('expected ok result')
     expect(result.data).toEqual([])
   })
 
   it('404s for an unknown location', async () => {
-    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, crypto.randomUUID())
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, crypto.randomUUID(), 'en')
     expect(result).toEqual({ ok: false, error: 'Storefront not found', status: 404 })
   })
 
@@ -780,7 +798,7 @@ describe('getInsuranceOptions', () => {
     const loc = await makeLocation({ operatorId: op.id })
     await locationRepo.archive(SYSTEM_CONTEXT, loc.id)
 
-    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id)
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id, 'en')
     expect(result).toEqual({ ok: false, error: 'Storefront not found', status: 404 })
   })
 })

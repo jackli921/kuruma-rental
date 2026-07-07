@@ -19,7 +19,7 @@ const SAVE = en.business.insurance.form.save
 const baseRow: InsuranceOptionData = {
   id: 'ins_1',
   operatorId: 'op_1',
-  name: 'Full cover',
+  resolvedName: 'Full cover',
   nameI18n: null,
   description: null,
   dailyPriceJpy: 2000,
@@ -46,7 +46,7 @@ describe('EditInsuranceDialog prefill (#1437 Finding 8)', () => {
   it('prefills all three name slots from a self-authored nameI18n bundle', () => {
     const option = {
       ...baseRow,
-      name: 'Full cover',
+      resolvedName: 'Full cover',
       nameI18n: { en: 'Full cover', ja: 'フルカバー', zh: '全保' },
     }
     renderDialog(<EditInsuranceDialog option={option} onOpenChange={vi.fn()} />)
@@ -56,18 +56,18 @@ describe('EditInsuranceDialog prefill (#1437 Finding 8)', () => {
     expect(screen.getByLabelText(NAME_ZH)).toHaveValue('全保')
   })
 
-  it('seeds the English slot from the name mirror for a legacy row (nameI18n null)', () => {
-    const option = { ...baseRow, name: 'Legacy Cover', nameI18n: null }
+  it('seeds the English slot from the resolved name for a legacy row (nameI18n null)', () => {
+    const option = { ...baseRow, resolvedName: 'Legacy Cover', nameI18n: null }
     renderDialog(<EditInsuranceDialog option={option} onOpenChange={vi.fn()} />)
 
-    // A price-only edit must not force re-typing the name — en falls back to the mirror.
+    // A price-only edit must not force re-typing the name — en falls back to resolvedName.
     expect(screen.getByLabelText(NAME_EN)).toHaveValue('Legacy Cover')
     expect(screen.getByLabelText(NAME_JA)).toHaveValue('')
     expect(screen.getByLabelText(NAME_ZH)).toHaveValue('')
   })
 
   it('submits the edited slots as a nameI18n bundle to the PATCH', async () => {
-    const option = { ...baseRow, name: 'Full cover', nameI18n: { en: 'Full cover' } }
+    const option = { ...baseRow, resolvedName: 'Full cover', nameI18n: { en: 'Full cover' } }
     fetchSpy.mockResolvedValue(
       new Response(
         JSON.stringify({

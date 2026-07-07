@@ -71,11 +71,31 @@ describe('Insurance option routes — operator CRUD', () => {
     expect(res.status).toBe(201)
     const { data } = await res.json()
     expect(data.operatorId).toBe(OP_A)
-    expect(data.name).toBe('Standard Cover')
+    expect(data.resolvedName).toBe('Standard Cover')
     expect(data.nameI18n).toEqual({ en: 'Standard Cover' })
     expect(data.dailyPriceJpy).toBe(1500)
     expect(data.deductibleJpy).toBe(150000)
     expect(data.status).toBe('ACTIVE')
+  })
+
+  it('resolves resolvedName to ?locale= on the list read (#1437 slice 3b)', async () => {
+    const repo = new InMemoryInsuranceOptionRepository()
+    await POST(
+      mountFor(repo, 'OPERATOR_OWNER', OP_A),
+      body({ nameI18n: { en: 'Full Cover', ja: 'フルカバー' } }),
+    )
+    const res = await mountFor(repo, 'OPERATOR_OWNER', OP_A).request('/insurance-options?locale=ja')
+    const { data } = await res.json()
+    expect(data[0].resolvedName).toBe('フルカバー')
+    // The raw bundle rides along so the edit form can prefill locale slots.
+    expect(data[0].nameI18n).toEqual({ en: 'Full Cover', ja: 'フルカバー' })
+  })
+
+  it('rejects an unknown ?locale= with 400 (never coerced)', async () => {
+    const repo = new InMemoryInsuranceOptionRepository()
+    await POST(mountFor(repo, 'OPERATOR_OWNER', OP_A))
+    const res = await mountFor(repo, 'OPERATOR_OWNER', OP_A).request('/insurance-options?locale=xx')
+    expect(res.status).toBe(400)
   })
 
   it('lists only the caller operator options', async () => {

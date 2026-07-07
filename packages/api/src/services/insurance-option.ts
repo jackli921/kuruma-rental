@@ -1,4 +1,6 @@
+import type { Locale } from '@kuruma/shared/i18n/locales'
 import type { LocalizedText } from '@kuruma/shared/i18n/localized-text'
+import type { InsuranceOptionData } from '@kuruma/shared/types/insurance-option'
 import type { CallerContext } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type {
@@ -7,10 +9,33 @@ import type {
   InsuranceOptionRepository,
 } from '../repositories/types'
 import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
+import { resolveInsuranceName } from './insurance-resolve'
 
 export type InsuranceOptionResult =
-  | { ok: true; option: InsuranceOption }
+  | { ok: true; option: InsuranceOptionData }
   | { ok: false; error: string; status: number }
+
+/**
+ * Project a read row to the operator wire DTO, resolving `nameI18n` to the caller
+ * locale (catalog i18n slice 3b). The multi-locale bundle stays server-side; the
+ * wire carries one resolved label + the raw `nameI18n` bag so the edit form can
+ * show/edit the authored-locale slots. Dates render as ISO strings (JSON has no
+ * Date) — the operator wire keeps timestamps (unlike the add-on DTO).
+ */
+function toInsuranceOptionData(row: InsuranceOption, locale: Locale): InsuranceOptionData {
+  return {
+    id: row.id,
+    operatorId: row.operatorId,
+    resolvedName: resolveInsuranceName(row, locale),
+    nameI18n: row.nameI18n,
+    description: row.description,
+    dailyPriceJpy: row.dailyPriceJpy,
+    deductibleJpy: row.deductibleJpy,
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  }
+}
 
 /**
  * The create intent (#1437 slice 3). Insurance is purely self-authored, so the
@@ -52,13 +77,20 @@ export class InsuranceOptionService {
   async findAll(
     ctx: CallerContext,
     read: CrossOperatorRead,
-    filters: InsuranceOptionFilters = {},
-  ): Promise<InsuranceOption[]> {
-    return this.repo.findAll(ctx, applyCrossOperatorReadScope(ctx, read, filters))
+    filters: InsuranceOptionFilters,
+    locale: Locale,
+  ): Promise<InsuranceOptionData[]> {
+    const rows = await this.repo.findAll(ctx, applyCrossOperatorReadScope(ctx, read, filters))
+    return rows.map((row) => toInsuranceOptionData(row, locale))
   }
 
-  async findById(ctx: CallerContext, id: string): Promise<InsuranceOption | undefined> {
-    return this.repo.findById(ctx, id)
+  async findById(
+    ctx: CallerContext,
+    id: string,
+    locale: Locale,
+  ): Promise<InsuranceOptionData | undefined> {
+    const row = await this.repo.findById(ctx, id)
+    return row ? toInsuranceOptionData(row, locale) : undefined
   }
 
   /**
@@ -67,7 +99,11 @@ export class InsuranceOptionService {
    * ACTIVE rows only; the pre-check yields a friendly 409, the DB partial unique
    * index is the real seal.
    */
-  async create(_ctx: CallerContext, data: InsuranceOptionCreate): Promise<InsuranceOptionResult> {
+  async create(
+    _ctx: CallerContext,
+    data: InsuranceOptionCreate,
+    locale: Locale,
+  ): Promise<InsuranceOptionResult> {
     // The `name` column mirrors nameI18n.en — the ACTIVE-name unique seal, the
     // asc(name) ordering key, and the booking-snapshot source (#1437 slice 3).
     const name = data.nameI18n.en
@@ -87,7 +123,7 @@ export class InsuranceOptionService {
         deductibleJpy: data.deductibleJpy,
         status: 'ACTIVE',
       })
-      return { ok: true, option }
+      return { ok: true, option: toInsuranceOptionData(option, locale) }
     } catch (err) {
       if (isDuplicateName(err)) return { ok: false, error: DUPLICATE_NAME_MESSAGE, status: 409 }
       throw err
@@ -98,6 +134,7 @@ export class InsuranceOptionService {
     ctx: CallerContext,
     id: string,
     data: InsuranceOptionUpdate,
+    locale: Locale,
   ): Promise<InsuranceOptionResult> {
     // Caller-scoped existence check: an operator may only edit its own option.
     // A cross-tenant id reads as undefined here, so the write below never runs
@@ -123,7 +160,7 @@ export class InsuranceOptionService {
       if (data.nameI18n) patch.name = data.nameI18n.en
       const updated = await this.repo.update(ctx, id, patch)
       if (!updated) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
-      return { ok: true, option: updated }
+      return { ok: true, option: toInsuranceOptionData(updated, locale) }
     } catch (err) {
       // Same lost-race seal as create: a concurrent rename onto this name maps
       // to a friendly 409 rather than surfacing the raw unique-violation.
@@ -132,7 +169,7 @@ export class InsuranceOptionService {
     }
   }
 
-  async archive(ctx: CallerContext, id: string): Promise<InsuranceOptionResult> {
+  async archive(ctx: CallerContext, id: string, locale: Locale): Promise<InsuranceOptionResult> {
     // Same caller-scoped guard as update — load before mutate so a cross-tenant
     // id can never be archived.
     const existing = await this.repo.findById(ctx, id)
@@ -140,6 +177,6 @@ export class InsuranceOptionService {
 
     const archived = await this.repo.archive(ctx, id)
     if (!archived) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
-    return { ok: true, option: archived }
+    return { ok: true, option: toInsuranceOptionData(archived, locale) }
   }
 }

@@ -41,7 +41,7 @@ export function EditInsuranceDialog({ option, onOpenChange }: EditInsuranceDialo
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('editOption')}</DialogTitle>
-          <DialogDescription>{option?.name}</DialogDescription>
+          <DialogDescription>{option?.resolvedName}</DialogDescription>
         </DialogHeader>
         {error && (
           <p className="text-sm text-destructive px-1">
@@ -63,8 +63,8 @@ export function EditInsuranceDialog({ option, onOpenChange }: EditInsuranceDialo
             isSubmitting={isPending}
             defaultValues={{
               // Prefill the locale slots; a legacy row (nameI18n null) seeds `en`
-              // from the `name` mirror so a price-only edit needn't re-type the name.
-              nameEn: option.nameI18n?.en ?? option.name,
+              // from the server-resolved name so a price-only edit needn't re-type it.
+              nameEn: option.nameI18n?.en ?? option.resolvedName,
               nameJa: option.nameI18n?.ja ?? '',
               nameZh: option.nameI18n?.zh ?? '',
               description: option.description ?? '',

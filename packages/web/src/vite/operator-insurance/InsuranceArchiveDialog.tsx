@@ -46,7 +46,7 @@ export function InsuranceArchiveDialog({ option, onOpenChange }: InsuranceArchiv
     <Dialog open={option !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('archiveTitle', { name: option?.name ?? '' })}</DialogTitle>
+          <DialogTitle>{t('archiveTitle', { name: option?.resolvedName ?? '' })}</DialogTitle>
           <DialogDescription>{t('archiveDescription')}</DialogDescription>
         </DialogHeader>
 

@@ -16,6 +16,7 @@ import type {
 } from '../repositories/types'
 import { resolveAddOnDescription, resolveAddOnName } from './add-on-resolve'
 import type { ClassOfferingService } from './class-offering'
+import { resolveInsuranceName } from './insurance-resolve'
 import { clampLimit, decodeCursor, encodeCursor } from './search-paging'
 
 export interface StorefrontSummary {
@@ -139,18 +140,23 @@ export class StorefrontDetailService {
   async getInsuranceOptions(
     ctx: CallerContext,
     locationId: string,
+    locale: Locale,
   ): Promise<StorefrontInsuranceResult> {
     const [storefront] = await this.storefrontRepo.findActiveStorefronts(ctx, {
       pickupLocationId: locationId,
     })
     if (!storefront) return { ok: false, error: 'Storefront not found', status: 404 }
 
+    // Catalog i18n (slice 3b): resolve the self-authored name to the renter's
+    // locale here, at the boundary — the multi-locale bundle never reaches the
+    // wire. The RENTER field stays `name` (unlike the operator DTO's rename);
+    // legacy nameI18n-null rows fall back to their `name` column.
     const options = await this.insuranceOptionRepo.findActiveByOperator(storefront.operatorId)
     return {
       ok: true,
       data: options.map((o) => ({
         id: o.id,
-        name: o.name,
+        name: resolveInsuranceName(o, locale),
         description: o.description,
         dailyPriceJpy: o.dailyPriceJpy,
         deductibleJpy: o.deductibleJpy,

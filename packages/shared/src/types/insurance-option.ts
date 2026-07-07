@@ -6,9 +6,10 @@
  * lives here, drizzle-free; the status union comes from `@kuruma/shared/enums` (#814).
  *
  * Dates are ISO 8601 strings (JSON has no Date). The web schema pins to this via
- * `satisfies z.ZodType<InsuranceOptionData>` and the API row type is fenced against
- * `Jsonified<InsuranceOption>` (api `wire-contract.test.ts`), so a producer-side
- * field rename fails `typecheck` instead of surfacing as a runtime ParseError.
+ * `satisfies z.ZodType<InsuranceOptionData>`. Catalog i18n (slice 3b): the operator
+ * DTO is a hand-projected service model (`resolvedName` + the raw `nameI18n` bundle,
+ * no `name` column), so the old `Jsonified<InsuranceOption>` compile-fence is retired
+ * (api `wire-contract.test.ts`) — the `satisfies` pin is now the single seam.
  */
 
 import type { InsuranceStatus } from '../enums'
@@ -17,11 +18,12 @@ import type { LocalizedText } from '../i18n/localized-text'
 export interface InsuranceOptionData {
   id: string
   operatorId: string
-  name: string
+  /** Self-authored name resolved to the caller locale (English fallback). */
+  resolvedName: string
   /**
-   * SELF-AUTHORED name bundle (#1437 slice 3). Additive in slice 3a: the read
-   * still returns the resolved label in `name`; slice 3b renames `name` ->
-   * `resolvedName`. Null for legacy rows (rendered from the `name` mirror).
+   * The operator's RAW authored name bundle (#1437 slice 3), returned so the edit
+   * form can add ja/zh or fix en later (D5). Null for a legacy row, which resolves
+   * from the `name` mirror server-side.
    */
   nameI18n: LocalizedText | null
   description: string | null

@@ -96,12 +96,12 @@ export const Route = createFileRoute('/$locale/_renter/bookings/new')({
     }
 
     // The $locale layout already 404s an invalid param; narrow it to satisfy the
-    // typed client (fall back to the default defensively). Add-on names resolve to
-    // this locale server-side; a locale change re-runs the loader via the path.
+    // typed client (fall back to the default defensively). Add-on + insurance names
+    // resolve to this locale server-side; a locale change re-runs the loader via the path.
     const locale = isLocale(params.locale) ? params.locale : DEFAULT_LOCALE
     const [addOns, insuranceOptions] = await Promise.all([
       fetchAddOns(deps.locationId, locale),
-      fetchInsuranceOptions(deps.locationId),
+      fetchInsuranceOptions(deps.locationId, locale),
     ])
     return {
       subject,
