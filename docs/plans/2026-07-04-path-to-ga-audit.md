@@ -89,12 +89,19 @@ Both are complete and correct but read a **build-time** function, so an admin to
 3. **Tier 3 — done.** #1349 shipped (**PR #1469 merged**, keyboard + ARIA on the bars); `FLEET_TIMELINE` is now flip-ready and folds into the Tier 1 go-live decision. No remaining work.
 4. **Tier 4** — resolve `RENTER_DOCUMENTS` (product call) and scope `MESSAGING` operator side if wanted; treat `SEARCH_MAP` as a build-config decision for paid tiers.
 
-## Open questions for the owner
+## Owner decisions (2026-07-07)
 
-1. Of the Tier-1 features, which are held off for **business/sequencing** reasons vs simply "not turned on yet"? (Determines whether go-live is one toggle session or staged.)
-2. **`RENTER_DOCUMENTS`:** is document verification required for GA bookings, or is instant-book the permanent flow (deprecate)?
-3. **`MESSAGING`:** is the operator side in scope for GA, or does renter↔operator messaging stay renter-only / off?
-4. **Go-live gating:** should turning a flag on require a QA smoke checklist per feature, or is the existing test coverage sufficient to flip directly?
+The four open questions below were resolved by the owner:
+
+1. **Tier-1 turn-on:** No engineering sequencing needed — the owner will flip each feature on directly from the admin switchboard (`/admin/feature-flags`) at their own pace. Reviews' empty-state concern is moot since each flag toggles independently and instantly.
+2. **`RENTER_DOCUMENTS`:** Keep it **built but off**; do not re-integrate or deprecate yet. Revisit once real operating/fraud signals justify a call.
+3. **`MESSAGING`:** Operator side is **in scope for launch** — build it (~5-7 days, security-critical; design `docs/plans/2026-06-27-messaging-un-gate-design.md`, 4 slices). This is the largest remaining engineering item.
+4. **Go-live gating:** **Trust existing test coverage** — flip flags on directly, no per-feature manual QA smoke gate.
+
+### Resulting priority order
+1. **Operator-side messaging** (the only committed multi-day build) — 4-slice design already exists.
+2. **Tier-2 migrations** (`OPERATOR_TODAY`, `CALENDAR_QUICKVIEW`) — ~2h each, so those two also become owner-toggleable.
+3. **Owner-driven flag turn-on** — self-serve, no engineering dependency.
 
 ## Provenance
 
