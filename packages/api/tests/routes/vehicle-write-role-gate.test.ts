@@ -14,12 +14,16 @@ import type { Vehicle } from '../../src/stores'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
 import { TEST_OPERATOR_ID } from '../helpers/operator'
 
-// #1477 drift guard. Every vehicle WRITE route must admit the FLEET_WRITE tier
-// (platform base + tenant operators), never the narrower platform STAFF tier.
+// #1477 drift guard. Every WRITE route under the /vehicles/* prefix (vehicles.ts,
+// vehicle-photos.ts, vehicle-blocks.ts) must admit the FLEET_WRITE tier (platform
+// base + tenant operators), never the narrower platform STAFF tier. Sibling
+// fleet-write resources on their OWN prefixes (/vehicle-classes, /locations,
+// /add-ons, /fee-schedules, /insurance-options) share the same hand-copied gate
+// but are out of this guard's /vehicles/* scope — extend or add sibling guards.
 // #1406 was an accidental retighten of the photo routes from FLEET_WRITE_ROLES
 // back to STAFF_ROLES; the gate `FLEET_WRITE_ROLES.has(user.role)` is hand-copied
-// into ~6 vehicle write handlers with nothing structural keeping them in sync, so
-// that desync shipped with no test going red. This pins the tier from BOTH sides:
+// into these handlers with nothing structural keeping them in sync, so that desync
+// shipped with no test going red. This pins the tier from BOTH sides:
 //   - an operator (OPERATOR_OWNER / OPERATOR_STAFF = FLEET_WRITE \ STAFF) must NOT
 //     be forbidden -> catches a retighten to STAFF_ROLES (the #1406 regression);
 //   - a renter (outside FLEET_WRITE) MUST be forbidden -> catches gate removal or
@@ -49,6 +53,14 @@ const WRITE_ROUTES: readonly WriteRoute[] = [
     multipart: true,
   },
   { name: 'DELETE /vehicles/:id/photos', method: 'DELETE', path: (id) => `/vehicles/${id}/photos` },
+  { name: 'POST /vehicles/:id/blocks', method: 'POST', path: (id) => `/vehicles/${id}/blocks` },
+  {
+    name: 'DELETE /vehicles/:id/blocks/:blockId',
+    method: 'DELETE',
+    // The gate is the first line of the handler, so the (nonexistent) blockId
+    // never matters — it 404s downstream, well past the 403 boundary we assert.
+    path: (id) => `/vehicles/${id}/blocks/00000000-0000-0000-0000-000000000000`,
+  },
 ]
 
 // FLEET_WRITE_ROLES \ STAFF_ROLES: the tenant operators a retighten-to-STAFF
