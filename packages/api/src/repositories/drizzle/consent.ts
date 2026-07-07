@@ -23,6 +23,7 @@ function toDocument(r: DocRow): ConsentDocument {
     type: r.type,
     version: r.version,
     locale: r.locale,
+    operatorId: r.operatorId,
     title: r.title,
     body: r.body,
     acceptanceLabel: r.acceptanceLabel,

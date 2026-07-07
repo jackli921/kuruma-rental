@@ -12,6 +12,7 @@ function doc(over: Partial<ConsentDocument> = {}): ConsentDocument {
     type: 'RENTER_TOS',
     version: '1.0',
     locale: 'en',
+    operatorId: null,
     title: 'Terms',
     body: 'body',
     acceptanceLabel: 'I accept',

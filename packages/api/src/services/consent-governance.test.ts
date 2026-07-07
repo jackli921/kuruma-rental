@@ -12,6 +12,7 @@ function doc(id: string, version: string, type: ConsentDocument['type']): Consen
     type,
     version,
     locale: 'en',
+    operatorId: null,
     title: 'Terms',
     body: 'body',
     acceptanceLabel: 'I accept',

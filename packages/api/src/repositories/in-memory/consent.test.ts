@@ -9,6 +9,7 @@ const DOC: ConsentDocument = {
   type: 'RENTER_TOS',
   version: '1.0',
   locale: 'en',
+  operatorId: null,
   title: 'Terms',
   body: 'body',
   acceptanceLabel: 'I accept',
