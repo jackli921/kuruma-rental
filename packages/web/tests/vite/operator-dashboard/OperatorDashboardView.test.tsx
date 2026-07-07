@@ -1,6 +1,8 @@
+import { FeatureFlagsProvider } from '@/vite/config'
 import { OperatorDashboardView } from '@/vite/operator-dashboard/OperatorDashboardView'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import type { Session } from '@/vite/session'
+import type { FeatureFlagOverrides } from '@kuruma/shared/feature-flags/registry'
 import type { OperatorOverview } from '@kuruma/shared/types/overview'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
@@ -104,6 +106,34 @@ function renderDashboard(
   )
 }
 
+// Runtime-override proof (#1479): OPERATOR_TODAY is now read via useFeatureFlag, so a
+// server override must beat the build-time env. Seed the ['feature-flags'] cache (fresh
+// for staleTime, so the provider's query never touches the network) and wrap in the real
+// FeatureFlagsProvider — the same seam the reservation wizard / #1322 flags are tested by.
+function renderDashboardWithOverride(
+  overrides: FeatureFlagOverrides,
+  session: Session | null,
+  pickedOperatorId: string | undefined = undefined,
+) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  queryClient.setQueryData(['feature-flags'], overrides)
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <IntlProvider locale="en" messages={enMessages}>
+        <FeatureFlagsProvider>
+          <OperatorDashboardView
+            overview={overview}
+            vehicles={[vehicle()]}
+            session={session}
+            locale="en"
+            pickedOperatorId={pickedOperatorId}
+          />
+        </FeatureFlagsProvider>
+      </IntlProvider>
+    </QueryClientProvider>,
+  )
+}
+
 describe('OperatorDashboardView', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
@@ -151,6 +181,18 @@ describe('OperatorDashboardView', () => {
   it('hides the Today panel from a picker admin who has not picked an operator (#1433)', () => {
     vi.stubEnv('VITE_FEATURE_OPERATOR_TODAY', 'true')
     renderDashboard([vehicle()], ADMIN_SESSION)
+    expect(screen.queryByRole('region', { name: TODAY_PANEL_TITLE })).not.toBeInTheDocument()
+  })
+
+  it('shows the Today panel when the OPERATOR_TODAY runtime override is ON despite the build-time env being OFF (#1479)', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_TODAY', undefined)
+    renderDashboardWithOverride({ OPERATOR_TODAY: true }, OPERATOR_SESSION)
+    expect(screen.getByRole('region', { name: TODAY_PANEL_TITLE })).toBeInTheDocument()
+  })
+
+  it('hides the Today panel when the OPERATOR_TODAY runtime override is OFF despite the build-time env being ON (#1479)', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_TODAY', 'true')
+    renderDashboardWithOverride({ OPERATOR_TODAY: false }, OPERATOR_SESSION)
     expect(screen.queryByRole('region', { name: TODAY_PANEL_TITLE })).not.toBeInTheDocument()
   })
 })
