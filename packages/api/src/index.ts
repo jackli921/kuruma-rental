@@ -55,6 +55,7 @@ import { createMessageRoutes } from './routes/messages'
 import { createNotificationRoutes } from './routes/notifications'
 import { createOperatorApplicationRoutes } from './routes/operator-applications'
 import { createOperatorTeamRoutes } from './routes/operator-team'
+import { createOperatorTermsRoutes } from './routes/operator-terms'
 import { createOperatorRoutes } from './routes/operators'
 import { createOverviewRoutes } from './routes/overview'
 import { createPaymentAnomalyRoutes } from './routes/payment-anomalies'
@@ -116,6 +117,7 @@ import {
 } from './services/operator-recipients'
 import { OperatorSummaryService } from './services/operator-summary'
 import { OperatorTeamService } from './services/operator-team'
+import { OperatorTermsService } from './services/operator-terms'
 import { OverviewService } from './services/overview'
 import { PaymentAnomalyService } from './services/payment-anomaly'
 import { CancellationRefundReconciler } from './services/payment/cancellation-refund-reconciler'
@@ -483,6 +485,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
     resolveOperatorIdForWrite(ctx, inputOperatorId)
+  const operatorTermsService = new OperatorTermsService(consentRepo)
   const vehicleService = new VehicleService(vehicleRepo, resolveWriteOperatorId, photosPublicUrl)
   const locationService = new LocationService(locationRepo, bookingRepo, cachedGeocoder, regionRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
@@ -614,6 +617,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createLocationRoutes(locationService, resolveWriteOperatorId))
     .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))
     .route('/', createAddOnRoutes(addOnService, resolveWriteOperatorId))
+    .route('/', createOperatorTermsRoutes(operatorTermsService, resolveWriteOperatorId))
     .route('/', createAddOnTemplateRoutes(addOnTemplateService))
     .route('/', createAdminTemplateRoutes(templateLibraryService))
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))
