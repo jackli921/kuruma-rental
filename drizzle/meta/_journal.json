@@ -715,6 +715,13 @@
       "when": 1783131802400,
       "tag": "0101_add_review_moderation_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1783200930778,
+      "tag": "0102_insurance_name_i18n",
+      "breakpoints": true
     }
   ]
 }

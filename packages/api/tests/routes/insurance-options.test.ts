@@ -22,8 +22,9 @@ function mountFor(repo: InMemoryInsuranceOptionRepository, role: UserRole, opera
   return app
 }
 
+// #1437 slice 3: insurance is self-authored — POST bodies carry a nameI18n bundle.
 function body(extra: Record<string, unknown> = {}) {
-  return JSON.stringify({ name: 'Standard Cover', dailyPriceJpy: 1500, ...extra })
+  return JSON.stringify({ nameI18n: { en: 'Standard Cover' }, dailyPriceJpy: 1500, ...extra })
 }
 
 const POST = (app: Hono, b = body()) =>
@@ -71,6 +72,7 @@ describe('Insurance option routes — operator CRUD', () => {
     const { data } = await res.json()
     expect(data.operatorId).toBe(OP_A)
     expect(data.name).toBe('Standard Cover')
+    expect(data.nameI18n).toEqual({ en: 'Standard Cover' })
     expect(data.dailyPriceJpy).toBe(1500)
     expect(data.deductibleJpy).toBe(150000)
     expect(data.status).toBe('ACTIVE')
@@ -79,7 +81,7 @@ describe('Insurance option routes — operator CRUD', () => {
   it('lists only the caller operator options', async () => {
     const repo = new InMemoryInsuranceOptionRepository()
     await POST(mountFor(repo, 'OPERATOR_OWNER', OP_A))
-    await POST(mountFor(repo, 'OPERATOR_OWNER', OP_B), body({ name: 'B Cover' }))
+    await POST(mountFor(repo, 'OPERATOR_OWNER', OP_B), body({ nameI18n: { en: 'B Cover' } }))
     const res = await mountFor(repo, 'OPERATOR_OWNER', OP_A).request('/insurance-options')
     const { data } = await res.json()
     expect(data).toHaveLength(1)
@@ -97,7 +99,7 @@ describe('Insurance option routes — operator CRUD', () => {
     const repo = new InMemoryInsuranceOptionRepository()
     const res = await POST(
       mountFor(repo, 'OPERATOR_OWNER', OP_A),
-      JSON.stringify({ name: 'No price' }),
+      JSON.stringify({ nameI18n: { en: 'No price' } }),
     )
     expect(res.status).toBe(400)
   })
@@ -124,7 +126,7 @@ describe('Insurance option routes — operator CRUD', () => {
         await intruder.request(`/insurance-options/${created.data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'Hijack' }),
+          body: JSON.stringify({ nameI18n: { en: 'Hijack' } }),
         })
       ).status,
     ).toBe(404)
@@ -146,7 +148,7 @@ describe('Insurance option routes — operator CRUD', () => {
   it('drops a stray ?operatorId for an operator caller (cannot widen scope)', async () => {
     const repo = new InMemoryInsuranceOptionRepository()
     await POST(mountFor(repo, 'OPERATOR_OWNER', OP_A))
-    await POST(mountFor(repo, 'OPERATOR_OWNER', OP_B), body({ name: 'B Cover' }))
+    await POST(mountFor(repo, 'OPERATOR_OWNER', OP_B), body({ nameI18n: { en: 'B Cover' } }))
     const res = await mountFor(repo, 'OPERATOR_OWNER', OP_A).request(
       `/insurance-options?operatorId=${OP_B}`,
     )
@@ -161,7 +163,7 @@ describe('Insurance option routes — platform-admin scoping (bypass-precedence)
     const repo = new InMemoryInsuranceOptionRepository()
     const a = await (await POST(mountFor(repo, 'OPERATOR_OWNER', OP_A))).json()
     const b = await (
-      await POST(mountFor(repo, 'OPERATOR_OWNER', OP_B), body({ name: 'B Cover' }))
+      await POST(mountFor(repo, 'OPERATOR_OWNER', OP_B), body({ nameI18n: { en: 'B Cover' } }))
     ).json()
     return { repo, a: a.data, b: b.data }
   }

@@ -409,6 +409,13 @@ export interface InsuranceOption {
   /** Owning operator (marketplace tenant, #404). NOT NULL in the DB. */
   operatorId: string
   name: string
+  /**
+   * SELF-AUTHORED name bundle (#1437 slice 3): the operator's own LocalizedText.
+   * Insurance is PURELY self-authored (no picker), so this is the identity for
+   * every new row; the `name` column mirrors `nameI18n.en`. Null for legacy rows,
+   * which fall back to the `name` mirror at resolution.
+   */
+  nameI18n: LocalizedText | null
   description: string | null
   dailyPriceJpy: number
   /** null = no deductible (full cover). */
