@@ -473,3 +473,114 @@ describe('#1260 photo writes are bound to the acting operator (HTTP)', () => {
     expect(body.code).toBeUndefined()
   })
 })
+
+// #1406: operators are fleet self-service everywhere else, so the photo write gate
+// widened from STAFF_ROLES (platform-admin only) to FLEET_WRITE_ROLES. A tenant
+// operator now manages ITS OWN vehicles' photos with no ?operatorId= (the acting-
+// operator guard no-ops for operator callers; the operator-scoped findById is the
+// tenant fence — a cross-tenant id resolves to 404, never the vehicle).
+describe('#1406 operators manage their own vehicle photos', () => {
+  let app: ReturnType<typeof createTestApp>['app']
+  let vehicleRepo: InMemoryVehicleRepository
+  let vehicleId: string
+
+  beforeEach(async () => {
+    const ctx = createTestApp()
+    app = ctx.app
+    vehicleRepo = ctx.vehicleRepo
+    const v = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      vehicleInput({ photos: ['https://test.com/a.jpg'] }),
+    )
+    vehicleId = v.id
+  })
+
+  it('OPERATOR_OWNER uploads to its own vehicle (no ?operatorId= needed)', async () => {
+    const headers = await authHeaders({
+      sub: 'op-owner-1',
+      role: 'OPERATOR_OWNER',
+      operatorId: TEST_OPERATOR_ID,
+    })
+
+    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
+      method: 'POST',
+      headers,
+      body: makeFormData('car.jpg', 'image/jpeg', 1024),
+    })
+
+    expect(res.status).toBe(201)
+    const updated = await vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
+    expect(updated?.photos).toHaveLength(2)
+  })
+
+  it('OPERATOR_OWNER deletes its own vehicle photo', async () => {
+    const headers = await authHeaders({
+      sub: 'op-owner-1',
+      role: 'OPERATOR_OWNER',
+      operatorId: TEST_OPERATOR_ID,
+    })
+
+    const res = await app.request(
+      `/vehicles/${vehicleId}/photos?url=${encodeURIComponent('https://test.com/a.jpg')}`,
+      { method: 'DELETE', headers },
+    )
+
+    expect(res.status).toBe(200)
+    const updated = await vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
+    expect(updated?.photos).toEqual([])
+  })
+
+  it('an operator from another tenant gets 404, never the vehicle', async () => {
+    const headers = await authHeaders({
+      sub: 'op-other-1',
+      role: 'OPERATOR_OWNER',
+      operatorId: 'op_other',
+    })
+
+    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
+      method: 'POST',
+      headers,
+      body: makeFormData('car.jpg', 'image/jpeg', 1024),
+    })
+
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toBe('Vehicle not found')
+    const updated = await vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
+    expect(updated?.photos).toEqual(['https://test.com/a.jpg'])
+  })
+
+  it('OPERATOR_STAFF (not just OWNER) also manages its own vehicle photos', async () => {
+    const headers = await authHeaders({
+      sub: 'op-staff-1',
+      role: 'OPERATOR_STAFF',
+      operatorId: TEST_OPERATOR_ID,
+    })
+
+    const res = await app.request(
+      `/vehicles/${vehicleId}/photos?url=${encodeURIComponent('https://test.com/a.jpg')}`,
+      { method: 'DELETE', headers },
+    )
+
+    expect(res.status).toBe(200)
+    const updated = await vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
+    expect(updated?.photos).toEqual([])
+  })
+
+  it('an operator from another tenant cannot DELETE a photo (404, unchanged)', async () => {
+    const headers = await authHeaders({
+      sub: 'op-other-1',
+      role: 'OPERATOR_OWNER',
+      operatorId: 'op_other',
+    })
+
+    const res = await app.request(
+      `/vehicles/${vehicleId}/photos?url=${encodeURIComponent('https://test.com/a.jpg')}`,
+      { method: 'DELETE', headers },
+    )
+
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toBe('Photo not found')
+    const updated = await vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
+    expect(updated?.photos).toEqual(['https://test.com/a.jpg'])
+  })
+})

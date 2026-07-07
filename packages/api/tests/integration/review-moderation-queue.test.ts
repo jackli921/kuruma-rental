@@ -1,5 +1,5 @@
 import { reviewReports, reviews } from '@kuruma/shared/db/schema'
-import { inArray } from 'drizzle-orm'
+import { inArray, sql } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { DrizzleReviewRepository } from '../../src/repositories/drizzle/review'
 import type { ReportedQueueCursor } from '../../src/repositories/types-review'
@@ -107,7 +107,64 @@ async function seedReportedReview(
   return id
 }
 
+/** Seed one VISIBLE OPERATOR review whose single report lands at an explicit sub-millisecond
+ *  instant. `createdAtLiteral` is bound as a raw `timestamptz` because JS `Date` is ms-only
+ *  and cannot express the microseconds that expose the ms-cursor truncation. */
+async function seedReviewReportedAtLiteral(
+  booking: SeededBooking,
+  id: string,
+  createdAtLiteral: string,
+): Promise<void> {
+  await db.insert(reviews).values({
+    id,
+    bookingId: booking.booking.id,
+    operatorId: booking.operatorId,
+    authorUserId: booking.renterId,
+    authorRole: 'RENTER',
+    subject: 'OPERATOR',
+    overall: 4,
+    moderationStatus: 'VISIBLE',
+    revealDeadlineAt: new Date('2027-01-21T09:00:00Z'),
+  })
+  await db.insert(reviewReports).values({
+    id: crypto.randomUUID(),
+    reviewId: id,
+    reporterUserId: booking.renterId,
+    reason: 'inappropriate',
+    createdAt: sql`${createdAtLiteral}::timestamptz`,
+  })
+}
+
 describe('DrizzleReviewRepository.listReported (#1451, real pg)', () => {
+  it('does not drop a reported review whose newest report shares a millisecond but differs in microseconds', async () => {
+    // review_reports.createdAt is defaultNow() = MICROSECOND precision, but the queue cursor is
+    // serialized to MILLISECONDS (Date.toISOString). Two reviews reported in the same ms but
+    // different µs must BOTH survive pagination — the ms cursor must not exclude the sub-ms
+    // neighbour on the far side of a page boundary (a dropped row is a reported review the
+    // moderator never sees, so it is never hidden and keeps counting in the public aggregate).
+    // The InMemory mirror CANNOT catch this: its reports stamp ms JS Dates, so it is lossless.
+    const SAME_MS = '2099-07-01 00:00:00.123'
+    const idA = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+    const idB = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+    // A's report is later WITHIN the same ms (µs 900) so it leads the raw-µs DESC order; B
+    // (µs 100) is the neighbour the buggy ms cursor drops once A's page boundary is passed.
+    await seedReviewReportedAtLiteral(b0, idA, `${SAME_MS}900+00`)
+    await seedReviewReportedAtLiteral(b1, idB, `${SAME_MS}100+00`)
+
+    // Walk one row per page following the cursor; both must be visited exactly once.
+    const collected: string[] = []
+    let cursor: ReportedQueueCursor | undefined
+    for (let guard = 0; guard < 12 && collected.length < 2; guard++) {
+      const page = await repo.listReported({ limit: 1, status: 'VISIBLE', cursor })
+      for (const item of page.items) {
+        if (item.review.id === idA || item.review.id === idB) collected.push(item.review.id)
+      }
+      if (!page.nextCursor) break
+      cursor = page.nextCursor
+    }
+    expect([...collected].sort()).toEqual([idA, idB])
+  })
+
   it('orders reports newest-first with distinct-reporter count and reasons', async () => {
     const r0 = await seedReportedReview(b0, {
       reports: [{ reporter: b0.renterId, at: new Date('2099-01-01T00:00:00Z'), reason: 'spam' }],
