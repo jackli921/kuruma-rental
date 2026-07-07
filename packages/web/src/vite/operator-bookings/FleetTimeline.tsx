@@ -19,7 +19,7 @@ import { addDays, startOfDay } from 'date-fns'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from 'react'
@@ -92,9 +92,19 @@ export function FleetTimeline({
   // exists. If focus is still on a live control (the toolbar's Next drove the nav, as in
   // Chromium where a click focuses the button first), it is left untouched so repeat
   // navigation keeps working.
+  //
+  // This covers the in-place re-render (the norm: the loader pre-warms the range so the
+  // route never suspends and this same fiber re-renders with a new `date`). A slow, cold
+  // nav that trips the route's pendingComponent unmounts this whole subtree and remounts a
+  // fresh one — that focus loss is app-wide and belongs to a route/layout-level announcer,
+  // not here (a component can't restore focus across its own unmount). See #1489.
+  //
+  // useLayoutEffect (not useEffect): restore synchronously post-commit/pre-paint so focus
+  // never lands on <body> for a painted frame (which can bump an AT's virtual cursor to the
+  // top). Client-only Vite SPA — no SSR to worry about.
   const regionRef = useRef<HTMLElement>(null)
   const prevDateMsRef = useRef(date.getTime())
-  useEffect(() => {
+  useLayoutEffect(() => {
     const ms = date.getTime()
     if (prevDateMsRef.current === ms) return
     prevDateMsRef.current = ms

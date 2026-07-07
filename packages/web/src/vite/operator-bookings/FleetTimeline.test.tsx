@@ -229,6 +229,11 @@ describe('FleetTimeline keyboard + ARIA (#1349)', () => {
 // button on click. The board must return focus to the labelled region — a stable anchor
 // that always exists — while leaving focus alone when a live control (the Next button)
 // drove the nav.
+//
+// These `rerender` on the same tree, so they cover the in-place re-render path (the norm).
+// They lean on jsdom reverting document.activeElement to <body> when the focused node is
+// removed — which matches real browsers and is the load-bearing precondition. The slow-nav
+// remount path (route pendingComponent swap) is out of scope here and tracked in #1489.
 describe('FleetTimeline focus restoration after date navigation (#1471)', () => {
   const DATE0 = new Date('2026-07-01T00:00:00.000Z')
   // +14 days: Alice's 2026-07-03 booking falls wholly before the new window, so its bar
