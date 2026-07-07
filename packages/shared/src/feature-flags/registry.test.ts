@@ -77,6 +77,8 @@ describe('feature flag registry', () => {
         // Server-only, but the web reads it via useFeatureFlag() to hide the
         // operator picker + admin template library live, so it is runtimeControlled.
         'SHARED_CATALOG',
+        // #operator-usage-consent (Slice A): ships dark (no prod env var set).
+        'OPERATOR_TERMS',
       ]),
     )
   })
@@ -91,5 +93,12 @@ describe('feature flag registry', () => {
     expect(isFeatureFlagKey('MULTI_CURRENCY')).toBe(true)
     expect(isFeatureFlagKey('DEFINITELY_NOT_A_FLAG')).toBe(false)
     expect(isFeatureFlagKey('')).toBe(false)
+  })
+})
+
+describe('OPERATOR_TERMS flag', () => {
+  it('registers OPERATOR_TERMS as a build-time web flag', () => {
+    expect(FEATURE_FLAGS.OPERATOR_TERMS).toMatchObject({ env: 'VITE_FEATURE_OPERATOR_TERMS' })
+    expect(FEATURE_FLAGS.OPERATOR_TERMS.serverOnly).toBeUndefined()
   })
 })

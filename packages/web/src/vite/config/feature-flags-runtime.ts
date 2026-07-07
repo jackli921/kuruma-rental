@@ -33,6 +33,7 @@ const BUILD_TIME_READERS: Partial<Record<FeatureFlagKey, () => boolean>> = {
   MULTI_CURRENCY: () => isEnvTrue(import.meta.env.VITE_FEATURE_MULTI_CURRENCY),
   OPERATOR_TODAY: () => isEnvTrue(import.meta.env.VITE_FEATURE_OPERATOR_TODAY),
   CALENDAR_QUICKVIEW: () => isEnvTrue(import.meta.env.VITE_FEATURE_CALENDAR_QUICKVIEW),
+  OPERATOR_TERMS: () => isEnvTrue(import.meta.env.VITE_FEATURE_OPERATOR_TERMS),
 }
 
 export function isBuildTimeEnabled(key: FeatureFlagKey): boolean {
