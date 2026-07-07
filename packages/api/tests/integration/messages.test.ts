@@ -16,7 +16,13 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { CallerContext } from '../../src/middleware/auth'
 import { DrizzleMessageRepository, DrizzleThreadRepository } from '../../src/repositories/drizzle'
 import type { Db } from '../../src/repositories/drizzle'
-import { cleanupMessaging, createTestUsers, testDb } from './messaging-setup'
+import {
+  cleanupMessaging,
+  cleanupOperators,
+  createTestOperators,
+  createTestUsers,
+  testDb,
+} from './messaging-setup'
 
 // thread/message create open interactive transactions; inject a postgres-js
 // runner so they use the test DB over TCP instead of the default neon-serverless
@@ -29,10 +35,15 @@ const messageRepo = new DrizzleMessageRepository(txDb, runOnTestDb)
 const ctx = (userId: string): CallerContext => ({ userId, role: 'RENTER' })
 
 const createdUserIds: string[] = []
+const createdOperatorIds: string[] = []
 
 afterEach(async () => {
+  // Order matters: threads reference operators via an ON DELETE restrict FK, so
+  // clear the messaging rows (which drop the threads) before the operators.
   await cleanupMessaging(createdUserIds)
+  await cleanupOperators(createdOperatorIds)
   createdUserIds.length = 0
+  createdOperatorIds.length = 0
 })
 
 describe('DrizzleThreadRepository', () => {
@@ -329,6 +340,102 @@ describe('persistence across repo instances (the whole point of #28)', () => {
     expect(found).toBeDefined()
     expect(found!.messages).toHaveLength(1)
     expect(found!.messages[0]!.content).toBe('before restart')
+  })
+})
+
+// Operator tenant isolation against real Postgres (#1205). The Drizzle read scope
+// `threads.operatorId = ctx.operatorId` IS the cross-tenant renter-PII boundary, but
+// before this block it had ZERO real-pg coverage — every other ctx here is a RENTER,
+// so deleting the operator filter from the Drizzle repos would have shipped green.
+// An operator reads by TENANT, not participant membership, so the operator caller
+// needs no users row: its userId never reaches a FK on these read/markAsRead paths.
+describe('operator tenant isolation (#1205, real-pg)', () => {
+  const opCtx = (operatorId: string): CallerContext => ({
+    userId: `op-caller-${operatorId}`,
+    role: 'OPERATOR_OWNER',
+    operatorId,
+  })
+
+  // Seed a booking-less thread owned by `operatorId` with a renter participant and
+  // one renter message (the renter send bumps the tenant-level unread 0 -> 1).
+  async function seedOperatorThread(operatorId: string) {
+    const [renter, staff] = await createTestUsers(2)
+    createdUserIds.push(renter!, staff!)
+    const thread = await threadRepo.create(ctx(renter!), null, [renter!, staff!], null, operatorId)
+    const { message } = await messageRepo.create(ctx(renter!), thread.id, 'renter question')
+    return { threadId: thread.id, messageId: message.id }
+  }
+
+  it("cannot read another operator's thread (findAll / findById / findByThreadId)", async () => {
+    const [opA, opB] = await createTestOperators(2)
+    createdOperatorIds.push(opA!, opB!)
+    const b = await seedOperatorThread(opB!)
+
+    // findAll: A sees none of B's threads; B sees exactly its own.
+    expect(await threadRepo.findAll(opCtx(opA!))).toEqual([])
+    expect((await threadRepo.findAll(opCtx(opB!))).map((t) => t.id)).toEqual([b.threadId])
+
+    // findById: A gets undefined; B gets the thread.
+    expect(await threadRepo.findById(opCtx(opA!), b.threadId)).toBeUndefined()
+    expect((await threadRepo.findById(opCtx(opB!), b.threadId))?.id).toBe(b.threadId)
+
+    // findByThreadId (message listing): A gets []; B gets the message.
+    expect(await messageRepo.findByThreadId(opCtx(opA!), b.threadId)).toEqual([])
+    expect(
+      (await messageRepo.findByThreadId(opCtx(opB!), b.threadId)).map((m) => m.content),
+    ).toEqual(['renter question'])
+  })
+
+  it("cannot resolve another operator's message by id", async () => {
+    const [opA, opB] = await createTestOperators(2)
+    createdOperatorIds.push(opA!, opB!)
+    const b = await seedOperatorThread(opB!)
+
+    expect(await messageRepo.findById(opCtx(opA!), b.messageId)).toBeUndefined()
+    expect((await messageRepo.findById(opCtx(opB!), b.messageId))?.id).toBe(b.messageId)
+  })
+
+  it("cannot reply in another operator's thread — the route's findById 404 gate returns undefined", async () => {
+    // POST /threads/:id/messages runs getThread -> threadRepo.findById first and
+    // 404s before createMessage. So findById being undefined for operator A on
+    // operator B's thread IS the real-pg proof that A cannot reply in it (the repo
+    // create itself trusts the pre-checked threadId — the gate lives in the read).
+    const [opA, opB] = await createTestOperators(2)
+    createdOperatorIds.push(opA!, opB!)
+    const b = await seedOperatorThread(opB!)
+
+    expect(await threadRepo.findById(opCtx(opA!), b.threadId)).toBeUndefined()
+  })
+
+  it("markAsRead cannot clear another operator's tenant unread", async () => {
+    const [opA, opB] = await createTestOperators(2)
+    createdOperatorIds.push(opA!, opB!)
+    const b = await seedOperatorThread(opB!)
+
+    // The renter send set B's tenant-level unread to 1.
+    expect((await threadRepo.findById(opCtx(opB!), b.threadId))?.operatorUnreadCount).toBe(1)
+
+    // Operator A's markAsRead is a scoped no-op: its WHERE operatorId = A misses B's thread.
+    await threadRepo.markAsRead(opCtx(opA!), b.threadId)
+    expect((await threadRepo.findById(opCtx(opB!), b.threadId))?.operatorUnreadCount).toBe(1)
+
+    // Positive control: B clears its own tenant unread to 0.
+    await threadRepo.markAsRead(opCtx(opB!), b.threadId)
+    expect((await threadRepo.findById(opCtx(opB!), b.threadId))?.operatorUnreadCount).toBe(0)
+  })
+
+  it('an operator missing its operatorId is fail-closed — reads nothing', async () => {
+    const [opB] = await createTestOperators(1)
+    createdOperatorIds.push(opB!)
+    const b = await seedOperatorThread(opB!)
+
+    // No operatorId => threadReadScope returns { kind: 'none' } => every read is empty.
+    const noneCtx: CallerContext = { userId: 'unscoped-operator', role: 'OPERATOR_OWNER' }
+
+    expect(await threadRepo.findAll(noneCtx)).toEqual([])
+    expect(await threadRepo.findById(noneCtx, b.threadId)).toBeUndefined()
+    expect(await messageRepo.findById(noneCtx, b.messageId)).toBeUndefined()
+    expect(await messageRepo.findByThreadId(noneCtx, b.threadId)).toEqual([])
   })
 })
 
