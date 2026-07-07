@@ -34,7 +34,11 @@ interface Copy {
   locales: Record<'en' | 'ja' | 'zh', LocaleCopy>
 }
 
-const COPY: Record<ConsentType, Copy> = {
+// OPERATOR_RENTAL_TERMS is operator-authored (not platform seed content) so it
+// is intentionally excluded from the platform copy table.
+type PlatformConsentType = Exclude<ConsentType, 'OPERATOR_RENTAL_TERMS'>
+
+const COPY: Record<PlatformConsentType, Copy> = {
   RENTER_LIABILITY: {
     version: '2026-06-13',
     locales: {
@@ -129,7 +133,7 @@ const COPY: Record<ConsentType, Copy> = {
 
 function buildDocs(): readonly DemoConsentDocument[] {
   const rows: DemoConsentDocument[] = []
-  for (const type of Object.keys(COPY) as ConsentType[]) {
+  for (const type of Object.keys(COPY) as PlatformConsentType[]) {
     const { version, locales } = COPY[type]
     for (const locale of ['en', 'ja', 'zh'] as const) {
       const c = locales[locale]

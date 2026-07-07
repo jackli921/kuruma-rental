@@ -722,6 +722,13 @@
       "when": 1783200930778,
       "tag": "0102_insurance_name_i18n",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1783463567162,
+      "tag": "0103_add_operator_rental_terms_enum",
+      "breakpoints": true
     }
   ]
 }
