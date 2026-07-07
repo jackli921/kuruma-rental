@@ -8,6 +8,7 @@ import { InMemoryInsuranceOptionRepository } from './insurance-option'
 const seed = (operatorId: string): Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'> => ({
   operatorId,
   name: 'Premium',
+  nameI18n: null,
   description: null,
   dailyPriceJpy: 1500,
   deductibleJpy: 150000,

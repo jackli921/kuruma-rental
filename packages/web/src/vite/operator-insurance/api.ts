@@ -2,6 +2,7 @@ import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import { type WithOperatorId, buildScopeParam } from '@/vite/operator-context'
 import { INSURANCE_STATUSES } from '@kuruma/shared/enums'
+import { localizedTextSchema } from '@kuruma/shared/i18n/localized-text'
 import type { InsuranceOptionData } from '@kuruma/shared/types/insurance-option'
 import type {
   CreateInsuranceOptionInput,
@@ -28,6 +29,9 @@ const insuranceOptionSchema = z.object({
   id: z.string(),
   operatorId: z.string(),
   name: z.string(),
+  // #1437 slice 3: additive self-authored bundle (the read still returns the
+  // resolved label in `name` until slice 3b renames it to `resolvedName`).
+  nameI18n: localizedTextSchema.nullable(),
   description: z.string().nullable(),
   dailyPriceJpy: z.number(),
   // null = full cover (no deductible).

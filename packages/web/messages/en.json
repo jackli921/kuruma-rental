@@ -744,8 +744,10 @@
         "noDeductible": "No deductible (full cover)"
       },
       "form": {
-        "name": "Option name",
-        "namePlaceholder": "e.g. Standard Cover",
+        "nameEn": "Name (English)",
+        "nameJa": "Name (Japanese)",
+        "nameZh": "Name (Chinese)",
+        "customNameNudge": "Tourists see English wherever Japanese or Chinese is blank. Fill both to reach more renters.",
         "description": "Description",
         "descriptionPlaceholder": "e.g. Covers collision damage waiver.",
         "dailyPrice": "Daily price (yen)",

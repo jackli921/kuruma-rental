@@ -96,6 +96,11 @@ export class DrizzleInsuranceOptionRepository implements InsuranceOptionReposito
       .values({
         operatorId: data.operatorId,
         name: data.name,
+        // #1437 slice 3: MUST be enumerated — `.values()` silently drops a
+        // nullable column left out here (tsc treats it as optional), so an
+        // omission would persist nameI18n=null in Postgres while the in-memory
+        // repo (which spreads ...data) keeps it, hiding the bug from unit tests.
+        nameI18n: data.nameI18n,
         description: data.description,
         dailyPriceJpy: data.dailyPriceJpy,
         deductibleJpy: data.deductibleJpy,
