@@ -1,6 +1,12 @@
 # Operator usage-consent (rental terms) — design spec
 
-Status: APPROVED (v1.0, owner-locked 2026-07-07). Tracking: extends issue #877 (consent ledger).
+Status: APPROVED (v1.1, owner-locked 2026-07-07). Tracking: extends issue #877 (consent ledger).
+
+v1.1 addendum (2026-07-07, session 2 — locked after ground-truth re-verification against live schema):
+- **Release:** gate the whole feature behind `VITE_FEATURE_OPERATOR_TERMS`. Slice A ships dark behind the
+  flag; flip on only once Slice B (renter acceptance) lands (§9).
+- **Immutability:** DB trigger + service guard, both — not service-only (§5.1).
+- **Type name:** locked to `OPERATOR_RENTAL_TERMS` (§13).
 Date: 2026-07-07
 Relationship to #877: this is a NEW capability beyond the approved consent-ledger spec
 (`docs/superpowers/specs/2026-06-15-consent-ledger-design.md`). It reuses that ledger's tables,
@@ -92,8 +98,10 @@ zero prod rows under this predicate today; preserves "one liability per booking"
 ### 5.1 State machine (first runtime writer of `consent_documents`)
 `DRAFT` (editable) → `PUBLISHED` (immutable; new wording = a new version row) → `ARCHIVED`.
 - Enforce immutability of PUBLISHED rows in the service AND with a DB guard (trigger/rule blocking UPDATE
-  of a PUBLISHED row's content). #877 §9.3 locked "authoring = seed/migration, no admin UI" — this feature
-  is the first runtime authoring path, so the guard does not exist yet and must be added.
+  of a PUBLISHED row's content) — **owner-locked v1.1: both, not service-only.** Consistent with the repo's
+  "DB-enforced, not service-promised" culture and existing triggers (`0015`/`0037`/`0069`). #877 §9.3 locked
+  "authoring = seed/migration, no admin UI" — this feature is the first runtime authoring path, so the guard
+  does not exist yet and must be added.
 - `contentHash` recomputed on publish over `(title, body, acceptanceLabel)` (reuse existing canonical form).
 
 ### 5.2 Authz — mirror add-on/insurance operator-authoring
@@ -159,6 +167,10 @@ migration ahead of any statement referencing the literal.)
 
 ## 9. Phasing (vertical, each a shippable TDD slice)
 
+**All slices land behind `VITE_FEATURE_OPERATOR_TERMS` (v1.1).** Slice A's operator authoring surface ships
+dark behind the flag; the flag is flipped on only once Slice B (renter acceptance) is merged, so operators
+never author into a void that renters can't yet see.
+
 - **Slice A — schema + enum + resolution + authoring API + operator web form.**
   Migrations §8(1)+(2)+the immutability guard; enum + cardinality; the two operator-scoped repo methods;
   authoring service (DRAFT/PUBLISH/ARCHIVE + authz mirror); operator routes; operator web surface
@@ -210,5 +222,6 @@ migration ahead of any statement referencing the literal.)
 
 ## 13. Minor / open
 
-- Type name `OPERATOR_RENTAL_TERMS` (default). Alternatives considered: `OPERATOR_TERMS`,
-  `OPERATOR_USAGE_CONSENT`. Cosmetic; lock at implementation.
+- Type name **locked to `OPERATOR_RENTAL_TERMS`** (v1.1). Alternatives considered and rejected:
+  `OPERATOR_TERMS` (ambiguous vs the existing `OPERATOR_AGREEMENT` type), `OPERATOR_USAGE_CONSENT`
+  (wordier enum literal).
