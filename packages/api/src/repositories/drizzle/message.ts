@@ -3,6 +3,7 @@ import { messages, threadParticipants, threads } from '@kuruma/shared/db/schema'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import {
   type CallerContext,
+  NotFoundError,
   PRIVILEGED_ROLES,
   requireOperatorScope,
 } from '../../middleware/auth'
@@ -102,6 +103,32 @@ export class DrizzleMessageRepository implements MessageRepository {
     return row ? normaliseMessage(row) : undefined
   }
 
+  // Defense-in-depth (#1205): the write self-verifies the caller may reach the
+  // thread, so a future caller that skips the route's getThread gate still cannot
+  // inject a message cross-tenant. A foreign thread reads as missing (NotFoundError
+  // -> 404, no existence oracle) — the same seal the scoped reads use. Cheap: a
+  // single indexed lookup, no message rows loaded.
+  private async assertThreadReachable(ctx: CallerContext, threadId: string): Promise<void> {
+    const scope = threadReadScope(ctx)
+    if (scope.kind === 'participant') {
+      const [participation] = await this.db
+        .select({ threadId: threadParticipants.threadId })
+        .from(threadParticipants)
+        .where(
+          and(eq(threadParticipants.threadId, threadId), eq(threadParticipants.userId, scope.userId)),
+        )
+      if (!participation) throw new NotFoundError('Thread not found')
+      return
+    }
+    const conditions = [eq(threads.id, threadId)]
+    if (scope.kind === 'operator') conditions.push(eq(threads.operatorId, scope.operatorId))
+    const [owned] = await this.db
+      .select({ id: threads.id })
+      .from(threads)
+      .where(and(...conditions))
+    if (!owned) throw new NotFoundError('Thread not found')
+  }
+
   async create(
     ctx: CallerContext,
     threadId: string,
@@ -109,6 +136,7 @@ export class DrizzleMessageRepository implements MessageRepository {
     idempotencyKey?: string | null,
   ): Promise<MessageCreateResult> {
     requireOperatorScope(ctx)
+    await this.assertThreadReachable(ctx, threadId)
     return this.runTransaction(async (tx) => {
       const [inserted] = (await tx
         .insert(messages)

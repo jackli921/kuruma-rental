@@ -416,6 +416,35 @@ describe('operator tenant isolation (#1205, real-pg)', () => {
     expect((await threadRepo.findByIdempotencyKey(opCtx(opB!), key))?.id).toBe(b.threadId)
   })
 
+  it("cannot post a message into another operator's thread — the repo write self-guards (F2)", async () => {
+    // The route's getThread gate is the primary block, but the repo must not trust
+    // it: a caller that reaches messageRepo.create directly still cannot inject a
+    // message cross-tenant (a foreign thread reads as missing).
+    const [opA, opB] = await createTestOperators(2)
+    createdOperatorIds.push(opA!, opB!)
+    const b = await seedOperatorThread(opB!)
+
+    // Real sender users (messages.senderId FKs into users, unlike the scoped reads)
+    // so the ONLY thing stopping a cross-tenant write is the reachability guard —
+    // not an incidental FK failure on a synthetic id.
+    const [senderA, senderB] = await createTestUsers(2)
+    createdUserIds.push(senderA!, senderB!)
+    const ctxA: CallerContext = { userId: senderA!, role: 'OPERATOR_OWNER', operatorId: opA! }
+    const ctxB: CallerContext = { userId: senderB!, role: 'OPERATOR_OWNER', operatorId: opB! }
+
+    // Operator A (a fully valid caller) still cannot inject into B's thread.
+    await expect(messageRepo.create(ctxA, b.threadId, 'cross-tenant intrusion')).rejects.toThrow(
+      'Thread not found',
+    )
+    expect(
+      (await messageRepo.findByThreadId(opCtx(opB!), b.threadId)).map((m) => m.content),
+    ).toEqual(['renter question'])
+
+    // Positive control: operator B can still reply in its own thread.
+    const { message } = await messageRepo.create(ctxB, b.threadId, 'operator reply')
+    expect(message.content).toBe('operator reply')
+  })
+
   it("cannot reply in another operator's thread — the route's findById 404 gate returns undefined", async () => {
     // POST /threads/:id/messages runs getThread -> threadRepo.findById first and
     // 404s before createMessage. So findById being undefined for operator A on
