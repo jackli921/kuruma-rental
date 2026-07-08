@@ -5,6 +5,7 @@ import { CurrencyProvider } from '@/vite/currency'
 import { isLocale } from '@/vite/i18n/locale'
 import { messagesQueryOptions } from '@/vite/i18n/messages'
 import { Navbar } from '@/vite/nav/Navbar'
+import { RouteAnnouncer } from '@/vite/nav/RouteAnnouncer'
 import { Outlet, createFileRoute, notFound } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { IntlProvider } from 'use-intl'
@@ -35,6 +36,11 @@ function LocaleLayout() {
           <ViewModeProvider>
             <LayoutPreferenceProvider>
               <Navbar />
+              {/* #1489: app-wide focus-on-navigate anchor; mounted here (a stable parent
+                  that survives child route + pendingComponent swaps) so a navigation never
+                  strands screen-reader focus on <body>. Placed just before <Outlet> so
+                  restored focus lands at the content boundary, past the (unchanged) nav. */}
+              <RouteAnnouncer />
               <Outlet />
             </LayoutPreferenceProvider>
           </ViewModeProvider>
