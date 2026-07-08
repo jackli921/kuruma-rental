@@ -5,7 +5,6 @@ import type { Booking } from '../stores'
 
 export interface BookingThreading {
   threadRepo: ThreadRepository
-  staffUserId: string
 }
 
 export type EnsureThread = (ctx: CallerContext, booking: Booking) => Promise<void>
@@ -26,16 +25,20 @@ export function makeEnsureThread(threading: BookingThreading): EnsureThread {
       // asks "does this booking's thread already exist?", so it MUST run under
       // SYSTEM_CONTEXT. A caller who isn't a thread participant — a PARTNER
       // (Trip.com) booking, or an operator manual booking, neither of which is
-      // in [renterId, staffUserId] — would otherwise miss an existing thread on
-      // replay and re-fire the insert into a benign-but-noisy UNIQUE_VIOLATION
-      // (worsened once #1168 dropped PARTNER from PRIVILEGED_ROLES). The create
-      // stays on the caller ctx; participants are fixed below regardless.
+      // the renter — would otherwise miss an existing thread on replay and
+      // re-fire the insert into a benign-but-noisy UNIQUE_VIOLATION (worsened
+      // once #1168 dropped PARTNER from PRIVILEGED_ROLES). The create stays on
+      // the caller ctx; participants are fixed below regardless.
       const existing = await threading.threadRepo.findByIdempotencyKey(SYSTEM_CONTEXT, threadKey)
       if (existing) return
       await threading.threadRepo.create(
         ctx,
         booking.id,
-        [booking.renterId, threading.staffUserId],
+        // The renter is the SOLE participant. Operators read-scope by
+        // thread.operatorId (#1205) and need no participant row, so seeding a
+        // shared DEFAULT_STAFF_ID member into every tenant's threads was dead
+        // weight and a latent cross-tenant membership — removed.
+        [booking.renterId],
         threadKey,
         // Tenant owner (#1205), server-derived from the authoritative booking so
         // the operator portal can read-scope this thread by operatorId.
