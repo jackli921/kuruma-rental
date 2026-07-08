@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type RovingBar, buildRovingModel, nextBarId } from './timeline-roving'
+import { type RovingBar, buildRovingModel, nextBarId, resolveActiveBarId } from './timeline-roving'
 
 // #1470: pure 2D-grid navigation over the interactive timeline bars. Rows are the fleet
 // vehicles in board order; within a row bars are ordered by start. Left/Right walk a row;
@@ -74,5 +74,30 @@ describe('nextBarId — defensive', () => {
 
   it('returns the first bar in order for an unknown current id', () => {
     expect(nextBarId(m, 'ghost', 'right')).toBe('a')
+  })
+})
+
+describe('resolveActiveBarId — the tabIndex=0 stop', () => {
+  const m = buildRovingModel(
+    ['v1', 'v2'],
+    [bar('a', 'v1', 100), bar('b', 'v1', 200), bar('c', 'v2', 50)],
+  )
+
+  it('keeps the remembered stop while its bar still exists', () => {
+    expect(resolveActiveBarId(m, 'b')).toBe('b')
+  })
+
+  it('falls back to the first bar when the remembered stop left the board (date nav)', () => {
+    // 'b' was the stop; a nav rebuilt the model without it — Tab must still enter the board.
+    const after = buildRovingModel(['v1', 'v2'], [bar('a', 'v1', 100), bar('c', 'v2', 50)])
+    expect(resolveActiveBarId(after, 'b')).toBe('a')
+  })
+
+  it('defaults to the first bar when nothing is remembered yet', () => {
+    expect(resolveActiveBarId(m, null)).toBe('a')
+  })
+
+  it('is null when the board has no interactive bars', () => {
+    expect(resolveActiveBarId(buildRovingModel(['v1'], []), 'anything')).toBeNull()
   })
 })

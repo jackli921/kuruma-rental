@@ -19,6 +19,7 @@ import {
   type RovingDirection,
   buildRovingModel,
   nextBarId,
+  resolveActiveBarId,
 } from '@/vite/operator-bookings/timeline-roving'
 import { addDays, startOfDay } from 'date-fns'
 import {
@@ -193,19 +194,21 @@ export function FleetTimeline({
   )
 
   // The single tab stop — the one bar with tabIndex=0. Arrow keys rove it to follow focus.
-  // Derived, not effect-synced: when a date nav drops the active bar from the window, fall
-  // back to the first bar so Tab still enters the board (no stale-id churn). Null = no bars.
+  // Derived, not effect-synced (resolveActiveBarId is pure): when a date nav drops the active
+  // bar from the window, it falls back to the first bar so Tab still enters the board — with
+  // no stale-id churn and no render lag an effect would introduce. Null = no bars.
   const [activeBarId, setActiveBarId] = useState<string | null>(null)
-  const resolvedActiveId =
-    activeBarId && rovingModel.posById.has(activeBarId)
-      ? activeBarId
-      : (rovingModel.order[0] ?? null)
+  const resolvedActiveId = resolveActiveBarId(rovingModel, activeBarId)
 
   // Focus a bar by id. The lib owns the bar DOM, so we reach it through the `data-bar-id`
   // attribute injected via itemProps (the same channel #1349's role/aria use) rather than a
   // ref the lib would not forward. Scoped to the board region so ids can't collide elsewhere.
+  // If the bar isn't in the DOM (impossible today — the lib renders every row — but a guard
+  // against a future virtualizing bump), fall back to the region so focus never lands on
+  // <body>, the same stable anchor #1471 restores to.
   const focusBar = useCallback((id: string) => {
-    regionRef.current?.querySelector<HTMLElement>(`[data-bar-id="${CSS.escape(id)}"]`)?.focus()
+    const node = regionRef.current?.querySelector<HTMLElement>(`[data-bar-id="${CSS.escape(id)}"]`)
+    ;(node ?? regionRef.current)?.focus()
   }, [])
 
   const groups = useMemo<TimelineGroupBase[]>(

@@ -76,18 +76,28 @@ export function buildRovingModel(
   return { order, rows, posById }
 }
 
+/** The bar that should carry `tabIndex=0` given the currently-remembered stop. Keeps the
+ *  remembered bar while it still exists; when a layout change (e.g. a date nav) drops it,
+ *  falls back to the first bar so Tab still enters the board. Null only when the board has
+ *  no bars. Pure so the shell holds no navigation policy — just the imperative focus. */
+export function resolveActiveBarId(model: RovingModel, activeId: string | null): string | null {
+  if (activeId && model.posById.has(activeId)) return activeId
+  return model.order[0] ?? null
+}
+
 /** The bar in `row` whose start is closest to `start`; ties break toward the earlier start,
- *  then the lower id (stable). Null for a missing/empty row so the caller can clamp. */
+ *  then the lower id (stable). Null for a missing/empty row so the caller can clamp. Single
+ *  pass (no sort/copy) since it runs on every Up/Down keypress. */
 function nearestInRow(rows: readonly RovingRow[], rowIndex: number, start: number): string | null {
   const row = rows[rowIndex]
   if (!row || row.bars.length === 0) return null
-  const sorted = [...row.bars].sort(
-    (a, b) =>
-      Math.abs(a.start - start) - Math.abs(b.start - start) ||
-      a.start - b.start ||
-      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-  )
-  return sorted[0]?.id ?? null
+  return row.bars.reduce((best, cell) => {
+    const dCell = Math.abs(cell.start - start)
+    const dBest = Math.abs(best.start - start)
+    if (dCell !== dBest) return dCell < dBest ? cell : best
+    if (cell.start !== best.start) return cell.start < best.start ? cell : best
+    return cell.id < best.id ? cell : best
+  }).id
 }
 
 /** The bar to focus after pressing `dir` while on `currentId`. Clamps at every board edge
