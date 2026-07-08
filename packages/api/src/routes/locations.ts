@@ -4,7 +4,7 @@ import {
   updateLocationSchema,
 } from '@kuruma/shared/validators/location'
 import { Hono } from 'hono'
-import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
+import { requireAuth, requireUser, toCallerContext } from '../middleware/auth'
 import { LOCATIONS_REGION_FK, PG_ERROR, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type { LocationFilters } from '../services/filters'
 import type { LocationService } from '../services/location'
@@ -16,6 +16,7 @@ import {
   parseBody,
   parseId,
   parseScopedCreate,
+  requireFleetWriteRole,
   stripUndefined,
 } from './helpers'
 
@@ -33,7 +34,8 @@ export function createLocationRoutes(
   return app
     .get('/locations', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const ctx = toCallerContext(user)
       const filters: LocationFilters = {}
@@ -54,7 +56,8 @@ export function createLocationRoutes(
     })
     .get('/locations/:id', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
@@ -65,7 +68,8 @@ export function createLocationRoutes(
     })
     .post('/locations', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const ctx = toCallerContext(user)
       const parsed = await parseScopedCreate(
@@ -108,7 +112,8 @@ export function createLocationRoutes(
     })
     .patch('/locations/:id', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
@@ -139,7 +144,8 @@ export function createLocationRoutes(
     })
     .delete('/locations/:id', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response

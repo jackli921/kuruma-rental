@@ -5,7 +5,6 @@ import {
 } from '@kuruma/shared/validators/fee-schedule'
 import { Hono } from 'hono'
 import {
-  FLEET_WRITE_ROLES,
   MANAGEMENT_READ_ROLES,
   requireAuth,
   requireUser,
@@ -23,6 +22,7 @@ import {
   parseCrossOperatorRead,
   parseId,
   parseScopedCreate,
+  requireFleetWriteRole,
   stripUndefined,
 } from './helpers'
 
@@ -71,7 +71,8 @@ export function createFeeScheduleRoutes(
     })
     .post('/fee-schedules', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const ctx = toCallerContext(user)
       const parsed = await parseScopedCreate(
@@ -96,7 +97,8 @@ export function createFeeScheduleRoutes(
     })
     .patch('/fee-schedules/:id', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
@@ -115,7 +117,8 @@ export function createFeeScheduleRoutes(
     })
     .delete('/fee-schedules/:id', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response

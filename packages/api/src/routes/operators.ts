@@ -1,8 +1,8 @@
 import { updateOperatorSchema } from '@kuruma/shared/validators/operator'
 import { Hono } from 'hono'
-import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
+import { requireAuth, requireUser, toCallerContext } from '../middleware/auth'
 import { type OperatorService, toOperatorProfile } from '../services/operator'
-import { fail, ok, parseBody, parseId } from './helpers'
+import { fail, ok, parseBody, parseId, requireFleetWriteRole } from './helpers'
 
 /**
  * Read-only operator resolution for the business portal (#387). The web layout
@@ -24,7 +24,8 @@ export function createOperatorRoutes(service: OperatorService) {
       // OPERATOR_* caller sees only its own row (scoped in the service).
       .get('/operators', async (c) => {
         const user = requireUser(c)
-        if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+        const denied = requireFleetWriteRole(c, user)
+        if (denied) return denied
 
         const operators = await service.list(toCallerContext(user))
         return ok(
@@ -36,7 +37,8 @@ export function createOperatorRoutes(service: OperatorService) {
       // `:id` so `/operators/by-slug/foo` can never be captured as an id.
       .get('/operators/by-slug/:slug', async (c) => {
         const user = requireUser(c)
-        if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+        const denied = requireFleetWriteRole(c, user)
+        if (denied) return denied
 
         const operator = await service.getBySlug(toCallerContext(user), c.req.param('slug'))
         if (!operator) return fail(c, 'Operator not found', 404)
@@ -44,7 +46,8 @@ export function createOperatorRoutes(service: OperatorService) {
       })
       .get('/operators/:id', async (c) => {
         const user = requireUser(c)
-        if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+        const denied = requireFleetWriteRole(c, user)
+        if (denied) return denied
 
         const idResult = parseId(c)
         if (!idResult.ok) return idResult.response
@@ -59,7 +62,8 @@ export function createOperatorRoutes(service: OperatorService) {
       // foreign id never surfaces as a 403. The service projects the response.
       .patch('/operators/:id', async (c) => {
         const user = requireUser(c)
-        if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+        const denied = requireFleetWriteRole(c, user)
+        if (denied) return denied
 
         const idResult = parseId(c)
         if (!idResult.ok) return idResult.response
