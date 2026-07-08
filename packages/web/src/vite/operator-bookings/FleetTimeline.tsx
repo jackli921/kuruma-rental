@@ -15,6 +15,11 @@ import {
   bookingIdFromTimelineItem,
   buildTimelineLayout,
 } from '@/vite/operator-bookings/timeline-layout'
+import {
+  type RovingDirection,
+  buildRovingModel,
+  nextBarId,
+} from '@/vite/operator-bookings/timeline-roving'
 import { addDays, startOfDay } from 'date-fns'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -22,6 +27,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react'
 import Timeline, {
   type Id,
@@ -47,8 +53,25 @@ import './fleet-timeline-theme.css'
 // item's `itemProps` — every interactive bar is a focusable role=button with a localized
 // aria-label that opens its detail on Enter/Space (parity with click); the redundant
 // turnaround tail is aria-hidden (one stop per booking, decided in buildTimelineLayout). This
-// closes the GA gate for VITE_FEATURE_FLEET_TIMELINE. Remaining a11y follow-up: roving-tabindex
-// so a dense board is one composite widget rather than N tab stops (deferred, see #1349).
+// closes the GA gate for VITE_FEATURE_FLEET_TIMELINE.
+//
+// A11y (#1470): #1349's per-bar tab stops make a dense board (40-50 cars × a week) 100-200
+// Tab presses. A roving tabindex collapses it to ONE stop — exactly one bar is tabIndex=0 —
+// with arrow keys moving focus in a 2D grid (Left/Right along a row, Up/Down to the nearest-
+// in-time bar in an adjacent row, Home/End to a row's ends). The grid geometry is the pure
+// `timeline-roving` model; this shell only maps a key to a direction, focuses the returned
+// bar, and roves the single stop to follow it (FC/IS: the core decides where focus goes).
+
+// #1470: arrow/Home/End keys mapped to a board direction. A key not here (Enter/Space/Tab)
+// falls through to activation or the browser's own focus handling.
+const ARROW_DIRECTIONS: Record<string, RovingDirection> = {
+  ArrowRight: 'right',
+  ArrowLeft: 'left',
+  ArrowDown: 'down',
+  ArrowUp: 'up',
+  Home: 'home',
+  End: 'end',
+}
 
 interface FleetTimelineProps {
   readonly rows: readonly CalendarBookingRow[]
@@ -156,6 +179,35 @@ export function FleetTimeline({
     [rows, vehicles, blocks, fromTrue, toTrue, t],
   )
 
+  // #1470: the interactive bars as a 2D grid (rows in board order × time). Rebuilt per layout
+  // so arrow keys navigate the same bars the board renders.
+  const rovingModel = useMemo(
+    () =>
+      buildRovingModel(
+        layout.groups.map((g) => g.id),
+        layout.items
+          .filter((it) => it.interactive)
+          .map((it) => ({ id: it.id, group: it.group, start: it.start })),
+      ),
+    [layout],
+  )
+
+  // The single tab stop — the one bar with tabIndex=0. Arrow keys rove it to follow focus.
+  // Derived, not effect-synced: when a date nav drops the active bar from the window, fall
+  // back to the first bar so Tab still enters the board (no stale-id churn). Null = no bars.
+  const [activeBarId, setActiveBarId] = useState<string | null>(null)
+  const resolvedActiveId =
+    activeBarId && rovingModel.posById.has(activeBarId)
+      ? activeBarId
+      : (rovingModel.order[0] ?? null)
+
+  // Focus a bar by id. The lib owns the bar DOM, so we reach it through the `data-bar-id`
+  // attribute injected via itemProps (the same channel #1349's role/aria use) rather than a
+  // ref the lib would not forward. Scoped to the board region so ids can't collide elsewhere.
+  const focusBar = useCallback((id: string) => {
+    regionRef.current?.querySelector<HTMLElement>(`[data-bar-id="${CSS.escape(id)}"]`)?.focus()
+  }, [])
+
   const groups = useMemo<TimelineGroupBase[]>(
     () => layout.groups.map((g) => ({ id: g.id, title: g.title })),
     [layout.groups],
@@ -203,17 +255,27 @@ export function FleetTimeline({
     [blockById, onSelectBlock, onSelectEvent],
   )
 
-  // #1349 keyboard parity: Enter or Space opens the same detail a click opens. Space
-  // is preventDefault'd so it never scrolls the page; every other key bubbles (Tab
-  // still moves focus between bars). Emulating both keys on keydown is the accepted
-  // APG simplification for a button-role element.
+  // #1349 keyboard parity: Enter or Space opens the same detail a click opens. Space is
+  // preventDefault'd so it never scrolls the page. #1470: arrow/Home/End rove focus across
+  // the 2D grid — preventDefault so they move focus instead of scrolling the board canvas,
+  // and rove the tabIndex=0 stop to the new bar (clamps at edges, so a no-op move is a
+  // silent stay). Any other key (notably Tab) bubbles to the browser's own handling.
   const handleItemKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>, itemId: string) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        handleItemSelect(itemId)
+        return
+      }
+      const dir = ARROW_DIRECTIONS[e.key]
+      if (!dir) return
       e.preventDefault()
-      handleItemSelect(itemId)
+      const target = nextBarId(rovingModel, itemId, dir)
+      if (target === itemId) return
+      setActiveBarId(target)
+      focusBar(target)
     },
-    [handleItemSelect],
+    [handleItemSelect, rovingModel, focusBar],
   )
 
   const items = useMemo<TimelineItemBase<number>[]>(
@@ -251,10 +313,14 @@ export function FleetTimeline({
           // never lands on two bars for one booking; a mouse click on it still works.
           // aria-haspopup only on block bars: they open BlockDetailDialog, whereas a
           // booking bar navigates to a full page — promising a dialog there would mislead AT.
+          // #1470: only the active bar is tabIndex=0 (the board is one tab stop); the rest
+          // are tabIndex=-1, reachable by arrow keys. `data-bar-id` lets focusBar find the
+          // lib-owned node by id.
           itemProps: it.interactive
             ? {
                 role: 'button',
-                tabIndex: 0,
+                tabIndex: it.id === resolvedActiveId ? 0 : -1,
+                'data-bar-id': it.id,
                 ...(it.type === 'block' ? { 'aria-haspopup': 'dialog' as const } : {}),
                 'aria-label': label,
                 onKeyDown: (e: ReactKeyboardEvent<HTMLDivElement>) => handleItemKeyDown(e, it.id),
@@ -262,7 +328,15 @@ export function FleetTimeline({
             : { 'aria-hidden': true },
         }
       }),
-    [layout.items, groupTitleById, barRangeFmt, t, tBlockKinds, handleItemKeyDown],
+    [
+      layout.items,
+      groupTitleById,
+      barRangeFmt,
+      t,
+      tBlockKinds,
+      handleItemKeyDown,
+      resolvedActiveId,
+    ],
   )
 
   const handleNavigate = useCallback(

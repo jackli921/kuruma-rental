@@ -287,3 +287,88 @@ describe('FleetTimeline focus restoration after date navigation (#1471)', () => 
     expect(next).toHaveFocus()
   })
 })
+
+// #1470 (follow-up to #1349): #1349 made every bar its own tab stop, so a dense board is
+// 100-200 sequential Tab presses. A roving tabindex collapses the board to ONE tab stop —
+// exactly one bar is tabIndex=0 at a time — and arrow keys move focus between bars in a 2D
+// grid (Left/Right along a row, Up/Down to the nearest-in-time bar in an adjacent row). The
+// pure timeline-roving tests pin the geometry; these pin that the shell wires keys to focus
+// and roves the single stop to follow it.
+describe('FleetTimeline roving tabindex (#1470)', () => {
+  // Alice (v1, Jul 3) and Bob (v1, Jul 5) share a row; Carol (v2, Jul 4) is the row below.
+  // Reading order is v1-then-v2, by start within a row: [Alice, Bob, Carol].
+  const alice = () => row({ id: 'b1', renterName: 'Alice', vehicleId: 'v1' })
+  const bob = () =>
+    row({
+      id: 'b2',
+      renterName: 'Bob',
+      vehicleId: 'v1',
+      startAt: '2026-07-05T09:00:00.000Z',
+      endAt: '2026-07-06T09:00:00.000Z',
+      effectiveEndAt: '2026-07-06T09:00:00.000Z',
+    })
+  const carol = () =>
+    row({
+      id: 'b3',
+      renterName: 'Carol',
+      vehicleId: 'v2',
+      startAt: '2026-07-04T09:00:00.000Z',
+      endAt: '2026-07-05T09:00:00.000Z',
+      effectiveEndAt: '2026-07-05T09:00:00.000Z',
+    })
+
+  const bar = (name: RegExp) => screen.getByRole('button', { name })
+  const tabbableBars = () =>
+    Array.from(document.querySelectorAll<HTMLElement>('[data-bar-id]')).filter(
+      (el) => el.getAttribute('tabindex') === '0',
+    )
+
+  it('collapses the board to one tab stop — only the first bar is tabIndex 0', () => {
+    renderTimeline([alice(), bob(), carol()])
+    const stops = tabbableBars()
+    expect(stops).toHaveLength(1)
+    expect(stops[0]).toHaveAttribute('data-bar-id', 'b1')
+    expect(bar(/Booking: Bob/)).toHaveAttribute('tabindex', '-1')
+    expect(bar(/Booking: Carol/)).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('ArrowRight moves focus to the next bar in the same row', () => {
+    renderTimeline([alice(), bob(), carol()])
+    bar(/Booking: Alice/).focus()
+    fireEvent.keyDown(bar(/Booking: Alice/), { key: 'ArrowRight' })
+    expect(bar(/Booking: Bob/)).toHaveFocus()
+  })
+
+  it('ArrowLeft clamps at the first bar in a row — no wrap into the previous row', () => {
+    renderTimeline([alice(), bob(), carol()])
+    bar(/Booking: Alice/).focus()
+    fireEvent.keyDown(bar(/Booking: Alice/), { key: 'ArrowLeft' })
+    expect(bar(/Booking: Alice/)).toHaveFocus()
+  })
+
+  it('ArrowDown crosses to the nearest-in-time bar in the row below', () => {
+    renderTimeline([alice(), bob(), carol()])
+    bar(/Booking: Alice/).focus()
+    fireEvent.keyDown(bar(/Booking: Alice/), { key: 'ArrowDown' })
+    expect(bar(/Booking: Carol/)).toHaveFocus()
+  })
+
+  it('roves the single tabIndex 0 stop to follow focus after an arrow move', () => {
+    renderTimeline([alice(), bob(), carol()])
+    bar(/Booking: Alice/).focus()
+    fireEvent.keyDown(bar(/Booking: Alice/), { key: 'ArrowRight' })
+    const stops = tabbableBars()
+    expect(stops).toHaveLength(1)
+    expect(stops[0]).toHaveAttribute('data-bar-id', 'b2')
+    expect(bar(/Booking: Alice/)).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('prevents the default page scroll on a handled arrow key', () => {
+    renderTimeline([alice(), bob(), carol()])
+    const target = bar(/Booking: Alice/)
+    target.focus()
+    const ev = createEvent.keyDown(target, { key: 'ArrowDown' })
+    fireEvent(target, ev)
+    expect(ev.defaultPrevented).toBe(true)
+  })
+})
