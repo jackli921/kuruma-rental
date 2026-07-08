@@ -358,12 +358,21 @@ describe('operator tenant isolation (#1205, real-pg)', () => {
 
   // Seed a booking-less thread owned by `operatorId` with a renter participant and
   // one renter message (the renter send bumps the tenant-level unread 0 -> 1).
-  async function seedOperatorThread(operatorId: string) {
+  async function seedOperatorThread(
+    operatorId: string,
+    idempotencyKey: string | null = null,
+  ): Promise<{ threadId: string; messageId: string; idempotencyKey: string | null }> {
     const [renter, staff] = await createTestUsers(2)
     createdUserIds.push(renter!, staff!)
-    const thread = await threadRepo.create(ctx(renter!), null, [renter!, staff!], null, operatorId)
+    const thread = await threadRepo.create(
+      ctx(renter!),
+      null,
+      [renter!, staff!],
+      idempotencyKey,
+      operatorId,
+    )
     const { message } = await messageRepo.create(ctx(renter!), thread.id, 'renter question')
-    return { threadId: thread.id, messageId: message.id }
+    return { threadId: thread.id, messageId: message.id, idempotencyKey }
   }
 
   it("cannot read another operator's thread (findAll / findById / findByThreadId)", async () => {
@@ -393,6 +402,18 @@ describe('operator tenant isolation (#1205, real-pg)', () => {
 
     expect(await messageRepo.findById(opCtx(opA!), b.messageId)).toBeUndefined()
     expect((await messageRepo.findById(opCtx(opB!), b.messageId))?.id).toBe(b.messageId)
+  })
+
+  it("cannot resolve another operator's thread by idempotency key", async () => {
+    // findByIdempotencyKey has its own operator filter (a replayed key must not
+    // leak another tenant's thread, #328 + #1205) — cover it like the other reads.
+    const [opA, opB] = await createTestOperators(2)
+    createdOperatorIds.push(opA!, opB!)
+    const key = `idem-${crypto.randomUUID()}`
+    const b = await seedOperatorThread(opB!, key)
+
+    expect(await threadRepo.findByIdempotencyKey(opCtx(opA!), key)).toBeUndefined()
+    expect((await threadRepo.findByIdempotencyKey(opCtx(opB!), key))?.id).toBe(b.threadId)
   })
 
   it("cannot reply in another operator's thread — the route's findById 404 gate returns undefined", async () => {
@@ -436,6 +457,10 @@ describe('operator tenant isolation (#1205, real-pg)', () => {
     expect(await threadRepo.findById(noneCtx, b.threadId)).toBeUndefined()
     expect(await messageRepo.findById(noneCtx, b.messageId)).toBeUndefined()
     expect(await messageRepo.findByThreadId(noneCtx, b.threadId)).toEqual([])
+
+    // Positive control: the same thread IS readable by its scoped owning operator,
+    // so the empty reads above are the missing-scope path, not a global lockout.
+    expect((await threadRepo.findById(opCtx(opB!), b.threadId))?.id).toBe(b.threadId)
   })
 })
 
