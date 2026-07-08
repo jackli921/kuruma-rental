@@ -81,7 +81,8 @@
     "./validators/translation": "./src/validators/translation.ts",
     "./validators/document": "./src/validators/document.ts",
     "./validators/provider-invite": "./src/validators/provider-invite.ts",
-    "./validators/feature-flags": "./src/validators/feature-flags.ts"
+    "./validators/feature-flags": "./src/validators/feature-flags.ts",
+    "./validators/consent-documents": "./src/validators/consent-documents.ts"
   },
   "scripts": {
     "test": "vitest run",
