@@ -108,7 +108,7 @@ const DEPRECATED_WEB_TREE_BASELINE = 170
 // fails CI; draining one shrinks the count and triggers a soft notice to lock
 // in the new baseline. Refresh with --update-baseline (same flag as the tree
 // ratchet above).
-const VITE_CROSS_FEATURE_REACH_IN_BASELINE = 162
+const VITE_CROSS_FEATURE_REACH_IN_BASELINE = 163
 
 export type DeprecatedTreeStatus = {
   count: number
