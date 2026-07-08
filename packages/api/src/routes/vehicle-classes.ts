@@ -5,7 +5,6 @@ import {
 } from '@kuruma/shared/validators/vehicle-class'
 import { Hono } from 'hono'
 import {
-  FLEET_WRITE_ROLES,
   PUBLIC_CONTEXT,
   requireAuth,
   requireManagementRead,
@@ -27,6 +26,7 @@ import {
   parseCrossOperatorRead,
   parseDateRange,
   parseId,
+  requireFleetWriteRole,
   stripUndefined,
 } from './helpers'
 import { rateLimitByIp } from './rate-limit'
@@ -124,7 +124,8 @@ export function createVehicleClassRoutes(
       })
       .post('/vehicle-classes', async (c) => {
         const user = requireUser(c)
-        if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+        const denied = requireFleetWriteRole(c, user)
+        if (denied) return denied
 
         const parsed = await parseBody(c, createVehicleClassSchema)
         if (!parsed.ok) return parsed.response
@@ -165,7 +166,8 @@ export function createVehicleClassRoutes(
       })
       .patch('/vehicle-classes/:id', async (c) => {
         const user = requireUser(c)
-        if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+        const denied = requireFleetWriteRole(c, user)
+        if (denied) return denied
 
         const idResult = parseId(c)
         if (!idResult.ok) return idResult.response
@@ -183,7 +185,8 @@ export function createVehicleClassRoutes(
       })
       .delete('/vehicle-classes/:id', async (c) => {
         const user = requireUser(c)
-        if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+        const denied = requireFleetWriteRole(c, user)
+        if (denied) return denied
 
         const idResult = parseId(c)
         if (!idResult.ok) return idResult.response

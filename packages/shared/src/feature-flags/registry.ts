@@ -14,18 +14,38 @@
 // migrates the flag off the build-time isXEnabled() reader (#1322); the admin page
 // badges a not-yet-migrated flag as "build-time only" so its toggle isn't mistaken
 // for a no-op.
-// A registry entry. `env` is the build-time VITE_FEATURE_* var a web flag reads;
-// a `serverOnly` flag has NONE (it is enforced by the API and defaults from code,
-// not the bundle) and instead carries a `serverDefault` fail-safe floor. Typing
-// the registry as Record<Key, FeatureFlagEntry> (below) keeps indexed `.env`
-// access uniform even though serverOnly entries omit it.
+// The strict authoring contract: a registry entry is exactly one of two shapes,
+// enforced by `satisfies Record<string, FeatureFlagSpec>` on REGISTRY (below).
+//   - A web flag pins a build-time `env` (VITE_FEATURE_*) and no serverDefault.
+//   - A `serverOnly` flag (#1437 SHARED_CATALOG) has NO env — it is enforced by
+//     the API and defaults from code — and MUST carry a `serverDefault` boolean
+//     fail-safe floor (the web floors to it; the API reads it as the no-override
+//     default). The discriminated union statically FORCES a serverOnly flag to
+//     declare serverDefault, so the invariant can't be forgotten at authoring
+//     time rather than only caught by a runtime test (#1492).
+type WebFeatureFlagEntry = {
+  env: string
+  label: string
+  runtimeControlled: boolean
+  serverOnly?: false
+}
+type ServerOnlyFeatureFlagEntry = {
+  label: string
+  runtimeControlled: boolean
+  serverOnly: true
+  serverDefault: boolean
+}
+type FeatureFlagSpec = WebFeatureFlagEntry | ServerOnlyFeatureFlagEntry
+
+// The shape consumers index into. Deliberately a WIDE flat record (env/serverDefault
+// optional), NOT the FeatureFlagSpec union: indexed `FEATURE_FLAGS[key].env` and
+// `.serverDefault` must stay uniform across every key (a consumed union would force
+// each call site to narrow first). The strict contract lives on the REGISTRY literal
+// via `satisfies`; this type is only how that already-enforced data is read back.
 export type FeatureFlagEntry = {
   env?: string
   label: string
   runtimeControlled: boolean
-  // Server-enforced flag with no web build-time env (#1437 SHARED_CATALOG). The
-  // web floors it to `serverDefault` rather than a build-time reader; the API
-  // reads `serverDefault` as the default when no admin override exists.
   serverOnly?: boolean
   serverDefault?: boolean
 }
@@ -101,7 +121,7 @@ const REGISTRY = {
     serverOnly: true,
     serverDefault: true,
   },
-} satisfies Record<string, FeatureFlagEntry>
+} satisfies Record<string, FeatureFlagSpec>
 
 // Typed as Record<Key, FeatureFlagEntry> (not the `as const` literal) so indexed
 // `.env` access is uniformly `string | undefined` across all entries - a serverOnly

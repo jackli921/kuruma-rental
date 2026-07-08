@@ -1,9 +1,37 @@
 # Messaging Un-Gate — Design & Slice Plan
 
-> **Status: DESIGN FOR REVIEW (no code yet).** Approach + decisions doc for un-gating in-app
-> messaging (#1205, follow-up to #1032 / #1161). Stops short of a bite-sized TDD plan — five
-> design decisions (D1–D5) need sign-off first, because they change what the implementation
-> tasks are. **Revised 2026-06-27** after a design review (four findings folded in; see §8).
+> **Status: IMPLEMENTED / SUPERSEDED — verified against `origin/develop` @ `82efa91c` (2026-07-07 architect review).**
+> This design shipped across **#1205 (slices 1–4)** plus **#1386** (removed `POST /threads`). The body below
+> is retained as historical rationale; the **as-built shape diverges from — and improves on — D2/D3**, so do
+> NOT rebuild from the slice plan. The doc's code claims were verified against `b0f8f889`, now 165 commits stale.
+>
+> **As-built (what actually shipped):**
+> - **D1 ✅** `threads.operatorId` (FK → operators, indexed) — `packages/shared/src/db/messaging.ts:31`; migration `drizzle/0091`.
+> - **D2 — simpler than designed.** No `thread_operator_state` / `unreadEpoch`. Operator unread is one
+>   `threads.operatorUnreadCount` counter; the operator gate is `threadReadScope(ctx)` (`packages/api/src/tenancy.ts:193`,
+>   a sibling of `bookingReadScope`/`operatorReadScope`) — it replaced `rejectOperatorContextUntilScoped` (deleted).
+> - **D3 — simpler than designed.** `OPERATOR_NEW_MESSAGE` kind (`notification.ts:23`, migration `drizzle/0092`);
+>   idempotency key is `msg:<messageId>` — re-arms naturally per message, so no window-epoch column was needed.
+> - **D4 ✅** `POST /threads` + `createThread` removed (#1386); `ensureThread` is the sole booking-derived creation path.
+> - **D5 ✅** all-or-nothing accepted; `MESSAGING` is now `runtimeControlled` (`registry.ts:59`) — flip live at `/admin/feature-flags`.
+>
+> **Open follow-ups the build did NOT close (2026-07-07 architect review):**
+> - **[HIGH, latent] `DEFAULT_STAFF_ID` shared participant.** `ensureThread` (`ensure-thread.ts:38`) still seeds one
+>   global staff user into *every* operator's threads. Operator reads no longer need it (they scope by `operatorId`);
+>   it is dead weight whose unread row is bumped on every renter send. If that account ever holds a participant-scope
+>   role (legacy `STAFF`/`ADMIN`), a single `GET /threads` returns every operator's renter conversations — the exact
+>   cross-tenant leak this feature exists to prevent. Not live today *iff* `DEFAULT_STAFF_ID` is `PLATFORM_ADMIN`/`OPERATOR_*`.
+>   Fix: seed `[booking.renterId]` only; drop the `staffUserId` wiring (`index.ts:399/404`); data-migrate existing rows away.
+> - **[MEDIUM] Blind `operatorUnreadCount = 0` reset can drop the operator *email* alert**, not just the badge (§4):
+>   a renter send landing between inbox-open and click-read is zeroed AND never armed an email (it observed count ≥ 2).
+>   Bounded (self-heals on next send) but should be documented as "alert can be missed," or switched to a watermark.
+>
+> ---
+>
+> <details><summary>Original design (historical — DESIGN FOR REVIEW, 2026-06-27)</summary>
+>
+> Approach + decisions doc for un-gating in-app messaging (#1205, follow-up to #1032 / #1161). Five
+> design decisions (D1–D5) needed sign-off first. **Revised 2026-06-27** after a design review (four findings folded in; see §8).
 
 **Goal:** Let operators read and reply to their bookings' message threads (today the
 feature is renter-side only and gated off via `VITE_FEATURE_MESSAGING`), without leaking
@@ -256,3 +284,5 @@ All four findings verified against the worktree and folded in:
 | 4 (P2) | Global flag can't un-gate operators only | `isVisibleToViewer(isMessagingEnabled(), role)` gates renter nav too (`renter-nav-items.ts:32`) | **D5 + Slice 3** — accept all-or-nothing, or add a separate operator flag |
 
 Not run: tests (design review only). Build must happen on a fresh `origin/develop` worktree.
+
+</details>
