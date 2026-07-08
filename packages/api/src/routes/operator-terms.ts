@@ -3,10 +3,16 @@ import {
   saveOperatorTermsDraftSchema,
 } from '@kuruma/shared/validators/consent-documents'
 import { Hono } from 'hono'
-import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
+import { requireAuth, requireUser, toCallerContext } from '../middleware/auth'
 import type { OperatorTermsService } from '../services/operator-terms'
 import type { ResolveWriteOperatorId } from '../tenancy'
-import { fail, ok, parseScopedCreate, resolveReadOperatorTarget } from './helpers'
+import {
+  fail,
+  ok,
+  parseScopedCreate,
+  requireFleetWriteRole,
+  resolveReadOperatorTarget,
+} from './helpers'
 
 export function createOperatorTermsRoutes(
   service: OperatorTermsService,
@@ -23,7 +29,8 @@ export function createOperatorTermsRoutes(
   return app
     .get('/operator-terms', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
       const ctx = toCallerContext(user)
       // operator → own tenant; admin → ?operatorId= (or nothing to show); none → nothing.
       const operatorId = resolveReadOperatorTarget(ctx, c.req.query('operatorId'))
@@ -34,7 +41,8 @@ export function createOperatorTermsRoutes(
     })
     .post('/operator-terms', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
       const ctx = toCallerContext(user)
       const parsed = await parseScopedCreate(
         c,
@@ -52,7 +60,8 @@ export function createOperatorTermsRoutes(
     })
     .post('/operator-terms/:version/publish', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
       const ctx = toCallerContext(user)
       // Throws OperatorRequiredError (→ 422 via setupGlobalHandlers) for an admin
       // with no ?operatorId=; an operator resolves to its own tenant.
@@ -63,7 +72,8 @@ export function createOperatorTermsRoutes(
     })
     .delete('/operator-terms/:version', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
       const ctx = toCallerContext(user)
       const operatorId = await resolveWriteOperatorId(ctx, c.req.query('operatorId'))
       const result = await service.archive(operatorId, c.req.param('version'), new Date())
