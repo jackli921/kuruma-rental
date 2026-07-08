@@ -385,6 +385,12 @@ describe('FleetTimeline roving tabindex (#1470)', () => {
   // arrow move puts the stop on a bar, a date nav that drops that bar must re-home the sole
   // tabIndex=0 to the new first bar (never a dead id, so Tab still enters) AND hand focus to
   // the region — the two mechanisms cooperating, not fighting.
+  //
+  // Scope: this pins FleetTimeline IN ISOLATION. In the full app the #1489 app-wide
+  // RouteAnnouncer (a preceding sibling of <Outlet>, so its layout effect fires first) can
+  // pre-empt this region restore on a search-param date nav and land focus on its sr-only
+  // anchor instead. That cross-layer precedence is a pre-existing #1489/#1471 concern tracked
+  // in #1508 — out of scope here; this component's own restore still runs and is correct.
   it('re-homes the stop to the first bar and restores region focus when a nav drops the active bar', () => {
     const DATE0 = new Date('2026-07-01T00:00:00.000Z')
     const DATE_NEXT = shiftCalendarDate('timeline', DATE0, 1)
