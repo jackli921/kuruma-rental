@@ -95,8 +95,12 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
   loader: async ({ context, deps }) => {
     // Warm the SAME range the component renders. The landing view depends on the
     // now-runtime-toggleable fleet-timeline flag (#1322), so read its effective value
-    // from the overrides map (warmed app-wide by FeatureFlagsProvider) to match.
-    const overrides = await context.queryClient.ensureQueryData(featureFlagsQueryOptions())
+    // to match. Use fetchQuery, not ensureQueryData (#1486): the flag map is seeded with
+    // a stale empty override, which ensureQueryData would return as-is on a hard load ->
+    // the warmer would pick the range from the build-time default while the component
+    // (via the refetching provider) renders from the live override, warming the wrong
+    // range. fetchQuery honors the stale seed and pulls the real override first.
+    const overrides = await context.queryClient.fetchQuery(featureFlagsQueryOptions())
     const timelineEnabled = resolveFeatureFlag(overrides, 'FLEET_TIMELINE')
     const view = parseCalendarView(deps.view, timelineEnabled)
     const { from, to } = calendarRange(view, parseCalendarDate(deps.date))

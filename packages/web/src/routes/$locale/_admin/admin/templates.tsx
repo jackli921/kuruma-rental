@@ -18,7 +18,9 @@ export const Route = createFileRoute('/$locale/_admin/admin/templates')({
   // catalog off is a deliberate platform decision, not a beta preview. SHARED_CATALOG is
   // serverOnly + serverDefault ON, so the default admits and only an override closes it.
   beforeLoad: async ({ context, params }) => {
-    const overrides = await context.queryClient.ensureQueryData(featureFlagsQueryOptions())
+    // fetchQuery (not ensureQueryData) so the kill-switch honors an override on a hard
+    // load, not the seeded default (#1486); fetchFeatureFlagOverrides is fail-safe.
+    const overrides = await context.queryClient.fetchQuery(featureFlagsQueryOptions())
     if (!resolveFeatureFlag(overrides, 'SHARED_CATALOG')) {
       throw redirect({ to: '/$locale/admin', params: { locale: params.locale } })
     }
