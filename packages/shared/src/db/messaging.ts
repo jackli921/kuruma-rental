@@ -30,11 +30,10 @@ export const threads = pgTable(
     // invisible to operators). Set by ensureThread; backfilled in this migration.
     operatorId: text('operatorId').references(() => operators.id, { onDelete: 'restrict' }),
     // Operator-side unread counter (#1205, slice 3). Tenant-level, not per-user:
-    // the operator inbox is one shared surface, so unread lives on the thread, not
-    // on a thread_participants row (a single DEFAULT_STAFF_ID participant is shared
-    // across all tenants and can't carry per-operator unread). Bumped on a renter
-    // send, zeroed when the operator reads. The renter side keeps its own
-    // per-participant unreadCount.
+    // operators are NOT thread participants (they read-scope by operatorId), and
+    // the inbox is one shared surface, so operator unread lives on the thread
+    // rather than a thread_participants row. Bumped on a renter send, zeroed when
+    // the operator reads. The renter side keeps its own per-participant unreadCount.
     operatorUnreadCount: integer('operatorUnreadCount').notNull().default(0),
     idempotencyKey: text('idempotencyKey'),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),

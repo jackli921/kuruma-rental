@@ -722,6 +722,13 @@
       "when": 1783200930778,
       "tag": "0102_insurance_name_i18n",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1783468694541,
+      "tag": "0103_drop_shared_staff_thread_participant",
+      "breakpoints": true
     }
   ]
 }
