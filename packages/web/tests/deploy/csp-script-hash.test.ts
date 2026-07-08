@@ -33,6 +33,25 @@ const cspLines = headers
   .split('\n')
   .filter((l) => /^\s+Content-Security-Policy(-Report-Only)?:/.test(l))
 const scriptSrcs = cspLines.map((l) => l.match(/script-src ([^;]*)/)?.[1]?.trim() ?? '')
+const imgSrcs = cspLines.map((l) => l.match(/img-src ([^;]*)/)?.[1]?.trim() ?? '')
+
+// Every non-'self' image host the app can render — an enforcing CSP silently
+// blocks any it omits, so pin the FULL set: a drift guard that covered only some
+// hosts would stay green while the rest are CSP-blocked (the #500-review miss).
+//   - Unsplash: landing imagery (Hero/CallToAction/FeaturedVehicles).
+//   - R2 bucket: operator-uploaded vehicle photos (api VEHICLE_PHOTOS_PUBLIC_URL).
+//   - Google: signed-in avatars (OAuth profile.picture, nav/UserMenu).
+//   - Wikimedia + placehold.co: the SEEDED catalog demo photos
+//     (seed-data/vehicles.ts) — TEMPORARY until the R2 re-host (#1507).
+//   - GSI tiles: the flag-gated search map (search/PigeonMapAdapter).
+const REQUIRED_IMG_HOSTS = [
+  'https://images.unsplash.com',
+  'https://pub-a6e9e98522e945a7aa1871f4fe741448.r2.dev',
+  'https://lh3.googleusercontent.com',
+  'https://upload.wikimedia.org',
+  'https://placehold.co',
+  'https://cyberjapandata.gsi.go.jp',
+]
 
 describe('CSP script-src hash (#500)', () => {
   test('index.html has exactly one inline (src-less) script', () => {
@@ -56,5 +75,19 @@ describe('CSP script-src hash (#500)', () => {
       const styleSrc = line.match(/style-src ([^;]*)/)?.[1]?.trim() ?? ''
       expect(styleSrc).toContain("'unsafe-inline'")
     }
+  })
+
+  test('serves the CSP as enforcing, not Report-Only (#500 flip)', () => {
+    const lines = headers.split('\n')
+    const enforcing = lines.filter((l) => /^\s+Content-Security-Policy:/.test(l))
+    const reportOnly = lines.filter((l) => /^\s+Content-Security-Policy-Report-Only:/.test(l))
+    expect(enforcing).toHaveLength(1)
+    expect(reportOnly).toHaveLength(0)
+  })
+
+  test('EVERY CSP header allows the active vehicle-photo (R2) + avatar (Google) img hosts', () => {
+    expect(imgSrcs.length).toBeGreaterThan(0)
+    for (const imgSrc of imgSrcs)
+      for (const host of REQUIRED_IMG_HOSTS) expect(imgSrc).toContain(host)
   })
 })

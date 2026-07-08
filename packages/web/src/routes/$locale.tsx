@@ -36,12 +36,14 @@ function LocaleLayout() {
           <ViewModeProvider>
             <LayoutPreferenceProvider>
               <Navbar />
-              {/* #1489: app-wide focus-on-navigate anchor; mounted here (a stable parent
+              {/* #1489/#1508: app-wide focus-on-navigate anchor; mounted here (a stable parent
                   that survives child route + pendingComponent swaps) so a navigation never
-                  strands screen-reader focus on <body>. Placed just before <Outlet> so
-                  restored focus lands at the content boundary, past the (unchanged) nav. */}
-              <RouteAnnouncer />
-              <Outlet />
+                  strands screen-reader focus on <body>. It WRAPS <Outlet> (not a preceding
+                  sibling) so its restore effect fires AFTER any per-component restorer nested
+                  inside — the announcer is the fallback, the more-specific restorer wins. */}
+              <RouteAnnouncer>
+                <Outlet />
+              </RouteAnnouncer>
             </LayoutPreferenceProvider>
           </ViewModeProvider>
         </CurrencyProvider>

@@ -14,9 +14,12 @@ export const Route = createFileRoute('/$locale/_business/manage/messages')({
   // #1322: the messaging flag now reads the runtime override (a dashboard toggle
   // opens/closes the route live); the admin-bypass visibility rule is unchanged.
   beforeLoad: async ({ context, params }) => {
+    // fetchQuery for the flags (not ensureQueryData) so a hard load honors a switchboard
+    // override, not the seeded build-time default (#1486); fetchFeatureFlagOverrides is
+    // fail-safe. Session stays ensureQueryData — its identity cache is unaffected.
     const [session, overrides] = await Promise.all([
       context.queryClient.ensureQueryData(sessionQueryOptions()),
-      context.queryClient.ensureQueryData(featureFlagsQueryOptions()),
+      context.queryClient.fetchQuery(featureFlagsQueryOptions()),
     ])
     if (!isVisibleToViewer(resolveFeatureFlag(overrides, 'MESSAGING'), session?.user?.role)) {
       throw redirect({ to: '/$locale', params: { locale: params.locale } })

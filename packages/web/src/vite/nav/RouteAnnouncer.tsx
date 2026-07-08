@@ -1,6 +1,6 @@
 import { useRouteFocusRestoration } from '@/vite/nav/useRouteFocusRestoration'
 import { useRouterState } from '@tanstack/react-router'
-import { useRef } from 'react'
+import { type PropsWithChildren, useRef } from 'react'
 import { useTranslations } from 'use-intl'
 
 /**
@@ -14,8 +14,16 @@ import { useTranslations } from 'use-intl'
  * (the new content is committed and the old subtree — with the element that had focus — is
  * unmounted). Keying on the pending `location` instead would fire before that unmount, while
  * focus is still on a live element, and miss the drop entirely.
+ *
+ * #1508: this WRAPS the routed content (`<RouteAnnouncer><Outlet/></RouteAnnouncer>`) instead
+ * of sitting before it as a sibling, which makes it a true app-wide FALLBACK. React fires
+ * layout effects in post-order, so any per-component restorer nested below (e.g. FleetTimeline's
+ * #1471 board-region restore) runs FIRST and reclaims focus; this anchor's effect then sees a
+ * live element and stands down. As a preceding sibling its effect fired first and pre-empted
+ * those restores onto the invisible anchor. The anchor is still rendered before `children`, so
+ * restored focus (and Tab order) lands at the content boundary, past the unchanged nav.
  */
-export function RouteAnnouncer() {
+export function RouteAnnouncer({ children }: PropsWithChildren) {
   const t = useTranslations('nav')
   // A named `<section>` (role="region") — not a bare `<div>` (role="generic", on which
   // `aria-label` is prohibited and dropped): a generic anchor is silent on VoiceOver, exactly
@@ -24,11 +32,14 @@ export function RouteAnnouncer() {
   const navKey = useRouterState({ select: (s) => s.resolvedLocation?.href ?? '' })
   useRouteFocusRestoration(navKey, anchorRef)
   return (
-    <section
-      ref={anchorRef}
-      tabIndex={-1}
-      className="sr-only"
-      aria-label={t('routeAnnouncerLabel')}
-    />
+    <>
+      <section
+        ref={anchorRef}
+        tabIndex={-1}
+        className="sr-only"
+        aria-label={t('routeAnnouncerLabel')}
+      />
+      {children}
+    </>
   )
 }
