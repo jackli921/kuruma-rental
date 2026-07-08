@@ -80,7 +80,14 @@ function ChildRestorer({ navKey }: { navKey: string }) {
 }
 
 describe('RouteAnnouncer focus precedence (#1508)', () => {
-  function Tree({ navKey, showTransient }: { navKey: string; showTransient: boolean }) {
+  // `childKey` remounts ChildRestorer when it changes (fresh fiber -> its seed guard fires),
+  // modelling the cold-remount path. Left undefined, the child keeps its fiber across a nav —
+  // the in-place re-render path where its restorer actually runs.
+  function Tree({
+    navKey,
+    showTransient,
+    childKey,
+  }: { navKey: string; showTransient: boolean; childKey?: string }) {
     return (
       <IntlProvider locale="en" messages={en}>
         <RouteAnnouncer>
@@ -89,7 +96,7 @@ describe('RouteAnnouncer focus precedence (#1508)', () => {
               x
             </button>
           ) : null}
-          <ChildRestorer navKey={navKey} />
+          <ChildRestorer key={childKey} navKey={navKey} />
         </RouteAnnouncer>
       </IntlProvider>
     )
@@ -111,18 +118,18 @@ describe('RouteAnnouncer focus precedence (#1508)', () => {
     expect(screen.getByRole('region', { name: 'Page content' })).not.toHaveFocus()
   })
 
-  it('still catches a cold remount where no descendant restorer runs', () => {
-    // The child mounts fresh (its seed guard suppresses restore), so nobody reclaims focus —
-    // the announcer must remain the fallback and focus its anchor.
+  it('still catches a cold remount where the fresh subtree cannot restore its own focus', () => {
     href.value = '/en/a'
-    const { rerender } = render(<Tree navKey="a" showTransient />)
+    const { rerender } = render(<Tree navKey="a" showTransient childKey="a" />)
 
     screen.getByTestId('transient').focus()
     href.value = '/en/b'
-    // navKey stays 'a' -> the child's restorer is seeded/no-op, modelling a freshly mounted
-    // subtree that cannot restore its own focus.
-    rerender(<Tree navKey="a" showTransient={false} />)
+    // Changing childKey remounts ChildRestorer: a genuinely fresh fiber whose seed guard
+    // suppresses restore on its first resolution — the cold pendingComponent swap where the
+    // subtree that owned focus is gone. Nobody reclaims focus, so the announcer must.
+    rerender(<Tree navKey="b" showTransient={false} childKey="b" />)
 
     expect(screen.getByRole('region', { name: 'Page content' })).toHaveFocus()
+    expect(screen.getByRole('region', { name: 'component region' })).not.toHaveFocus()
   })
 })
