@@ -110,6 +110,12 @@ export class DrizzleMessageRepository implements MessageRepository {
   // single indexed lookup, no message rows loaded.
   private async assertThreadReachable(ctx: CallerContext, threadId: string): Promise<void> {
     const scope = threadReadScope(ctx)
+    // Fail closed for a tenant-less operator, mirroring the sibling reads
+    // (findById / findByThreadId) and the in-memory guard. requireOperatorScope
+    // already 403s this input before create reaches here, but the guard must not
+    // depend on that gate: without this branch a `none` scope falls through to an
+    // operator-unfiltered lookup and would reach any thread by id.
+    if (scope.kind === 'none') throw new NotFoundError('Thread not found')
     if (scope.kind === 'participant') {
       const [participation] = await this.db
         .select({ threadId: threadParticipants.threadId })
