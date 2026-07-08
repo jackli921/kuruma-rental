@@ -34,6 +34,7 @@ import { Route as LocaleProviderInviteTokenRouteImport } from './routes/$locale/
 import { Route as LocaleRenterMessagesThreadIdRouteImport } from './routes/$locale/_renter/messages/$threadId'
 import { Route as LocaleRenterBookingsNewRouteImport } from './routes/$locale/_renter/bookings/new'
 import { Route as LocaleRenterBookingsConfirmationRouteImport } from './routes/$locale/_renter/bookings/confirmation'
+import { Route as LocaleBusinessManageTermsRouteImport } from './routes/$locale/_business/manage/terms'
 import { Route as LocaleBusinessManageTeamRouteImport } from './routes/$locale/_business/manage/team'
 import { Route as LocaleBusinessManageSettingsRouteImport } from './routes/$locale/_business/manage/settings'
 import { Route as LocaleBusinessManageMessagesRouteImport } from './routes/$locale/_business/manage/messages'
@@ -189,6 +190,12 @@ const LocaleRenterBookingsConfirmationRoute =
     id: '/confirmation',
     path: '/confirmation',
     getParentRoute: () => LocaleRenterBookingsRoute,
+  } as any)
+const LocaleBusinessManageTermsRoute =
+  LocaleBusinessManageTermsRouteImport.update({
+    id: '/manage/terms',
+    path: '/manage/terms',
+    getParentRoute: () => LocaleBusinessRoute,
   } as any)
 const LocaleBusinessManageTeamRoute =
   LocaleBusinessManageTeamRouteImport.update({
@@ -377,6 +384,7 @@ export interface FileRoutesByFullPath {
   '/$locale/manage/messages': typeof LocaleBusinessManageMessagesRouteWithChildren
   '/$locale/manage/settings': typeof LocaleBusinessManageSettingsRoute
   '/$locale/manage/team': typeof LocaleBusinessManageTeamRoute
+  '/$locale/manage/terms': typeof LocaleBusinessManageTermsRoute
   '/$locale/bookings/confirmation': typeof LocaleRenterBookingsConfirmationRoute
   '/$locale/bookings/new': typeof LocaleRenterBookingsNewRoute
   '/$locale/messages/$threadId': typeof LocaleRenterMessagesThreadIdRoute
@@ -423,6 +431,7 @@ export interface FileRoutesByTo {
   '/$locale/manage/locations': typeof LocaleBusinessManageLocationsRoute
   '/$locale/manage/settings': typeof LocaleBusinessManageSettingsRoute
   '/$locale/manage/team': typeof LocaleBusinessManageTeamRoute
+  '/$locale/manage/terms': typeof LocaleBusinessManageTermsRoute
   '/$locale/bookings/confirmation': typeof LocaleRenterBookingsConfirmationRoute
   '/$locale/bookings/new': typeof LocaleRenterBookingsNewRoute
   '/$locale/messages/$threadId': typeof LocaleRenterMessagesThreadIdRoute
@@ -477,6 +486,7 @@ export interface FileRoutesById {
   '/$locale/_business/manage/messages': typeof LocaleBusinessManageMessagesRouteWithChildren
   '/$locale/_business/manage/settings': typeof LocaleBusinessManageSettingsRoute
   '/$locale/_business/manage/team': typeof LocaleBusinessManageTeamRoute
+  '/$locale/_business/manage/terms': typeof LocaleBusinessManageTermsRoute
   '/$locale/_renter/bookings/confirmation': typeof LocaleRenterBookingsConfirmationRoute
   '/$locale/_renter/bookings/new': typeof LocaleRenterBookingsNewRoute
   '/$locale/_renter/messages/$threadId': typeof LocaleRenterMessagesThreadIdRoute
@@ -529,6 +539,7 @@ export interface FileRouteTypes {
     | '/$locale/manage/messages'
     | '/$locale/manage/settings'
     | '/$locale/manage/team'
+    | '/$locale/manage/terms'
     | '/$locale/bookings/confirmation'
     | '/$locale/bookings/new'
     | '/$locale/messages/$threadId'
@@ -575,6 +586,7 @@ export interface FileRouteTypes {
     | '/$locale/manage/locations'
     | '/$locale/manage/settings'
     | '/$locale/manage/team'
+    | '/$locale/manage/terms'
     | '/$locale/bookings/confirmation'
     | '/$locale/bookings/new'
     | '/$locale/messages/$threadId'
@@ -628,6 +640,7 @@ export interface FileRouteTypes {
     | '/$locale/_business/manage/messages'
     | '/$locale/_business/manage/settings'
     | '/$locale/_business/manage/team'
+    | '/$locale/_business/manage/terms'
     | '/$locale/_renter/bookings/confirmation'
     | '/$locale/_renter/bookings/new'
     | '/$locale/_renter/messages/$threadId'
@@ -829,6 +842,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/$locale/bookings/confirmation'
       preLoaderRoute: typeof LocaleRenterBookingsConfirmationRouteImport
       parentRoute: typeof LocaleRenterBookingsRoute
+    }
+    '/$locale/_business/manage/terms': {
+      id: '/$locale/_business/manage/terms'
+      path: '/manage/terms'
+      fullPath: '/$locale/manage/terms'
+      preLoaderRoute: typeof LocaleBusinessManageTermsRouteImport
+      parentRoute: typeof LocaleBusinessRoute
     }
     '/$locale/_business/manage/team': {
       id: '/$locale/_business/manage/team'
@@ -1082,6 +1102,7 @@ interface LocaleBusinessRouteChildren {
   LocaleBusinessManageMessagesRoute: typeof LocaleBusinessManageMessagesRouteWithChildren
   LocaleBusinessManageSettingsRoute: typeof LocaleBusinessManageSettingsRoute
   LocaleBusinessManageTeamRoute: typeof LocaleBusinessManageTeamRoute
+  LocaleBusinessManageTermsRoute: typeof LocaleBusinessManageTermsRoute
   LocaleBusinessManageBookingsBookingIdRoute: typeof LocaleBusinessManageBookingsBookingIdRoute
   LocaleBusinessManageFleetVehicleIdRoute: typeof LocaleBusinessManageFleetVehicleIdRoute
   LocaleBusinessManageBookingsIndexRoute: typeof LocaleBusinessManageBookingsIndexRoute
@@ -1099,6 +1120,7 @@ const LocaleBusinessRouteChildren: LocaleBusinessRouteChildren = {
     LocaleBusinessManageMessagesRouteWithChildren,
   LocaleBusinessManageSettingsRoute: LocaleBusinessManageSettingsRoute,
   LocaleBusinessManageTeamRoute: LocaleBusinessManageTeamRoute,
+  LocaleBusinessManageTermsRoute: LocaleBusinessManageTermsRoute,
   LocaleBusinessManageBookingsBookingIdRoute:
     LocaleBusinessManageBookingsBookingIdRoute,
   LocaleBusinessManageFleetVehicleIdRoute:

@@ -18,6 +18,7 @@ const doc = (() => {
     type: 'RENTER_TOS' as const,
     version: '1.0',
     locale: 'en',
+    operatorId: null,
     title,
     body,
     acceptanceLabel,

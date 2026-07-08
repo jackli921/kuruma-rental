@@ -8,6 +8,7 @@ describe('schema pgEnum tripwires', () => {
       'PRIVACY_POLICY',
       'RENTER_LIABILITY',
       'OPERATOR_AGREEMENT',
+      'OPERATOR_RENTAL_TERMS',
     ])
     expect(consentDocStatusEnum.enumValues).toEqual(['DRAFT', 'PUBLISHED', 'ARCHIVED'])
     expect(consentMethodEnum.enumValues).toEqual(['CLICKWRAP', 'ESIGN', 'IMPORTED'])

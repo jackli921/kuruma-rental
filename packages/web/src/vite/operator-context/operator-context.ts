@@ -110,6 +110,7 @@ export const OPERATOR_CONTEXT_ROUTE_IDS: ReadonlySet<string> = new Set([
   '/$locale/_business/manage/locations',
   '/$locale/_business/manage/settings', // slice 2 — picker honored on settings
   '/$locale/_business/manage/team', // slice 6 (#1230) — picker honored on team management
+  '/$locale/_business/manage/terms', // operator rental-terms — list narrows to picked operator
 ])
 
 // True when the active route is one that honors `?operator` (a descendant match

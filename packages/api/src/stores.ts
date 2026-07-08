@@ -618,6 +618,7 @@ export interface ConsentDocument {
   type: ConsentType
   version: string
   locale: string
+  operatorId: string | null
   title: string
   body: string
   acceptanceLabel: string

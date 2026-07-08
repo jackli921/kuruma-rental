@@ -29,6 +29,8 @@ export const consentDocuments = pgTable(
     type: consentTypeEnum('type').notNull(),
     version: text('version').notNull(),
     locale: text('locale').notNull(),
+    // Platform docs stay NULL; operator-authored rental-terms set it (§4.2).
+    operatorId: text('operatorId').references(() => operators.id, { onDelete: 'restrict' }),
     title: text('title').notNull(),
     body: text('body').notNull(),
     acceptanceLabel: text('acceptanceLabel').notNull(),
@@ -40,10 +42,19 @@ export const consentDocuments = pgTable(
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    unique('consent_documents_type_version_locale_unique').on(t.type, t.version, t.locale),
+    // §4.3 — two partial uniques (a single nullable-column unique would let duplicate
+    // platform rows in, since Postgres treats NULLs as distinct).
+    uniqueIndex('consent_documents_platform_tvl_unique')
+      .on(t.type, t.version, t.locale)
+      .where(sql`${t.operatorId} IS NULL`),
+    uniqueIndex('consent_documents_operator_tvl_unique')
+      .on(t.operatorId, t.type, t.version, t.locale)
+      .where(sql`${t.operatorId} IS NOT NULL`),
     // Redundant vs PK, but it is the composite-FK target that keeps acceptances' denormalized
     // `consentType` honest (§4.1 sync seal).
     unique('consent_documents_id_type_unique').on(t.id, t.type),
+    // FK-covering index (lint:fk-indexes).
+    index('consent_documents_operator_idx').on(t.operatorId),
   ],
 )
 

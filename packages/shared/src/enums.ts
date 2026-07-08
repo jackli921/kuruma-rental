@@ -206,6 +206,7 @@ export const CONSENT_TYPES = [
   'PRIVACY_POLICY',
   'RENTER_LIABILITY',
   'OPERATOR_AGREEMENT',
+  'OPERATOR_RENTAL_TERMS',
 ] as const
 export type ConsentType = (typeof CONSENT_TYPES)[number]
 
@@ -222,6 +223,7 @@ export const CONSENT_CARDINALITY: Record<ConsentType, ConsentCardinality> = {
   PRIVACY_POLICY: 'ONCE_PER_SUBJECT',
   OPERATOR_AGREEMENT: 'ONCE_PER_SUBJECT',
   RENTER_LIABILITY: 'PER_EVENT',
+  OPERATOR_RENTAL_TERMS: 'PER_EVENT',
 }
 
 // --- Mutual reviews & ratings (issue #1067) ---

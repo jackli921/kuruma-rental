@@ -71,6 +71,11 @@ const REGISTRY = {
     label: 'Operator settings',
     runtimeControlled: true,
   },
+  OPERATOR_TERMS: {
+    env: 'VITE_FEATURE_OPERATOR_TERMS',
+    label: 'Operator-authored rental terms',
+    runtimeControlled: true,
+  },
   RENTER_DOCUMENTS: {
     env: 'VITE_FEATURE_RENTER_DOCUMENTS',
     label: 'Renter document upload',
