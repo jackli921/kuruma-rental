@@ -19,11 +19,14 @@ import { type RefObject, useLayoutEffect, useRef } from 'react'
  * never sits on `<body>` for a painted frame (which can bump an AT virtual cursor to the top
  * of the page). Client-only Vite SPA — no SSR caveat.
  *
- * The "focus fell to the document root" guard is also what lets this coexist with per-component
- * restorers (e.g. FleetTimeline focusing its own board region): React runs child effects before
- * parent effects, so a more-specific child restores first, and this parent then sees a live
- * element and stands down. This app-wide anchor is the fallback for the cold-remount path where
- * the child that owned focus is itself unmounted and can't run its effect.
+ * The "focus fell to the document root" guard is what lets this coexist with per-component
+ * restorers (e.g. FleetTimeline focusing its own board region). For that to hold the announcer
+ * must WRAP the routed content (see RouteAnnouncer / $locale.tsx, #1508), NOT sit before it as a
+ * sibling: React fires layout effects in post-order, so a restorer nested below this anchor runs
+ * FIRST and reclaims focus, and this effect then sees a live element and stands down. (A
+ * preceding sibling's effect fires first and pre-empts the restore onto this invisible anchor.)
+ * This app-wide anchor is the fallback for the cold-remount path where the child that owned
+ * focus is itself unmounted and can't run its effect.
  */
 export function useRouteFocusRestoration<T extends HTMLElement>(
   navKey: string,
