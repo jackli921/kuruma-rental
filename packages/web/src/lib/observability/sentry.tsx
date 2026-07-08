@@ -40,6 +40,16 @@ export function captureRouteError(error: Error) {
 }
 
 /**
+ * Reports a handled (swallowed) error to Sentry without letting it propagate.
+ * For fail-safe paths that degrade to a default rather than throw, so the
+ * degradation still leaves a signal instead of failing silently. The SDK
+ * no-ops when Sentry is disabled (no DSN).
+ */
+export function captureHandledError(error: unknown, context?: Record<string, unknown>) {
+  Sentry.captureException(error, context ? { extra: context } : undefined)
+}
+
+/**
  * Minimal crash fallback rendered when the React tree throws above the router.
  * Inline-styled (no Tailwind/i18n dependency) so it still renders if CSS or the
  * locale provider is what failed. `Sentry.ErrorBoundary` reports the error to
