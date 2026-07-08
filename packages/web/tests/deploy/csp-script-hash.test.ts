@@ -33,6 +33,18 @@ const cspLines = headers
   .split('\n')
   .filter((l) => /^\s+Content-Security-Policy(-Report-Only)?:/.test(l))
 const scriptSrcs = cspLines.map((l) => l.match(/script-src ([^;]*)/)?.[1]?.trim() ?? '')
+const imgSrcs = cspLines.map((l) => l.match(/img-src ([^;]*)/)?.[1]?.trim() ?? '')
+
+// Non-'self' image hosts the app ACTIVELY loads (both live in beta). Operator
+// vehicle photos come from the R2 public bucket (api wrangler.toml
+// VEHICLE_PHOTOS_PUBLIC_URL); signed-in avatars come from Google (OAuth
+// profile.picture, rendered in nav/UserMenu). An enforcing CSP silently blocks
+// any img host it omits, so pin both — an img-src edit that drops one would
+// break every vehicle photo / avatar the moment the policy enforces (#500 audit).
+const REQUIRED_IMG_HOSTS = [
+  'https://pub-a6e9e98522e945a7aa1871f4fe741448.r2.dev',
+  'https://lh3.googleusercontent.com',
+]
 
 describe('CSP script-src hash (#500)', () => {
   test('index.html has exactly one inline (src-less) script', () => {
@@ -56,5 +68,19 @@ describe('CSP script-src hash (#500)', () => {
       const styleSrc = line.match(/style-src ([^;]*)/)?.[1]?.trim() ?? ''
       expect(styleSrc).toContain("'unsafe-inline'")
     }
+  })
+
+  test('serves the CSP as enforcing, not Report-Only (#500 flip)', () => {
+    const lines = headers.split('\n')
+    const enforcing = lines.filter((l) => /^\s+Content-Security-Policy:/.test(l))
+    const reportOnly = lines.filter((l) => /^\s+Content-Security-Policy-Report-Only:/.test(l))
+    expect(enforcing).toHaveLength(1)
+    expect(reportOnly).toHaveLength(0)
+  })
+
+  test('EVERY CSP header allows the active vehicle-photo (R2) + avatar (Google) img hosts', () => {
+    expect(imgSrcs.length).toBeGreaterThan(0)
+    for (const imgSrc of imgSrcs)
+      for (const host of REQUIRED_IMG_HOSTS) expect(imgSrc).toContain(host)
   })
 })
