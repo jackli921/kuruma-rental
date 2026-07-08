@@ -28,7 +28,9 @@ export const Route = createFileRoute('/$locale/_business/manage/settings')({
   // Reads the runtime-toggleable flag (#1322): a dashboard override opens/closes the
   // route live. resolveFeatureFlag = override ?? build-time env ?? false.
   beforeLoad: async ({ context, params }) => {
-    const overrides = await context.queryClient.ensureQueryData(featureFlagsQueryOptions())
+    // fetchQuery (not ensureQueryData) so a hard load honors a switchboard override,
+    // not the seeded build-time default (#1486); fetchFeatureFlagOverrides is fail-safe.
+    const overrides = await context.queryClient.fetchQuery(featureFlagsQueryOptions())
     if (!resolveFeatureFlag(overrides, 'OPERATOR_SETTINGS')) {
       throw redirect({ to: '/$locale/manage/bookings', params: { locale: params.locale } })
     }

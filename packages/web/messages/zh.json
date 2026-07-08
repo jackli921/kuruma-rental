@@ -105,7 +105,8 @@
     "newBookings": "{count} 个新订单",
     "unreadMessages": "{count} 条未读消息",
     "settings": "设置",
-    "team": "团队"
+    "team": "团队",
+    "routeAnnouncerLabel": "页面内容"
   },
   "acriss": {
     "MCAR": "微型车",

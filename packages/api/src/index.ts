@@ -395,15 +395,16 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     availabilityRepo,
     operatorRepo,
   )
-  // Messaging: if a staff user id is configured, every confirmed booking
-  // auto-creates a renter/staff thread for coordination (design doc
-  // `docs/plans/2026-04-14-messaging-design.md`).
-  const staffUserId = process.env.DEFAULT_STAFF_ID
+  // Messaging: every confirmed booking auto-creates the renter's coordination
+  // thread. Operators read-scope by thread.operatorId (#1205), so the thread
+  // carries the renter alone — the old shared DEFAULT_STAFF_ID participant
+  // (one global staff user seeded into EVERY tenant's threads) was dead weight
+  // and a latent cross-tenant membership, so it is gone.
   // Single post-commit seam (#393): thread autocreate (#335) + outbound
   // notifications, awaited in the service, each caught-and-logged. The dispatcher
   // wiring is shared with the #1125 retry-sweep cron via resolveNotificationDispatcher.
   const notificationDispatcher = resolveNotificationDispatcher(repos, emailSender, webBaseUrl)
-  const ensureThread = staffUserId ? makeEnsureThread({ threadRepo, staffUserId }) : async () => {}
+  const ensureThread = makeEnsureThread({ threadRepo })
   const postCommit = new BookingPostCommitDispatcher(ensureThread, notificationDispatcher)
   const renterDocumentService = new RenterDocumentService(renterDocumentRepo, documentStorage)
   // #459: gate new bookings on renter document verification only when the flag

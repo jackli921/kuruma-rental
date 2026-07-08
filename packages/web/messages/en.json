@@ -105,7 +105,8 @@
     "newBookings": "{count, plural, one {# new booking} other {# new bookings}}",
     "unreadMessages": "{count, plural, one {# unread message} other {# unread messages}}",
     "settings": "Settings",
-    "team": "Team"
+    "team": "Team",
+    "routeAnnouncerLabel": "Page content"
   },
   "acriss": {
     "MCAR": "Mini",

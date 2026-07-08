@@ -105,7 +105,8 @@
     "newBookings": "新規予約 {count}件",
     "unreadMessages": "未読メッセージ {count}件",
     "settings": "設定",
-    "team": "チーム"
+    "team": "チーム",
+    "routeAnnouncerLabel": "ページコンテンツ"
   },
   "acriss": {
     "MCAR": "ミニ",

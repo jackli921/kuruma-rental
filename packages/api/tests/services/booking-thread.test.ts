@@ -1,7 +1,7 @@
 // Slice: auto-create thread on booking confirmation (#300), updated for the
 // slice-6 (#392) selected-vehicle submit. BookingService, when configured with
-// a ThreadRepository + staff user id, creates a renter/staff thread AFTER a
-// booking commits — its failure never rolls back the booking.
+// a ThreadRepository, creates the renter's thread AFTER a booking commits — its
+// failure never rolls back the booking.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
@@ -110,7 +110,7 @@ function vehicleData(o: Partial<Vehicle> = {}): Omit<Vehicle, 'id' | 'createdAt'
   }
 }
 
-async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) {
+async function makeService(threadRepo?: ThreadRepository) {
   const bookingRepo = new InMemoryBookingRepository()
   const bookingEventRepo = new InMemoryBookingEventRepository()
   const vehicleRepo = new InMemoryVehicleRepository()
@@ -210,14 +210,13 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
   // Compose the post-commit seam exactly as index.ts does: ensureThread (when a
-  // staff user is configured) + a no-op notification dispatch (this suite asserts
+  // thread repo is wired) + a no-op notification dispatch (this suite asserts
   // thread autocreate, not email).
-  const postCommit =
-    threadRepo && staffUserId
-      ? new BookingPostCommitDispatcher(makeEnsureThread({ threadRepo, staffUserId }), {
-          dispatch: async () => {},
-        })
-      : undefined
+  const postCommit = threadRepo
+    ? new BookingPostCommitDispatcher(makeEnsureThread({ threadRepo }), {
+        dispatch: async () => {},
+      })
+    : undefined
   const service = new BookingService(
     bookingRepo,
     runInTransaction,
@@ -254,8 +253,13 @@ describe('BookingService.create — auto-thread on confirmation', () => {
     threadRepo = makeMockThreadRepo()
   })
 
-  it('creates a thread with renter + staff as participants after successful booking', async () => {
-    const { service, vehicleId, locationId } = await makeService(threadRepo, STAFF)
+  it('seeds ONLY the renter as a participant — never a shared staff/platform user across tenants', async () => {
+    // A participant seeded into every operator's threads is a cross-tenant
+    // membership: threadReadScope maps a participant-scope role to "read every
+    // thread you belong to", so one shared member could read all operators'
+    // renter conversations. Operators read-scope by thread.operatorId and need
+    // no participant row, so the thread carries the renter alone.
+    const { service, vehicleId, locationId } = await makeService(threadRepo)
     const result = await service.create(renterCtx, bookingInput(vehicleId, locationId))
 
     expect(result.ok).toBe(true)
@@ -264,11 +268,11 @@ describe('BookingService.create — auto-thread on confirmation', () => {
     const [ctxArg, bookingIdArg, participantIds] = threadRepo.create.mock.calls[0]!
     expect(ctxArg).toEqual(renterCtx)
     expect(bookingIdArg).toBe(result.booking.id)
-    expect([...(participantIds as string[])].sort()).toEqual([RENTER, STAFF].sort())
+    expect(participantIds).toEqual([RENTER])
   })
 
-  it('does not touch the thread repo when threading is not configured (back-compat)', async () => {
-    const { service, vehicleId, locationId } = await makeService(threadRepo) // no staffUserId
+  it('does not touch the thread repo when no post-commit dispatcher is wired (back-compat)', async () => {
+    const { service, vehicleId, locationId } = await makeService() // no threadRepo -> no dispatcher
     const result = await service.create(renterCtx, bookingInput(vehicleId, locationId))
     expect(result.ok).toBe(true)
     expect(threadRepo.create).not.toHaveBeenCalled()
@@ -276,7 +280,7 @@ describe('BookingService.create — auto-thread on confirmation', () => {
   })
 
   it('does not create a duplicate thread on an idempotent replay', async () => {
-    const { service, vehicleId, locationId } = await makeService(threadRepo, STAFF)
+    const { service, vehicleId, locationId } = await makeService(threadRepo)
     const input = bookingInput(vehicleId, locationId, {
       idempotencyKey: '00000000-0000-4000-8000-00000000c001',
     })
@@ -296,7 +300,7 @@ describe('BookingService.create — auto-thread on confirmation', () => {
       throw new Error('thread service down')
     })
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { service, vehicleId, locationId } = await makeService(threadRepo, STAFF)
+    const { service, vehicleId, locationId } = await makeService(threadRepo)
 
     const result = await service.create(renterCtx, bookingInput(vehicleId, locationId))
 
@@ -320,7 +324,7 @@ describe('BookingService.create — auto-thread on confirmation', () => {
       return stubThread(bookingId ?? 'none', participantIds)
     })
 
-    const { service, vehicleId, locationId } = await makeService(threadRepo, STAFF)
+    const { service, vehicleId, locationId } = await makeService(threadRepo)
     const input = bookingInput(vehicleId, locationId, {
       idempotencyKey: '00000000-0000-4000-8000-00000000c002',
     })
@@ -339,13 +343,13 @@ describe('BookingService.create — auto-thread on confirmation', () => {
   })
 
   it('runs the idempotency probe under SYSTEM_CONTEXT — a non-participant caller (PARTNER) replay finds the thread, no duplicate insert (#1168)', async () => {
-    // Real repo (not the ctx-blind mock): the thread's participants are
-    // [renter, staff], so a PARTNER caller is NOT a participant. Before #1168 the
+    // Real repo (not the ctx-blind mock): the thread's sole participant is the
+    // renter, so a PARTNER caller is NOT a participant. Before #1168 the
     // probe ran under the caller ctx — PARTNER (no longer privileged) missed the
     // existing thread on replay and re-fired the insert → a caught, logged
     // UNIQUE_VIOLATION. Under SYSTEM_CONTEXT the probe is privileged and finds it.
     const realThreadRepo = new InMemoryThreadRepository()
-    const ensureThread = makeEnsureThread({ threadRepo: realThreadRepo, staffUserId: STAFF })
+    const ensureThread = makeEnsureThread({ threadRepo: realThreadRepo })
     const partnerCtx: CallerContext = { userId: 'trip-partner', role: 'PARTNER', bypassScope: true }
     const booking = { id: 'bk-1168-partner', renterId: RENTER } as unknown as Booking
     const createSpy = vi.spyOn(realThreadRepo, 'create')
@@ -365,7 +369,7 @@ describe('BookingService.create — auto-thread on confirmation', () => {
     // auto-created thread MUST inherit its booking's operator. Server-derived
     // here from the authoritative booking — never from a request body.
     const realThreadRepo = new InMemoryThreadRepository()
-    const ensureThread = makeEnsureThread({ threadRepo: realThreadRepo, staffUserId: STAFF })
+    const ensureThread = makeEnsureThread({ threadRepo: realThreadRepo })
     const booking = {
       id: 'bk-1205-operator',
       renterId: RENTER,

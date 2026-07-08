@@ -13,9 +13,11 @@ function runGuard(
   overrides: FeatureFlagOverrides = {},
 ): Promise<unknown> {
   const session = role ? { user: { role } } : null
-  const ensureQueryData = async (opts: { queryKey: readonly unknown[] }) =>
+  // The loader reads the session via ensureQueryData and the flags via fetchQuery
+  // (#1486); both branch on the query key, so one responder backs both methods.
+  const respond = async (opts: { queryKey: readonly unknown[] }) =>
     opts.queryKey[0] === 'feature-flags' ? overrides : session
-  const context = { queryClient: { ensureQueryData } }
+  const context = { queryClient: { ensureQueryData: respond, fetchQuery: respond } }
   return (Route.options.beforeLoad as (arg: unknown) => Promise<unknown>)({
     context,
     params: { locale: 'en' },

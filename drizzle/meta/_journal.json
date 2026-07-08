@@ -726,22 +726,29 @@
     {
       "idx": 103,
       "version": "7",
-      "when": 1783463567162,
-      "tag": "0103_add_operator_rental_terms_enum",
+      "when": 1783468694541,
+      "tag": "0103_drop_shared_staff_thread_participant",
       "breakpoints": true
     },
     {
       "idx": 104,
       "version": "7",
-      "when": 1783463942669,
-      "tag": "0104_consent_documents_operator_id",
+      "when": 1783468694542,
+      "tag": "0104_add_operator_rental_terms_enum",
       "breakpoints": true
     },
     {
       "idx": 105,
       "version": "7",
-      "when": 1783464243841,
-      "tag": "0105_consent_published_immutable",
+      "when": 1783468694543,
+      "tag": "0105_consent_documents_operator_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1783468694544,
+      "tag": "0106_consent_published_immutable",
       "breakpoints": true
     }
   ]
