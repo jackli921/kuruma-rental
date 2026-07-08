@@ -108,7 +108,9 @@ const DEPRECATED_WEB_TREE_BASELINE = 170
 // fails CI; draining one shrinks the count and triggers a soft notice to lock
 // in the new baseline. Refresh with --update-baseline (same flag as the tree
 // ratchet above).
-const VITE_CROSS_FEATURE_REACH_IN_BASELINE = 162
+// 163 (#1489): routes/$locale.tsx composes the RouteAnnouncer feature component, the same
+// sanctioned routes-compose-a-vite-feature pattern as its sibling Navbar/AdminSidebar imports.
+const VITE_CROSS_FEATURE_REACH_IN_BASELINE = 163
 
 export type DeprecatedTreeStatus = {
   count: number
