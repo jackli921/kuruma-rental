@@ -1,7 +1,7 @@
 import { DEFAULT_LOCALE, type Locale, SUPPORTED_LOCALES } from '@kuruma/shared/i18n/locales'
 import type { Context } from 'hono'
 import { z } from 'zod'
-import type { CallerContext } from '../middleware/auth'
+import { type AuthUser, type CallerContext, FLEET_WRITE_ROLES } from '../middleware/auth'
 import { type CrossOperatorRead, type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
 
 // --- Response helpers ---
@@ -53,6 +53,31 @@ export function failResult(c: Context, result: FailureResult): Response {
     extras.activeBookingsCount = result.activeBookingsCount
   }
   return fail(c, result.error, result.status, extras)
+}
+
+// --- Authorization helpers ---
+
+/**
+ * Route-level fleet-write gate. Returns a `403 { success: false, error: 'Forbidden' }`
+ * response to short-circuit when the caller is outside the FLEET_WRITE tier, or
+ * `undefined` to proceed:
+ *
+ *   const denied = requireFleetWriteRole(c, user)
+ *   if (denied) return denied
+ *
+ * Extracted (#1484) because this exact gate was hand-copied into ~30 handlers
+ * across the fleet-write routes, each an independently editable one-liner — an
+ * OCP smell where a per-handler retighten silently drifts the tier (the #1406
+ * regression). Collapsing them to one enforcement point makes that drift
+ * structurally impossible. Returns a response rather than throwing, mirroring the
+ * sibling `parseId`/`parseBody` guards and keeping each route self-contained (its
+ * 403 never depends on the global ForbiddenError handler being wired). The
+ * repo-layer `requireFleetWriteScope` guard stays as defence-in-depth (and
+ * additionally fail-closes an operator missing its tenant).
+ */
+export function requireFleetWriteRole(c: Context, user: AuthUser): Response | undefined {
+  if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+  return undefined
 }
 
 // --- Object helpers ---

@@ -6,6 +6,7 @@ import en from '../../../messages/en.json'
 import { FleetTimeline } from './FleetTimeline'
 import type { CalendarBookingRow } from './api'
 import type { BlockCalendarEvent } from './calendar-events'
+import { shiftCalendarDate } from './calendar-view'
 
 const VEHICLES = [
   { id: 'v1', name: 'Corolla' },
@@ -217,5 +218,72 @@ describe('FleetTimeline keyboard + ARIA (#1349)', () => {
   it('labels the whole board as a region for screen-reader navigation', () => {
     renderTimeline([row({ id: 'b1', renterName: 'Alice' })])
     expect(screen.getByRole('region', { name: /Fleet planning board/ })).toBeInTheDocument()
+  })
+})
+
+// #1471 (follow-up to #1349): after a date-range nav, keyboard/screen-reader focus can be
+// orphaned to <body>. When focus sat on a booking bar and that booking leaves the new
+// window, buildTimelineLayout clamps it out, React unmounts the focused bar node, and the
+// browser drops focus to <body>. It surfaces with VoiceOver/Safari, where clicking the
+// toolbar's Next does not first move focus to the button; Chromium masks it by focusing the
+// button on click. The board must return focus to the labelled region — a stable anchor
+// that always exists — while leaving focus alone when a live control (the Next button)
+// drove the nav.
+//
+// These `rerender` on the same tree, so they cover the in-place re-render path (the norm).
+// They lean on jsdom reverting document.activeElement to <body> when the focused node is
+// removed — which matches real browsers and is the load-bearing precondition. The slow-nav
+// remount path (route pendingComponent swap) is out of scope here and tracked in #1489.
+describe('FleetTimeline focus restoration after date navigation (#1471)', () => {
+  const DATE0 = new Date('2026-07-01T00:00:00.000Z')
+  // +14 days: Alice's 2026-07-03 booking falls wholly before the new window, so its bar
+  // (and the node that held focus) is removed — the reported focus-loss trigger.
+  const DATE_NEXT = shiftCalendarDate('timeline', DATE0, 1)
+  const alice = (): CalendarBookingRow => row({ id: 'b1', renterName: 'Alice' })
+
+  function element(date: Date, rows: CalendarBookingRow[]) {
+    return (
+      <IntlProvider locale="en" messages={en}>
+        <FleetTimeline
+          rows={rows}
+          vehicles={VEHICLES}
+          blocks={[]}
+          date={date}
+          locale="en"
+          onViewChange={vi.fn()}
+          onDateChange={vi.fn()}
+          onSelectEvent={vi.fn()}
+          onSelectBlock={vi.fn()}
+        />
+      </IntlProvider>
+    )
+  }
+
+  it('returns focus to the board region when a nav orphans the focused bar', () => {
+    const { rerender } = render(element(DATE0, [alice()]))
+    const bar = screen.getByRole('button', { name: /Booking: Alice/ })
+    bar.focus()
+    expect(bar).toHaveFocus()
+
+    rerender(element(DATE_NEXT, [alice()]))
+
+    // The booking left the window, so the bar that held focus is unmounted...
+    expect(screen.queryByRole('button', { name: /Booking: Alice/ })).not.toBeInTheDocument()
+    // ...and focus is reclaimed to the always-present region, not dropped to <body>.
+    expect(screen.getByRole('region', { name: /Fleet planning board/ })).toHaveFocus()
+  })
+
+  it('leaves focus on the toolbar control that drove the nav — never steals it', () => {
+    // When the Next button itself held focus (it survives the re-render), the restoration
+    // must not yank focus to the region, or rapid prev/next navigation would break. Guards
+    // against the fix regressing to an unconditional "always focus the region on nav".
+    const { rerender } = render(element(DATE0, [alice()]))
+    const next = screen.getByRole('button', { name: 'Next' })
+    next.focus()
+    expect(next).toHaveFocus()
+
+    rerender(element(DATE_NEXT, [alice()]))
+
+    expect(next).toHaveFocus()
   })
 })

@@ -5,10 +5,18 @@ import {
   updateVehicleStatusWithReasonSchema,
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
-import { FLEET_WRITE_ROLES, requireUser, toCallerContext } from '../middleware/auth'
+import { requireUser, toCallerContext } from '../middleware/auth'
 import type { MaintenanceService } from '../services/maintenance'
 import type { VehicleService } from '../services/vehicle'
-import { fail, failResult, ok, parseBody, parseId, parsePagination } from './helpers'
+import {
+  fail,
+  failResult,
+  ok,
+  parseBody,
+  parseId,
+  parsePagination,
+  requireFleetWriteRole,
+} from './helpers'
 
 export function createVehicleRoutes(
   service: VehicleService,
@@ -42,7 +50,8 @@ export function createVehicleRoutes(
     })
     .post('/vehicles', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const parsed = await parseBody(c, createVehicleSchema)
       if (!parsed.ok) return parsed.response
@@ -53,7 +62,8 @@ export function createVehicleRoutes(
     })
     .patch('/vehicles/bulk-status', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const parsed = await parseBody(c, bulkUpdateVehicleStatusSchema)
       if (!parsed.ok) return parsed.response
@@ -69,7 +79,8 @@ export function createVehicleRoutes(
     })
     .patch('/vehicles/:id', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
@@ -88,7 +99,8 @@ export function createVehicleRoutes(
     })
     .patch('/vehicles/:id/status', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
       const ctx = toCallerContext(user)
 
       const idResult = parseId(c)
@@ -109,7 +121,8 @@ export function createVehicleRoutes(
     })
     .delete('/vehicles/:id', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
