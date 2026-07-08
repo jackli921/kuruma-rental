@@ -5,7 +5,6 @@ import {
 } from '@kuruma/shared/validators/insurance-option'
 import { Hono } from 'hono'
 import {
-  FLEET_WRITE_ROLES,
   MANAGEMENT_READ_ROLES,
   requireAuth,
   requireUser,
@@ -24,6 +23,7 @@ import {
   parseId,
   parseLocale,
   parseScopedCreate,
+  requireFleetWriteRole,
   stripUndefined,
 } from './helpers'
 
@@ -70,7 +70,8 @@ export function createInsuranceOptionRoutes(
     })
     .post('/insurance-options', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const locale = parseLocale(c)
       if (!locale.ok) return locale.response
@@ -101,7 +102,8 @@ export function createInsuranceOptionRoutes(
     })
     .patch('/insurance-options/:id', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
@@ -123,7 +125,8 @@ export function createInsuranceOptionRoutes(
     })
     .delete('/insurance-options/:id', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
