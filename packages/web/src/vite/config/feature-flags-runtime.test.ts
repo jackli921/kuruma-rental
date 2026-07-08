@@ -1,3 +1,4 @@
+import { captureHandledError } from '@/lib/observability/sentry'
 import type { FeatureFlagOverrides } from '@kuruma/shared/feature-flags/registry'
 import { QueryClient, QueryObserver } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +8,10 @@ import {
   isBuildTimeEnabled,
   resolveFeatureFlag,
 } from './feature-flags-runtime'
+
+// Stub the Sentry seam so the fail-safe path's degradation signal is observable in
+// tests without loading the real @sentry/react client.
+vi.mock('@/lib/observability/sentry', () => ({ captureHandledError: vi.fn() }))
 
 // #1437: the SHARED_CATALOG kill-switch is serverOnly + default-ON. The web override
 // map is SPARSE (a key present IFF an admin set it), so in the normal default-ON state
@@ -73,20 +78,28 @@ describe('featureFlagsQueryOptions - override liveness', () => {
 // Route flag GATES call fetchQuery(featureFlagsQueryOptions()) in beforeLoad, which
 // (unlike the provider's error-tolerant useQuery) propagates a rejected queryFn and
 // would throw the whole route to its error boundary. So the reader must never reject:
-// any transport or shape failure degrades to an empty map -> build-time defaults.
+// any transport or shape failure degrades to an empty map -> build-time defaults. Since
+// the swallow defeats React Query's retry, each fail-safe exit must still leave a signal.
 describe('fetchFeatureFlagOverrides - fail-safe', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.mocked(captureHandledError).mockClear()
   })
 
   it('resolves to an empty map when the fetch rejects (offline/DNS), never throwing', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    const rejection = new TypeError('Failed to fetch')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(rejection))
     await expect(fetchFeatureFlagOverrides()).resolves.toEqual({})
+    // The transport failure is swallowed but not silent -> reported for observability.
+    expect(captureHandledError).toHaveBeenCalledWith(rejection)
   })
 
   it('resolves to an empty map on a non-ok response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 503 })))
     await expect(fetchFeatureFlagOverrides()).resolves.toEqual({})
+    expect(captureHandledError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'feature-flags fetch failed: 503' }),
+    )
   })
 
   it('keeps only known boolean override keys from an ok response', async () => {
@@ -94,5 +107,7 @@ describe('fetchFeatureFlagOverrides - fail-safe', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(body))))
     // BOGUS is not a flag key and MESSAGING is not a boolean -> both dropped at the boundary.
     await expect(fetchFeatureFlagOverrides()).resolves.toEqual({ FLEET_TIMELINE: false })
+    // A successful read must not report a phantom error.
+    expect(captureHandledError).not.toHaveBeenCalled()
   })
 })

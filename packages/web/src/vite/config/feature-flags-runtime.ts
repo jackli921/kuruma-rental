@@ -1,3 +1,4 @@
+import { captureHandledError } from '@/lib/observability/sentry'
 import {
   FEATURE_FLAGS,
   type FeatureFlagKey,
@@ -87,14 +88,22 @@ function parseOverrides(body: unknown): FeatureFlagOverrides {
  * provider's error-tolerant useQuery): a bare fetch rejection (offline, DNS, abort)
  * would otherwise propagate through fetchQuery and throw the whole route to its error
  * boundary. Swallowing to {} keeps a gate degrading to the build-time default instead.
+ *
+ * Because we swallow rather than reject, React Query's retry never fires and the whole
+ * runtime-flag control plane can silently degrade to build defaults. So each fail-safe
+ * exit reports to Sentry first: the degradation stays observable instead of invisible.
  */
 export async function fetchFeatureFlagOverrides(): Promise<FeatureFlagOverrides> {
   try {
     const response = await fetch(`${getApiBaseUrl()}/feature-flags`, { credentials: 'include' })
-    if (!response.ok) return {}
+    if (!response.ok) {
+      captureHandledError(new Error(`feature-flags fetch failed: ${response.status}`))
+      return {}
+    }
     const body: unknown = await response.json()
     return parseOverrides(body)
-  } catch {
+  } catch (error) {
+    captureHandledError(error)
     return {}
   }
 }
