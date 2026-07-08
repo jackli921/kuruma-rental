@@ -22,9 +22,13 @@
 #   img-src     'self' + Unsplash (landing imagery) + the R2 public bucket that
 #               serves operator vehicle photos + Google's avatar host
 #               (OAuth profile.picture, nav/UserMenu) + the GSI tile host for the
-#               flag-gated search map. Google OAuth itself is a full-page
-#               navigation (form-action 'self' → 302), not an XHR, so it needs
-#               no connect-src entry.
+#               flag-gated search map + upload.wikimedia.org & placehold.co — the
+#               SEED catalog demo photos (seed-data/vehicles.ts hotlinks Commons,
+#               placehold.co is the fallback; both pass through the photo decoder
+#               verbatim to <img>). TEMPORARY: drop once the catalog is re-hosted
+#               to R2 (docs/plans/2026-06-16-vehicle-photo-optimization.md, #1507).
+#               Google OAuth itself is a full-page navigation (form-action 'self'
+#               → 302), not an XHR, so it needs no connect-src entry.
 #   style-src keeps 'unsafe-inline' — inline style attributes can't be hashed.
 # COEP is intentionally omitted — `require-corp` would block Unsplash images.
 # NOTE (#1042): when the Sentry browser SDK is given a prod DSN, add its ingest
@@ -34,4 +38,4 @@
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: SAMEORIGIN
   Cross-Origin-Opener-Policy: same-origin-allow-popups
-  Content-Security-Policy: default-src 'self'; img-src 'self' data: https://images.unsplash.com https://pub-a6e9e98522e945a7aa1871f4fe741448.r2.dev https://lh3.googleusercontent.com https://cyberjapandata.gsi.go.jp; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-2S6frsINm4/FKaaiq6qA65fjvkeL2N9Um5j1Yra+lT0='; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: https://images.unsplash.com https://pub-a6e9e98522e945a7aa1871f4fe741448.r2.dev https://lh3.googleusercontent.com https://cyberjapandata.gsi.go.jp https://upload.wikimedia.org https://placehold.co; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-2S6frsINm4/FKaaiq6qA65fjvkeL2N9Um5j1Yra+lT0='; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'

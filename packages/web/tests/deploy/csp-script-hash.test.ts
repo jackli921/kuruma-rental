@@ -35,15 +35,22 @@ const cspLines = headers
 const scriptSrcs = cspLines.map((l) => l.match(/script-src ([^;]*)/)?.[1]?.trim() ?? '')
 const imgSrcs = cspLines.map((l) => l.match(/img-src ([^;]*)/)?.[1]?.trim() ?? '')
 
-// Non-'self' image hosts the app ACTIVELY loads (both live in beta). Operator
-// vehicle photos come from the R2 public bucket (api wrangler.toml
-// VEHICLE_PHOTOS_PUBLIC_URL); signed-in avatars come from Google (OAuth
-// profile.picture, rendered in nav/UserMenu). An enforcing CSP silently blocks
-// any img host it omits, so pin both — an img-src edit that drops one would
-// break every vehicle photo / avatar the moment the policy enforces (#500 audit).
+// Every non-'self' image host the app can render — an enforcing CSP silently
+// blocks any it omits, so pin the FULL set: a drift guard that covered only some
+// hosts would stay green while the rest are CSP-blocked (the #500-review miss).
+//   - Unsplash: landing imagery (Hero/CallToAction/FeaturedVehicles).
+//   - R2 bucket: operator-uploaded vehicle photos (api VEHICLE_PHOTOS_PUBLIC_URL).
+//   - Google: signed-in avatars (OAuth profile.picture, nav/UserMenu).
+//   - Wikimedia + placehold.co: the SEEDED catalog demo photos
+//     (seed-data/vehicles.ts) — TEMPORARY until the R2 re-host (#1507).
+//   - GSI tiles: the flag-gated search map (search/PigeonMapAdapter).
 const REQUIRED_IMG_HOSTS = [
+  'https://images.unsplash.com',
   'https://pub-a6e9e98522e945a7aa1871f4fe741448.r2.dev',
   'https://lh3.googleusercontent.com',
+  'https://upload.wikimedia.org',
+  'https://placehold.co',
+  'https://cyberjapandata.gsi.go.jp',
 ]
 
 describe('CSP script-src hash (#500)', () => {
