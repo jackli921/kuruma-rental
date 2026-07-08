@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { render, screen } from '@testing-library/react'
+import { useLayoutEffect, useRef } from 'react'
 import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
@@ -54,5 +55,81 @@ describe('RouteAnnouncer (#1489)', () => {
     )
 
     expect(screen.getByRole('region', { name: 'Page content' })).toHaveFocus()
+  })
+})
+
+// #1508: RouteAnnouncer is the app-wide fallback — a per-component restorer nested UNDER it
+// (e.g. FleetTimeline's #1471 region restore) must win on a shared navigation, with the
+// announcer standing down. This only holds when the announcer WRAPS the content: its own
+// layout effect then fires after its descendants' (React post-order), so a deeper restorer
+// reclaims focus first. (As a preceding sibling of <Outlet>, the announcer's effect fired
+// FIRST and pre-empted the region restore onto the invisible anchor — the bug this fixes.)
+function ChildRestorer({ navKey }: { navKey: string }) {
+  const ref = useRef<HTMLElement>(null)
+  const prev = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    if (prev.current === null) {
+      prev.current = navKey // first resolution = seed, never steal
+      return
+    }
+    if (prev.current === navKey) return
+    prev.current = navKey
+    if (document.activeElement === document.body) ref.current?.focus()
+  }, [navKey])
+  return <section ref={ref} tabIndex={-1} aria-label="component region" />
+}
+
+describe('RouteAnnouncer focus precedence (#1508)', () => {
+  // `childKey` remounts ChildRestorer when it changes (fresh fiber -> its seed guard fires),
+  // modelling the cold-remount path. Left undefined, the child keeps its fiber across a nav —
+  // the in-place re-render path where its restorer actually runs.
+  function Tree({
+    navKey,
+    showTransient,
+    childKey,
+  }: { navKey: string; showTransient: boolean; childKey?: string }) {
+    return (
+      <IntlProvider locale="en" messages={en}>
+        <RouteAnnouncer>
+          {showTransient ? (
+            <button type="button" data-testid="transient">
+              x
+            </button>
+          ) : null}
+          <ChildRestorer key={childKey} navKey={navKey} />
+        </RouteAnnouncer>
+      </IntlProvider>
+    )
+  }
+
+  it('defers to a nested per-component restorer — the app-wide anchor stands down', () => {
+    href.value = '/en/a'
+    const { rerender } = render(<Tree navKey="a" showTransient />)
+
+    // Focus a transient control, then one navigation unmounts it AND bumps both nav keys in
+    // the same commit (models the search-param date nav that strands focus on <body>).
+    screen.getByTestId('transient').focus()
+    href.value = '/en/b'
+    rerender(<Tree navKey="b" showTransient={false} />)
+
+    // The descendant (deeper fiber) restores first to its own region; the announcer then sees
+    // a live element and does NOT pull focus to the invisible sr-only anchor.
+    expect(screen.getByRole('region', { name: 'component region' })).toHaveFocus()
+    expect(screen.getByRole('region', { name: 'Page content' })).not.toHaveFocus()
+  })
+
+  it('still catches a cold remount where the fresh subtree cannot restore its own focus', () => {
+    href.value = '/en/a'
+    const { rerender } = render(<Tree navKey="a" showTransient childKey="a" />)
+
+    screen.getByTestId('transient').focus()
+    href.value = '/en/b'
+    // Changing childKey remounts ChildRestorer: a genuinely fresh fiber whose seed guard
+    // suppresses restore on its first resolution — the cold pendingComponent swap where the
+    // subtree that owned focus is gone. Nobody reclaims focus, so the announcer must.
+    rerender(<Tree navKey="b" showTransient={false} childKey="b" />)
+
+    expect(screen.getByRole('region', { name: 'Page content' })).toHaveFocus()
+    expect(screen.getByRole('region', { name: 'component region' })).not.toHaveFocus()
   })
 })
