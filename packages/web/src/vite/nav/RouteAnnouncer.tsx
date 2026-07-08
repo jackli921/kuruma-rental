@@ -17,10 +17,18 @@ import { useTranslations } from 'use-intl'
  */
 export function RouteAnnouncer() {
   const t = useTranslations('nav')
-  const anchorRef = useRef<HTMLDivElement>(null)
+  // A named `<section>` (role="region") — not a bare `<div>` (role="generic", on which
+  // `aria-label` is prohibited and dropped): a generic anchor is silent on VoiceOver, exactly
+  // the AT #1471's stranded-focus bug lived on. Mirrors the FleetTimeline board region.
+  const anchorRef = useRef<HTMLElement>(null)
   const navKey = useRouterState({ select: (s) => s.resolvedLocation?.href ?? '' })
   useRouteFocusRestoration(navKey, anchorRef)
   return (
-    <div ref={anchorRef} tabIndex={-1} className="sr-only" aria-label={t('routeAnnouncerLabel')} />
+    <section
+      ref={anchorRef}
+      tabIndex={-1}
+      className="sr-only"
+      aria-label={t('routeAnnouncerLabel')}
+    />
   )
 }

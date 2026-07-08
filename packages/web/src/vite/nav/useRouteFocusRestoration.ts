@@ -18,6 +18,12 @@ import { type RefObject, useLayoutEffect, useRef } from 'react'
  * `useLayoutEffect` (not `useEffect`): restore synchronously post-commit/pre-paint so focus
  * never sits on `<body>` for a painted frame (which can bump an AT virtual cursor to the top
  * of the page). Client-only Vite SPA — no SSR caveat.
+ *
+ * The "focus fell to the document root" guard is also what lets this coexist with per-component
+ * restorers (e.g. FleetTimeline focusing its own board region): React runs child effects before
+ * parent effects, so a more-specific child restores first, and this parent then sees a live
+ * element and stands down. This app-wide anchor is the fallback for the cold-remount path where
+ * the child that owned focus is itself unmounted and can't run its effect.
  */
 export function useRouteFocusRestoration<T extends HTMLElement>(
   navKey: string,
@@ -32,6 +38,12 @@ export function useRouteFocusRestoration<T extends HTMLElement>(
     }
     if (prevKeyRef.current === navKey) return // not a navigation
     prevKeyRef.current = navKey
-    if (document.activeElement === document.body) anchorRef.current?.focus()
+    // Focus was stranded: removing the focused node resets `activeElement` to the document
+    // root — `<body>` on most engines, `<html>` or `null` on others. Restore only then;
+    // `preventScroll` keeps the hidden anchor from tugging the viewport.
+    const active = document.activeElement
+    if (!active || active === document.body || active === document.documentElement) {
+      anchorRef.current?.focus({ preventScroll: true })
+    }
   }, [navKey, anchorRef])
 }

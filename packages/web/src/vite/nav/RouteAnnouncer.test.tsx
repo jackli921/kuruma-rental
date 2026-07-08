@@ -30,7 +30,7 @@ afterEach(() => {
 describe('RouteAnnouncer (#1489)', () => {
   it('renders a visually-hidden, focusable, localized anchor', () => {
     renderAnnouncer()
-    const anchor = screen.getByLabelText('Page content')
+    const anchor = screen.getByRole('region', { name: 'Page content' })
     expect(anchor).toHaveClass('sr-only')
     expect(anchor).toHaveAttribute('tabindex', '-1')
   })
@@ -38,7 +38,7 @@ describe('RouteAnnouncer (#1489)', () => {
   it('does not grab focus on the initial resolution', () => {
     href.value = '/en/dashboard'
     renderAnnouncer()
-    expect(screen.getByLabelText('Page content')).not.toHaveFocus()
+    expect(screen.getByRole('region', { name: 'Page content' })).not.toHaveFocus()
     expect(document.body).toHaveFocus()
   })
 
@@ -53,6 +53,6 @@ describe('RouteAnnouncer (#1489)', () => {
       </IntlProvider>,
     )
 
-    expect(screen.getByLabelText('Page content')).toHaveFocus()
+    expect(screen.getByRole('region', { name: 'Page content' })).toHaveFocus()
   })
 })

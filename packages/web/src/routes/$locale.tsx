@@ -35,11 +35,12 @@ function LocaleLayout() {
         <CurrencyProvider>
           <ViewModeProvider>
             <LayoutPreferenceProvider>
+              <Navbar />
               {/* #1489: app-wide focus-on-navigate anchor; mounted here (a stable parent
                   that survives child route + pendingComponent swaps) so a navigation never
-                  strands screen-reader focus on <body>. */}
+                  strands screen-reader focus on <body>. Placed just before <Outlet> so
+                  restored focus lands at the content boundary, past the (unchanged) nav. */}
               <RouteAnnouncer />
-              <Navbar />
               <Outlet />
             </LayoutPreferenceProvider>
           </ViewModeProvider>
