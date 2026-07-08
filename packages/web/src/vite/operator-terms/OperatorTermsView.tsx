@@ -11,7 +11,7 @@ import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { FileText, Plus } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { useTranslations } from 'use-intl'
+import { useLocale, useTranslations } from 'use-intl'
 import { SaveTermsDialog } from './SaveTermsDialog'
 import { TermsStatusBadge } from './TermsStatusBadge'
 import type { OperatorTermsVersionData } from './api'
@@ -103,6 +103,7 @@ function ArchiveDialog({ version, pickedOperatorId, onOpenChange }: ArchiveDialo
 export function OperatorTermsView({ versions, scope }: OperatorTermsViewProps) {
   const { pickedOperatorId, canWrite } = scope
   const t = useTranslations('business.terms')
+  const locale = useLocale()
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
 
@@ -121,7 +122,9 @@ export function OperatorTermsView({ versions, scope }: OperatorTermsViewProps) {
   })
 
   function formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString()
+    // Render the effective date in the active app locale (en/ja/zh), matching the
+    // rest of the localized UI — a bare toLocaleDateString() would follow the browser.
+    return new Date(iso).toLocaleDateString(locale)
   }
 
   return (

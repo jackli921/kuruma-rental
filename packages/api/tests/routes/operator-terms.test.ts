@@ -58,4 +58,11 @@ describe('operator-terms authoring routes', () => {
     const res = await mountFor(repo, 'PLATFORM_ADMIN').request('/operator-terms', post(draft))
     expect(res.status).toBe(422)
   })
+
+  it('a renter is forbidden from the authoring surface (the FLEET_WRITE gate rejects reads and writes)', async () => {
+    const repo = new InMemoryConsentRepository([])
+    const renter = mountFor(repo, 'RENTER', OP_A)
+    expect((await renter.request('/operator-terms')).status).toBe(403)
+    expect((await renter.request('/operator-terms', post(draft))).status).toBe(403)
+  })
 })
