@@ -131,6 +131,16 @@ export const OPERATOR_APPLICATION_EMAIL_CONSTRAINT = 'operator_applications_live
  */
 export const OPERATORS_SLUG_CONSTRAINT = 'operators_slug_unique'
 
+/**
+ * Partial unique index on consent_documents(operatorId, type, version, locale)
+ * WHERE operatorId IS NOT NULL (§4.3, `consent_documents_operator_tvl_unique`).
+ * On the operator terms-authoring path (#1498), two concurrent first-saves both
+ * compute the same next version and race the insert; the loser trips this 23505.
+ * OperatorTermsService maps it to a 409 (a benign "someone else just saved this
+ * version"), never a raw 500.
+ */
+export const CONSENT_DOC_OPERATOR_TVL_CONSTRAINT = 'consent_documents_operator_tvl_unique'
+
 /** Extract the Postgres error code from an unknown thrown value, or null.
  *
  * Drizzle + postgres-js wraps the raw PostgresError inside `err.cause`,

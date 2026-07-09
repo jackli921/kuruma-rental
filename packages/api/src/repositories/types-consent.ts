@@ -113,8 +113,19 @@ export interface ConsentRepository {
   ): Promise<ConsentDocument | undefined>
   /** Every row this operator authored for a type (any status) — the service groups by version. */
   findOperatorDocuments(operatorId: string, type: ConsentType): Promise<ConsentDocument[]>
-  createOperatorDocuments(rows: NewConsentDocument[]): Promise<ConsentDocument[]>
-  deleteOperatorDraftRows(operatorId: string, type: ConsentType, version: string): Promise<void>
+  /**
+   * Atomically rewrite an operator's DRAFT of one version: delete the prior draft
+   * rows of (operatorId, type, version) and insert `rows` in a single transaction
+   * (#1498), so a mid-op failure can't destroy the existing draft with nothing to
+   * replace it. Throws the 23505 `consent_documents_operator_tvl_unique` when a
+   * concurrent save already claimed the version — the service maps that to 409.
+   */
+  replaceOperatorDraftRows(
+    operatorId: string,
+    type: ConsentType,
+    version: string,
+    rows: NewConsentDocument[],
+  ): Promise<ConsentDocument[]>
   setOperatorVersionStatus(params: {
     operatorId: string
     type: ConsentType

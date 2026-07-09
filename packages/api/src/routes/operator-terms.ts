@@ -23,6 +23,15 @@ export function createOperatorTermsRoutes(
   // Operator-private authoring surface: auth gates every path; the FLEET_WRITE
   // role gate (below) rejects RENTER/PARTNER. An admin without a picked operator
   // sees an empty list; a write without one is 422 (global OperatorRequiredError).
+  //
+  // Dark-flag scope (#1499): OPERATOR_TERMS is a VITE_ (client build-time) flag,
+  // so "dark until Slice B" is enforced on the web only (route redirect + hidden
+  // nav) — these routes stay mounted. That is a conscious decision, not a gap: the
+  // surface is auth + FLEET_WRITE gated (operators/admins only) and the rows are
+  // INERT until Slice B wires renter-side resolution, so an early direct-API write
+  // creates nothing a renter can see. Server-side gating a VITE_FEATURE_* flag is
+  // not a pattern the codebase has; revisit only if OPERATOR_TERMS graduates to a
+  // runtime-registry flag (then gate here via the server flag resolver).
   app.use('/operator-terms', requireAuth())
   app.use('/operator-terms/*', requireAuth())
 

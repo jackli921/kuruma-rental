@@ -63,4 +63,27 @@ describe('OperatorTermsService', () => {
     const r = await svc.archive(OP, 'v1', NOW)
     expect(r.ok && r.version.status).toBe('ARCHIVED')
   })
+
+  it('maps a concurrent-save unique violation to a 409, not a raw 500', async () => {
+    // Two tabs first-save at once: both compute v1, the loser trips
+    // consent_documents_operator_tvl_unique. The service must translate it.
+    repo.replaceOperatorDraftRows = async () => {
+      throw Object.assign(new Error('duplicate key value violates unique constraint'), {
+        code: '23505',
+        constraint_name: 'consent_documents_operator_tvl_unique',
+      })
+    }
+    const r = await svc.saveDraft(OP, draft, NOW)
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.status).toBe(409)
+    expect(r.error).toMatch(/already exists/)
+  })
+
+  it('re-throws a non-unique repo failure instead of swallowing it as a 409', async () => {
+    repo.replaceOperatorDraftRows = async () => {
+      throw new Error('connection terminated unexpectedly')
+    }
+    await expect(svc.saveDraft(OP, draft, NOW)).rejects.toThrow('connection terminated')
+  })
 })

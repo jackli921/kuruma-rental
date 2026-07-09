@@ -177,22 +177,16 @@ export class InMemoryConsentRepository implements ConsentRepository {
     return [...this.docs.values()].filter((d) => d.operatorId === operatorId && d.type === type)
   }
 
-  async createOperatorDocuments(rows: NewConsentDocument[]): Promise<ConsentDocument[]> {
-    const created: ConsentDocument[] = rows.map((r) => ({
-      ...r,
-      id: crypto.randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }))
-    for (const d of created) this.docs.set(d.id, d)
-    return created
-  }
-
-  async deleteOperatorDraftRows(
+  async replaceOperatorDraftRows(
     operatorId: string,
     type: ConsentType,
     version: string,
-  ): Promise<void> {
+    rows: NewConsentDocument[],
+  ): Promise<ConsentDocument[]> {
+    // Mirror the drizzle atomic rewrite + its unique seal (#1498): drop the prior
+    // DRAFT of this version, then insert — throwing the SAME 23505 / constraint
+    // name the real DB would if a surviving row already occupies (operatorId,
+    // type, version, locale). Keeps the InMemory <-> Drizzle parity the suite asserts.
     for (const [id, d] of this.docs) {
       if (
         d.operatorId === operatorId &&
@@ -203,6 +197,24 @@ export class InMemoryConsentRepository implements ConsentRepository {
         this.docs.delete(id)
       }
     }
+    for (const r of rows) {
+      const clash = [...this.docs.values()].some(
+        (d) =>
+          d.operatorId === r.operatorId &&
+          d.type === r.type &&
+          d.version === r.version &&
+          d.locale === r.locale,
+      )
+      if (clash) throw uniqueViolation('consent_documents_operator_tvl_unique')
+    }
+    const created: ConsentDocument[] = rows.map((r) => ({
+      ...r,
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }))
+    for (const d of created) this.docs.set(d.id, d)
+    return created
   }
 
   async setOperatorVersionStatus(p: {

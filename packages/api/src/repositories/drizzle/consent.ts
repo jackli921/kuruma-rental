@@ -1,3 +1,4 @@
+import type { RunTx } from '@kuruma/shared/db'
 import type { ConsentDocStatus, ConsentType } from '@kuruma/shared/enums'
 import { consentAcceptances, consentDocuments } from '@kuruma/shared/db/schema'
 import { type SQL, and, desc, eq, gte, inArray, isNull, lte } from 'drizzle-orm'
@@ -62,7 +63,10 @@ function toAcceptance(r: AcceptanceRow): ConsentAcceptance {
 }
 
 export class DrizzleConsentRepository implements ConsentRepository {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly runTransaction: RunTx,
+  ) {}
 
   async findDocumentById(id: string): Promise<ConsentDocument | undefined> {
     const [row] = await this.db
@@ -286,28 +290,33 @@ export class DrizzleConsentRepository implements ConsentRepository {
     return rows.map(toDocument)
   }
 
-  async createOperatorDocuments(rows: NewConsentDocument[]): Promise<ConsentDocument[]> {
-    if (rows.length === 0) return []
-    const inserted = await this.db
-      .insert(consentDocuments)
-      .values(rows.map((r) => ({ ...r, id: crypto.randomUUID() })))
-      .returning()
-    return inserted.map(toDocument)
-  }
-
-  async deleteOperatorDraftRows(
+  async replaceOperatorDraftRows(
     operatorId: string,
     type: ConsentType,
     version: string,
-  ): Promise<void> {
-    await this.db.delete(consentDocuments).where(
-      and(
-        eq(consentDocuments.operatorId, operatorId),
-        eq(consentDocuments.type, type),
-        eq(consentDocuments.version, version),
-        eq(consentDocuments.status, 'DRAFT'),
-      ),
-    )
+    rows: NewConsentDocument[],
+  ): Promise<ConsentDocument[]> {
+    // Atomic draft rewrite (#1498): delete the prior draft of this version and
+    // insert the new locale rows in ONE tx, so a failure between the two can't
+    // leave the operator with no draft. A concurrent first-save that already
+    // claimed the version trips consent_documents_operator_tvl_unique (23505),
+    // which OperatorTermsService maps to a 409.
+    return this.runTransaction(async (tx) => {
+      await tx.delete(consentDocuments).where(
+        and(
+          eq(consentDocuments.operatorId, operatorId),
+          eq(consentDocuments.type, type),
+          eq(consentDocuments.version, version),
+          eq(consentDocuments.status, 'DRAFT'),
+        ),
+      )
+      if (rows.length === 0) return []
+      const inserted = await tx
+        .insert(consentDocuments)
+        .values(rows.map((r) => ({ ...r, id: crypto.randomUUID() })))
+        .returning()
+      return inserted.map(toDocument)
+    })
   }
 
   async setOperatorVersionStatus(p: {
