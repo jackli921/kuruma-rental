@@ -1,6 +1,6 @@
 # Add-on description machine-translation (auto-fill on save)
 
-Status: DESIGN — awaiting owner review.
+Status: DESIGN — architect-reviewed (SHIP-WITH-FIXES; all findings folded below), awaiting owner review.
 Date: 2026-07-09.
 Issue: #1318 (partial — the add-on-description half only; see Scope).
 Epic: catalog content i18n (#1315). Realizes "Non-goals / deferred item 1" of the superseded
@@ -62,32 +62,54 @@ export interface DescriptionTranslator {
 
 - The real impl wraps a `TranslationProvider`, translating `sourceText` from `sourceLocale` into each other locale.
   The non-source calls run in parallel (`Promise.allSettled`); a rejected one is dropped, not fatal.
-- A **no-op default** (`{ fill: (l, t) => ({ [l]: t }) }`) is exported so every existing `new AddOnService(...)` in
-  tests keeps compiling — the same defaulted-dependency pattern the constructor already uses for `isSharedCatalogEnabled`.
+- **Bounded deadline (LOW-6).** The provider is `TIMEOUT_MS=3000 × MAX_ATTEMPTS=2` ≈ 6s per locale
+  (`google-translation-provider.ts:6-7`); run the locales in parallel and cap the whole `fill` so a slow provider can't
+  make an operator's save feel hung. Keep it synchronous (not `waitUntil`-deferred) — the list refetch reads-after-write.
+- **No silent no-op default (MEDIUM-3).** The `AddOnService` translator param is REQUIRED, not defaulted. A no-op default
+  fails to *degraded output* (source-only, no error) if the composition root forgets to wire the real translator — unlike
+  the `isSharedCatalogEnabled` default whose `true` IS the intended prod value. A test-only exported fake is passed
+  explicitly by the ~7 existing `new AddOnService(...)` sites, and a wired-test pins the real injection (see Testing).
+- **Dev-stub note (NIT-7).** With no key in dev the factory stub returns `[<locale>] <text>`
+  (`translation-provider-factory.ts:21`). Because this slice PERSISTS the fill (unlike message translation's read-time
+  use), a dev/staging DB accumulates literal `[ja] …` descriptions. Harmless, but expected.
 
 ### `AddOnService` changes (`packages/api/src/services/add-on.ts`)
 
-- Constructor gains `descriptionTranslator: DescriptionTranslator = noopDescriptionTranslator` (4th param, defaulted).
-- `create` resolves the persisted bag **once** before dispatching to `createFromTemplate` / `createSelfAuthored`, so both
-  branches store the translated bag instead of the raw `data.descriptionOverride`.
-- `update` resolves the bag when `data.descriptionOverride` is being set, with a **skip-on-unchanged** guard.
+- Constructor gains a **required** `descriptionTranslator: DescriptionTranslator` (4th param, no default — MEDIUM-3).
+- `create` resolves the persisted bag **once** before dispatching to `createFromTemplate` / `createSelfAuthored`.
+- `update` resolves the bag when `data.descriptionOverride` is being set, with a **skip-on-unchanged** guard, gated on
+  `existing.templateId`.
 
-**Bag resolution rule** (`sourceLocale = locale`, the request param):
+**MT applies to SELF-AUTHORED rows only (HIGH-1).** A picked row's description already falls through to the platform
+template's human-curated per-locale text via `resolveDescription` (`add-on-resolve.ts:28`); MT-filling its override would
+SHADOW that curated text with machine output in every locale (`override?.[locale]` wins first) — "fixing" a row the
+Problem section admits has no bug. So MT runs only when the row is self-authored (`nameI18n` set on create;
+`existing.templateId === null` on update). Picked rows store `descriptionOverride` verbatim.
+
+**Never coerce a non-empty bag to null (HIGH-2).** The source slot is `descriptionOverride[locale]` and `?locale=`
+defaults to `en` (`helpers.ts:252`); the API is source-agnostic (Trip.com hits these same routes), so a caller sending
+`{descriptionOverride:{ja:"…"}}` without `?locale=ja` must not lose the `ja` text. MT runs only when a real source slot
+is present; otherwise the caller's bag is stored unchanged.
+
+**Bag resolution rule** (`sourceLocale = locale`, the request param; `sourceText = descriptionOverride[locale]`):
 
 | Incoming `descriptionOverride` | Result |
 |---|---|
-| `undefined` (update only — field not touched) | leave existing bag untouched, no MT |
-| `null`, or source slot empty/absent | store `null` (cleared), no MT |
-| source text unchanged vs the stored row **and** bag already complete (update) | keep the existing bag, no MT |
-| otherwise | `fill(sourceLocale, sourceText)` where `sourceText = descriptionOverride[sourceLocale]` |
+| `undefined` (update — field not touched) | leave existing bag untouched, no MT |
+| explicit `null` | store `null` (cleared), no MT |
+| picked row (`templateId` set / no `nameI18n`) | store the bag **verbatim**, no MT (HIGH-1) |
+| self-authored, `sourceText` present & non-empty, and (create OR changed OR bag incomplete) | `fill(locale, sourceText)` |
+| self-authored, `sourceText` unchanged vs stored row & bag complete (update) | keep existing bag, no MT |
+| self-authored but `sourceText` absent/empty (e.g. caller omitted `?locale=`) | store the bag **verbatim**, no MT (HIGH-2 — no coercion to null) |
 
-"Source slot" = `descriptionOverride[locale]`. Any other keys the client sent are ignored — Model B rebuilds them.
+### Composition (`packages/api/src/index.ts`) — MEDIUM-5
 
-### Composition (`packages/api/src/composition/services.ts`)
-
-Wire the real `DescriptionTranslator` over `createTranslationProvider()` (Google when the key is set; the prod sentinel
-throws on use, so a best-effort `fill` simply drops every locale and stores the source alone — no working translations
-ship silently on a secret drift) and inject it into `AddOnService`.
+`AddOnService` is constructed at `index.ts:498`, and `translationProvider = createTranslationProvider()` already exists at
+`index.ts:214`. Build the real `DescriptionTranslator` over that provider and inject it into `AddOnService`. (The earlier
+draft named `composition/services.ts`, which holds only `resolve*` helpers and constructs neither — optionally add a
+`resolveDescriptionTranslator()` helper there for consistency, but the wiring edit is `index.ts`.) The prod sentinel
+provider throws per-locale, so a best-effort `fill` drops every locale and stores the source alone — no working
+translations ship silently on a secret drift.
 
 ### Web (`packages/web/src/vite/operator-add-ons`)
 
@@ -109,11 +131,18 @@ operator edits description in /ja  ->  PATCH /add-ons/:id?operatorId=..&locale=j
 renter views storefront in /zh       ->  resolveOwnDescription(bag, 'zh')  ->  the MT zh text
 ```
 
+This is the SELF-AUTHORED path (the only one MT touches — HIGH-1). A picked row's override is stored verbatim and its
+other locales resolve through the curated template description, unchanged.
+
 ## Error handling
 
 - Provider throws for a locale -> that locale is omitted from the bag (best-effort). The operator's save still succeeds;
   a `zh` reader falls back through `resolveOwnDescription` exactly as before this slice. No 5xx, no partial-write.
 - The prod sentinel provider (no key) throws for every locale -> the bag holds only the source slot. Correct fail-safe.
+- **Capture the failure (MEDIUM-4).** Request observability only reports `>=500` / `>2s` (`observability/middleware.ts`),
+  so a fully-silent drop is a blind spot — a `GOOGLE_TRANSLATE_API_KEY` drift would degrade every add-on save to
+  source-only with zero signal. On a dropped locale, `console.error` (parity with `message-translation.ts:46`) AND
+  `Sentry.captureException`. Silent-drop the reader fallback, never the operator/ops signal.
 
 ## Testing strategy (TDD, vertical)
 
@@ -124,7 +153,35 @@ renter views storefront in /zh       ->  resolveOwnDescription(bag, 'zh')  ->  t
   - update with unchanged source text and a complete bag makes **zero** provider calls (spy on the fake).
   - update that only changes `priceJpy` does not re-translate.
   - a provider failure still persists the source slot and returns `ok: true`.
+  - **picked-row (HIGH-1)**: a `templateId` create/update with a one-locale override stores it VERBATIM — zero provider
+    calls, template floor intact.
+  - **source-agnostic caller (HIGH-2)**: a self-authored write with a non-empty bag but no `?locale=` stores the bag
+    verbatim (no coercion to null, no data loss).
+- **Wired-test (MEDIUM-3)** — mirror `tests/routes/shared-catalog-killswitch-wired.test.ts`: assert `createApp`'s
+  `AddOnService` gets the REAL `DescriptionTranslator`, so a forgotten injection fails CI.
 - **Web**: a test that `updateAddOn` / `createAddOn` include `&locale=<locale>` in the request URL.
+
+## Architect review (2026-07-09, folded)
+
+Independent architecture pass. Verdict SHIP-WITH-FIXES; no CRITICAL. Code assumptions verified accurate except the two
+noted. All folded into the sections above.
+
+- **HIGH-1 — picked-row MT shadows curated template text.** MT was applied to both create branches; for a picked row that
+  shadows the human-curated per-locale template description with machine output. Fix: gate MT on self-authored only
+  (`nameI18n` / `existing.templateId === null`); picked rows store verbatim.
+- **HIGH-2 — `?locale=` overload silently drops content.** Source slot `descriptionOverride[locale]` with `?locale=`
+  defaulting to `en` meant a source-agnostic caller (Trip.com) sending a `ja`-only bag without `?locale=ja` would have its
+  text coerced to null — a data-loss regression vs today. Fix: MT only when a real source slot is present; otherwise store
+  the caller's bag verbatim.
+- **MEDIUM-3 — no-op default translator.** Silent zero-translation if the composition root forgets to wire the real one.
+  Fix: required constructor param + a wired-test pinning the real injection.
+- **MEDIUM-4 — silent MT failure = observability blind spot.** Request obs only reports 5xx/slow. Fix: `console.error` +
+  `Sentry.captureException` on a dropped locale.
+- **MEDIUM-5 — wrong wiring file named.** `AddOnService` is built in `index.ts:498`, not `composition/services.ts`. Fixed.
+- **LOW-6 — bound the in-request MT deadline** (~6s/locale worst case). Folded into DescriptionTranslator.
+- **NIT-7 — dev stub persists `[ja] …` junk** in dev/staging DBs. Noted.
+- **NIT-8 — divergence from the MessageTranslationService content-keyed cache is justified** (mutable content + Model B
+  overwrite). No change.
 
 ## Accepted limitations (explicit)
 
