@@ -298,6 +298,7 @@
         },
         "board": {
           "label": "配車ボード、{range}",
+          "keyboardHint": "矢印キーで予約間を移動し、Enterキーまたはスペースキーで予約を開きます。",
           "bookingBar": "{vehicle}。予約: {renter}、{status}、{range}",
           "blockBar": "{vehicle}。{kind}ブロック: {title}、{range}"
         }
