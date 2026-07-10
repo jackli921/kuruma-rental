@@ -187,25 +187,36 @@ export class InMemoryConsentRepository implements ConsentRepository {
     // DRAFT of this version, then insert — throwing the SAME 23505 / constraint
     // name the real DB would if a surviving row already occupies (operatorId,
     // type, version, locale). Keeps the InMemory <-> Drizzle parity the suite asserts.
-    for (const [id, d] of this.docs) {
-      if (
-        d.operatorId === operatorId &&
-        d.type === type &&
-        d.version === version &&
-        d.status === 'DRAFT'
-      ) {
-        this.docs.delete(id)
-      }
-    }
+    //
+    // Validate BEFORE mutating so a clash aborts with the existing draft intact —
+    // the drizzle path runs delete+insert in one runTx, so a 23505 on insert rolls
+    // the delete back. `survivors` = everything that is NOT a prior DRAFT of this exact
+    // version (those rows are the ones being replaced); a new row clashes iff it matches
+    // a survivor, or a same-locale sibling already in this batch (the partial unique
+    // index rejects an intra-batch (operatorId,type,version,locale) dup too).
+    const isPriorDraft = (d: ConsentDocument) =>
+      d.operatorId === operatorId &&
+      d.type === type &&
+      d.version === version &&
+      d.status === 'DRAFT'
+    const survivors = [...this.docs.values()].filter((d) => !isPriorDraft(d))
+    const seen = new Set<string>()
     for (const r of rows) {
-      const clash = [...this.docs.values()].some(
-        (d) =>
-          d.operatorId === r.operatorId &&
-          d.type === r.type &&
-          d.version === r.version &&
-          d.locale === r.locale,
-      )
+      const key = `${r.operatorId}|${r.type}|${r.version}|${r.locale}`
+      const clash =
+        seen.has(key) ||
+        survivors.some(
+          (d) =>
+            d.operatorId === r.operatorId &&
+            d.type === r.type &&
+            d.version === r.version &&
+            d.locale === r.locale,
+        )
       if (clash) throw uniqueViolation('consent_documents_operator_tvl_unique')
+      seen.add(key)
+    }
+    for (const [id, d] of this.docs) {
+      if (isPriorDraft(d)) this.docs.delete(id)
     }
     const created: ConsentDocument[] = rows.map((r) => ({
       ...r,

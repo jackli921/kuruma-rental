@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { ConsentDocument } from '../../stores'
-import type { NewConsentAcceptance } from '../types'
+import type { NewConsentAcceptance, NewConsentDocument } from '../types'
 import { CONSENT_ACCEPTANCE_LIST_LIMIT } from '../types-consent'
 import { InMemoryConsentRepository } from './consent'
 
@@ -38,6 +38,44 @@ const baseAcceptance: NewConsentAcceptance = {
   signingKeyId: 'v1',
   signatureCanonicalVersion: 'v1',
   documentSnapshot: null,
+}
+
+const OP = 'op_kuruma'
+const TERMS = 'OPERATOR_RENTAL_TERMS' as const
+
+function opDoc(
+  over: Partial<ConsentDocument> & Pick<ConsentDocument, 'id' | 'version' | 'locale' | 'status'>,
+): ConsentDocument {
+  return {
+    type: TERMS,
+    operatorId: OP,
+    title: 'Terms',
+    body: 'body',
+    acceptanceLabel: 'I agree',
+    contentHash: 'b'.repeat(64),
+    effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+    publishedAt: null,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
+    ...over,
+  }
+}
+
+function newOpRow(over: Partial<NewConsentDocument> = {}): NewConsentDocument {
+  return {
+    operatorId: OP,
+    type: TERMS,
+    version: 'v1',
+    locale: 'en',
+    title: 'Terms',
+    body: 'body',
+    acceptanceLabel: 'I agree',
+    contentHash: 'c'.repeat(64),
+    status: 'DRAFT',
+    effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+    publishedAt: null,
+    ...over,
+  }
 }
 
 describe('InMemoryConsentRepository', () => {
@@ -131,6 +169,50 @@ describe('InMemoryConsentRepository', () => {
       repo.createAcceptance({ ...operatorAcceptance, documentId: 'doc_other' }),
     ).resolves.toBeDefined()
     expect((await repo.findOperatorDocumentAcceptance('op_1', DOC.id))?.id).toBe(created.id)
+  })
+
+  it('replaceOperatorDraftRows is atomic: a unique clash on insert leaves the prior draft intact (rollback parity with the drizzle runTx, #1498)', async () => {
+    // A PUBLISHED en row of v1 blocks the new en insert; a DRAFT ja row of the SAME
+    // version is the prior draft a rollback must preserve. The drizzle path runs
+    // delete+insert in ONE runTx, so the 23505 on insert rolls the delete back and the
+    // ja draft survives. The in-memory twin must match, or Slice B's test double lies.
+    const seeded = new InMemoryConsentRepository([
+      opDoc({ id: 'pub_v1_en', version: 'v1', locale: 'en', status: 'PUBLISHED' }),
+      opDoc({ id: 'draft_v1_ja', version: 'v1', locale: 'ja', status: 'DRAFT' }),
+    ])
+
+    await expect(
+      seeded.replaceOperatorDraftRows(OP, TERMS, 'v1', [newOpRow({ locale: 'en' })]),
+    ).rejects.toMatchObject({
+      code: '23505',
+      constraint_name: 'consent_documents_operator_tvl_unique',
+    })
+
+    // The prior ja draft must NOT have been destroyed by the aborted rewrite.
+    const surviving = await seeded.findOperatorDocuments(OP, TERMS)
+    expect(surviving.map((d) => d.id).sort()).toEqual(['draft_v1_ja', 'pub_v1_en'])
+  })
+
+  it('replaceOperatorDraftRows rejects an intra-batch duplicate locale before mutating, so the prior draft survives (#1498)', async () => {
+    // Two en rows in one batch violate the same (operatorId,type,version,locale) seal
+    // the real partial unique index enforces; validate-before-mutate must reject the
+    // batch without first deleting the existing ja draft.
+    const seeded = new InMemoryConsentRepository([
+      opDoc({ id: 'draft_v1_ja', version: 'v1', locale: 'ja', status: 'DRAFT' }),
+    ])
+
+    await expect(
+      seeded.replaceOperatorDraftRows(OP, TERMS, 'v1', [
+        newOpRow({ locale: 'en' }),
+        newOpRow({ locale: 'en' }),
+      ]),
+    ).rejects.toMatchObject({
+      code: '23505',
+      constraint_name: 'consent_documents_operator_tvl_unique',
+    })
+
+    const surviving = await seeded.findOperatorDocuments(OP, TERMS)
+    expect(surviving.map((d) => d.id)).toEqual(['draft_v1_ja'])
   })
 
   it('findAcceptanceById returns the acceptance, findAcceptancesByUser scopes by user, findAcceptancesByBooking returns empty for unknown booking', async () => {
