@@ -6,7 +6,10 @@ import { InMemoryPaymentEventRepository } from '../../repositories/in-memory/pay
 import { InMemoryPaymentRefundRepository } from '../../repositories/in-memory/payment-refund'
 import { InMemoryRefundReconcilerRepository } from '../../repositories/in-memory/refund-reconciler'
 import type { Booking, PaymentRefund } from '../../stores'
-import { CancellationRefundReconciler } from './cancellation-refund-reconciler'
+import {
+  CancellationRefundReconciler,
+  refundReconcilerStrandedAlert,
+} from './cancellation-refund-reconciler'
 import { PaymentService } from './payment'
 import {
   type PaymentGateway,
@@ -224,5 +227,35 @@ describe('CancellationRefundReconciler.run (#851 S4)', () => {
 
     expect(summary).toEqual({ attempted: 0, succeeded: 0, failed: 0, pending: 0 })
     expect(gateway.refundCalls).toHaveLength(0)
+  })
+})
+
+describe('refundReconcilerStrandedAlert', () => {
+  it('raises an alert naming the FAILED count when refunds are stranded', () => {
+    const alert = refundReconcilerStrandedAlert({
+      attempted: 5,
+      succeeded: 3,
+      failed: 2,
+      pending: 0,
+    })
+
+    // A FAILED receipt keeps the booking REFUND_DUE but is excluded from every later
+    // sweep (drizzle/refund-reconciler.ts), so this run is the ONLY signal that money
+    // is stuck — it must page a human, not sit in the info-level summary.
+    expect(alert).toBe(
+      '2 cancellation refund(s) FAILED at Stripe and are stranded at REFUND_DUE — manual reconciliation needed',
+    )
+  })
+
+  it('is silent (null) when no refund failed', () => {
+    expect(
+      refundReconcilerStrandedAlert({ attempted: 4, succeeded: 4, failed: 0, pending: 0 }),
+    ).toBeNull()
+  })
+
+  it('is silent for a clean empty sweep', () => {
+    expect(
+      refundReconcilerStrandedAlert({ attempted: 0, succeeded: 0, failed: 0, pending: 0 }),
+    ).toBeNull()
   })
 })
