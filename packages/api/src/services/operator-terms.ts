@@ -1,6 +1,7 @@
 import type { ConsentDocStatus } from '@kuruma/shared/enums'
 import { computeContentHash } from '@kuruma/shared/lib/consent-canonical'
 import type { SaveOperatorTermsDraftInput } from '@kuruma/shared/validators/consent-documents'
+import { CONSENT_DOC_OPERATOR_TVL_CONSTRAINT, pgConstraintName } from '../pg-errors'
 import type { ConsentRepository, NewConsentDocument } from '../repositories/types-consent'
 import type { ConsentDocument } from '../stores'
 
@@ -68,8 +69,6 @@ export class OperatorTermsService {
     const version = draftVersion ?? this.nextVersion(existing)
     const effectiveFrom = input.effectiveFrom ? new Date(input.effectiveFrom) : now
 
-    if (draftVersion) await this.repo.deleteOperatorDraftRows(operatorId, TYPE, version)
-
     const rows: NewConsentDocument[] = LOCALES.flatMap((locale) => {
       const t = input[locale]
       if (!t) return []
@@ -89,8 +88,18 @@ export class OperatorTermsService {
         },
       ]
     })
-    const created = await this.repo.createOperatorDocuments(rows)
-    return { ok: true, version: toVersion(created) }
+
+    try {
+      // Atomic delete-old-draft + insert (#1498) — the repo runs both in one tx.
+      const created = await this.repo.replaceOperatorDraftRows(operatorId, TYPE, version, rows)
+      return { ok: true, version: toVersion(created) }
+    } catch (err) {
+      // Two concurrent first-saves compute the same nextVersion; the loser trips
+      // consent_documents_operator_tvl_unique. Surface a clean 409, not a raw 500.
+      if (pgConstraintName(err) === CONSENT_DOC_OPERATOR_TVL_CONSTRAINT)
+        return { ok: false, error: 'A draft for this version already exists', status: 409 }
+      throw err
+    }
   }
 
   async publish(operatorId: string, version: string, now: Date): Promise<OperatorTermsResult> {

@@ -481,7 +481,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     operatorMembershipRepo,
     auditLogRepo,
     bookingEventRepo: new DrizzleBookingEventRepository(db),
-    consentRepo: new DrizzleConsentRepository(db),
+    consentRepo: new DrizzleConsentRepository(db, tx),
     reviewRepo: new DrizzleReviewRepository(db),
     featureFlagRepo: new DrizzleFeatureFlagRepository(db),
     operatorApplicationRepo: new DrizzleOperatorApplicationRepository(db),

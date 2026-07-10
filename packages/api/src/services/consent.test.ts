@@ -215,8 +215,7 @@ describe('ConsentService.recordAcceptance — concurrent-race catch path', () =>
         realRepo.findLatestPublishedVersionForOperator(...args),
       findPublishedOperatorDocument: (...args) => realRepo.findPublishedOperatorDocument(...args),
       findOperatorDocuments: (...args) => realRepo.findOperatorDocuments(...args),
-      createOperatorDocuments: (...args) => realRepo.createOperatorDocuments(...args),
-      deleteOperatorDraftRows: (...args) => realRepo.deleteOperatorDraftRows(...args),
+      replaceOperatorDraftRows: (...args) => realRepo.replaceOperatorDraftRows(...args),
       setOperatorVersionStatus: (...args) => realRepo.setOperatorVersionStatus(...args),
     }
 
