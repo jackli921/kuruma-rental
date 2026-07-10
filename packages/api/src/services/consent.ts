@@ -65,9 +65,12 @@ export class ConsentService {
     const bookingId = input.bookingId ?? null
     const operatorId = input.operatorId ?? null
     // Subject-shape pre-check (the DB CHECKs are the real seal; this returns a clean 400).
-    const isLiability = doc.type === 'RENTER_LIABILITY'
-    const isOperator = doc.type === 'OPERATOR_AGREEMENT'
-    if (isLiability !== (bookingId !== null) || isOperator !== (operatorId !== null))
+    // Mirrors consent_liability_booking_chk (widened §4.4) + consent_operator_agreement_chk:
+    // the per-booking types (RENTER_LIABILITY, OPERATOR_RENTAL_TERMS) require a bookingId and
+    // no operatorId; OPERATOR_AGREEMENT requires an operatorId and no bookingId.
+    const requiresBooking = doc.type === 'RENTER_LIABILITY' || doc.type === 'OPERATOR_RENTAL_TERMS'
+    const requiresOperator = doc.type === 'OPERATOR_AGREEMENT'
+    if (requiresBooking !== (bookingId !== null) || requiresOperator !== (operatorId !== null))
       return { ok: false, status: 400, error: 'SUBJECT_SHAPE_INVALID' }
 
     const existing = await this.findExisting(doc.type, input.userId, doc.id, operatorId, bookingId)
@@ -217,13 +220,15 @@ export class ConsentService {
   }
 
   private findExisting(
-    _type: ConsentType,
+    type: ConsentType,
     userId: string,
     documentId: string,
     operatorId: string | null,
     bookingId: string | null,
   ): Promise<ConsentAcceptance | undefined> {
-    if (bookingId !== null) return this.repo.findBookingAcceptance(bookingId)
+    // Per-booking idempotency is now type-scoped (§6 H3): a booking may carry both a
+    // liability and an operator-terms acceptance, so look up by (bookingId, type).
+    if (bookingId !== null) return this.repo.findBookingAcceptance(bookingId, type)
     if (operatorId !== null) return this.repo.findOperatorDocumentAcceptance(operatorId, documentId)
     return this.repo.findUserDocumentAcceptance(userId, documentId)
   }

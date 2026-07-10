@@ -163,6 +163,43 @@ describe('ConsentService.recordAcceptance — subject-shape validation', () => {
     )
     expect(r).toMatchObject({ ok: false, status: 400, error: 'SUBJECT_SHAPE_INVALID' })
   })
+
+  it('rejects OPERATOR_RENTAL_TERMS accepted without a bookingId → SUBJECT_SHAPE_INVALID', async () => {
+    // §4.4: operator-terms is per-booking, so the shape-check must require a bookingId for it
+    // (the pre-widening code did not, and would have let this through).
+    const repo = new InMemoryConsentRepository([
+      doc({ id: 'doc_terms_v1_en', type: 'OPERATOR_RENTAL_TERMS' }),
+    ])
+    const svc = new ConsentService(repo, () => KEY)
+    const r = await svc.recordAcceptance(
+      { documentId: 'doc_terms_v1_en', userId: 'user_1', actorRole: 'RENTER' },
+      { now: NOW },
+    )
+    expect(r).toMatchObject({ ok: false, status: 400, error: 'SUBJECT_SHAPE_INVALID' })
+  })
+
+  it('accepts a well-shaped OPERATOR_RENTAL_TERMS (bookingId set, operatorId null)', async () => {
+    // The acceptance's operatorId stays NULL (operator recovered by joining the document, §3);
+    // a bookingId is required. This is the shape the booking-create path builds (sub-slice 4).
+    const repo = new InMemoryConsentRepository([
+      doc({ id: 'doc_terms_v1_en', type: 'OPERATOR_RENTAL_TERMS' }),
+    ])
+    const svc = new ConsentService(repo, () => KEY)
+    const r = await svc.recordAcceptance(
+      {
+        documentId: 'doc_terms_v1_en',
+        userId: 'user_1',
+        actorRole: 'RENTER',
+        bookingId: 'booking_terms',
+      },
+      { now: NOW },
+    )
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.acceptance.consentType).toBe('OPERATOR_RENTAL_TERMS')
+    expect(r.acceptance.bookingId).toBe('booking_terms')
+    expect(r.acceptance.operatorId).toBeNull()
+  })
 })
 
 describe('ConsentService.recordAcceptance — concurrent-race catch path', () => {
