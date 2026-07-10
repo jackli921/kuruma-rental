@@ -434,3 +434,26 @@ describe('FleetTimeline roving tabindex (#1470)', () => {
     expect(screen.getByRole('region', { name: /Fleet planning board/ })).toHaveFocus()
   })
 })
+
+// #1503 (follow-up to #1470): the roving arrow-key affordance is invisible to a screen-reader
+// user until they guess it exists. This advertises it two ways: the board region carries an
+// accessible description naming the arrow keys (heard when focus lands on the region — the
+// #1471 restore entry point), and each interactive bar declares aria-keyshortcuts so a
+// focus-mode user who Tabs to a bar hears exactly which keys move focus. The keys named are
+// the ones handleItemKeyDown actually wires (#1470), so the advertisement is truthful.
+describe('FleetTimeline keyboard discoverability (#1503)', () => {
+  it('describes the board region with the arrow-key roving affordance', () => {
+    renderTimeline([row({ id: 'b1', renterName: 'Alice' })])
+    expect(
+      screen.getByRole('region', { name: /Fleet planning board/ }),
+    ).toHaveAccessibleDescription(/arrow keys/i)
+  })
+
+  it('advertises the exact roving shortcuts on each interactive bar', () => {
+    renderTimeline([row({ id: 'b1', renterName: 'Alice' })])
+    expect(screen.getByRole('button', { name: /Booking: Alice/ })).toHaveAttribute(
+      'aria-keyshortcuts',
+      'ArrowRight ArrowLeft ArrowDown ArrowUp Home End',
+    )
+  })
+})
