@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { requireUser, toCallerContext } from '../middleware/auth'
+import { reportStrandedFunds } from '../observability/money-alerts'
 import type { PaymentService } from '../services/payment/payment'
+import { paymentWebhookStrandedAlert } from '../services/payment/webhook-alert'
 import { fail, failResult, ok, parseId } from './helpers'
 
 const STRIPE_SIGNATURE_HEADER = 'stripe-signature'
@@ -49,20 +51,17 @@ export function createPaymentRoutes(service: PaymentService) {
       // amounts). NOTE: persistence happens before the 200 ack, so a transient failure
       // rejects here → 500 → Stripe retry, which re-converges (idempotent) — favouring
       // durable capture over a silent log-only ack.
-      if (result.outcome === 'amount_mismatch') {
-        // #1378: the mismatched charge is AUTO-REFUNDED. Alert LOUD only when the refund
-        // did not go through ('failed'/'unrefundable') — captured funds may still be
-        // stranded and need a human. A completed/pending refund is a warning-level record.
-        const stranded = result.refund === 'failed' || result.refund === 'unrefundable'
-        const emit = stranded ? console.error : console.warn
-        emit('[payment:webhook] amount mismatch', {
+      // Money stuck at Stripe — a stranded #1378 mismatch auto-refund ('failed'/
+      // 'unrefundable'), or a double charge that (unlike a mismatch) is NOT auto-refunded —
+      // must PAGE a human. The SDK only auto-captures thrown errors, so a handled money-stuck
+      // condition needs an explicit Sentry event (reportStrandedFunds), not a log nobody tails.
+      const strandedAlert = paymentWebhookStrandedAlert(result)
+      if (strandedAlert) {
+        reportStrandedFunds(`[payment:webhook] ${strandedAlert}`, { context: result.context })
+      } else if (result.outcome === 'amount_mismatch') {
+        // A completed/pending auto-refund self-healed — a warning-level record, not an alert.
+        console.warn('[payment:webhook] amount mismatch auto-refunded', {
           refund: result.refund,
-          stranded,
-          ...result.context,
-        })
-      } else if (result.outcome === 'double_payment') {
-        console.error('[payment:webhook] anomaly', {
-          outcome: result.outcome,
           ...result.context,
         })
       } else if (result.outcome === 'invalid_signature') {
