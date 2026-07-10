@@ -108,4 +108,33 @@ describe('DrizzleConsentRepository operator authoring', () => {
     // Byte-for-byte parity with the constant OperatorTermsService branches on.
     expect(pgConstraintName(caught)).toBe(CONSENT_DOC_OPERATOR_TVL_CONSTRAINT)
   })
+
+  it('runTx rolls the delete back on the unique clash — the prior DRAFT of the version survives (#1498 atomicity, witnessed)', async () => {
+    // Seed a mixed-status version directly: PUBLISHED en (blocks the new en insert) plus
+    // a DRAFT ja of the SAME version (the prior draft a rollback must preserve). The
+    // rewrite deletes DRAFTs of v1 then inserts en; the 23505 on the published en must
+    // roll the whole tx back, leaving BOTH seeded rows intact. This is the atomicity
+    // guarantee the InMemory twin mirrors (see in-memory/consent.test.ts).
+    await db.insert(consentDocuments).values([
+      {
+        ...row({ version: 'v1', locale: 'en', title: 'pub' }),
+        id: crypto.randomUUID(),
+        status: 'PUBLISHED',
+        publishedAt: new Date('2026-05-01T00:00:00Z'),
+      },
+      { ...row({ version: 'v1', locale: 'ja', title: 'draft-ja' }), id: crypto.randomUUID() },
+    ])
+
+    await expect(
+      repo.replaceOperatorDraftRows(OP, TYPE, 'v1', [
+        row({ version: 'v1', locale: 'en', title: 'new' }),
+      ]),
+    ).rejects.toSatisfy((e) => pgConstraintName(e) === CONSENT_DOC_OPERATOR_TVL_CONSTRAINT)
+
+    const all = await repo.findOperatorDocuments(OP, TYPE)
+    expect(all.map((d) => `${d.locale}:${d.status}:${d.title}`).sort()).toEqual([
+      'en:PUBLISHED:pub',
+      'ja:DRAFT:draft-ja',
+    ])
+  })
 })
