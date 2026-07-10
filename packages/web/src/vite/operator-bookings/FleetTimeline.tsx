@@ -25,6 +25,7 @@ import { addDays, startOfDay } from 'date-fns'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -74,6 +75,12 @@ const ARROW_DIRECTIONS: Record<string, RovingDirection> = {
   End: 'end',
 }
 
+// #1503: the space-delimited aria-keyshortcuts advertised on each interactive bar. Derived
+// from ARROW_DIRECTIONS so the advertisement can never drift from the keys handleItemKeyDown
+// actually handles. Enter/Space are omitted — they are the standard button-activation keys AT
+// already implies from role=button, not a bespoke shortcut.
+const ROVING_KEYSHORTCUTS = Object.keys(ARROW_DIRECTIONS).join(' ')
+
 interface FleetTimelineProps {
   readonly rows: readonly CalendarBookingRow[]
   // The operator's fleet — each becomes a row; bookings bind to a row by vehicle id.
@@ -108,6 +115,9 @@ export function FleetTimeline({
   // Shares the switcher with BookingsCalendar; the Timeline option follows the same
   // runtime-toggleable flag (#1322) so both views agree on the offered set.
   const timelineEnabled = useFeatureFlag('FLEET_TIMELINE')
+
+  // #1503: id linking the board region to its sr-only roving hint (aria-describedby below).
+  const keyboardHintId = useId()
 
   // #1471: a date-range nav rebuilds every bar. If keyboard/screen-reader focus sat on a
   // booking bar that the new window drops, React unmounts that node and the browser lets
@@ -319,11 +329,14 @@ export function FleetTimeline({
           // #1470: only the active bar is tabIndex=0 (the board is one tab stop); the rest
           // are tabIndex=-1, reachable by arrow keys. `data-bar-id` lets focusBar find the
           // lib-owned node by id.
+          // #1503: aria-keyshortcuts advertises the arrow/Home/End roving keys to a focus-mode
+          // AT user who Tabs onto the bar, so the affordance is discoverable, not guessed.
           itemProps: it.interactive
             ? {
                 role: 'button',
                 tabIndex: it.id === resolvedActiveId ? 0 : -1,
                 'data-bar-id': it.id,
+                'aria-keyshortcuts': ROVING_KEYSHORTCUTS,
                 ...(it.type === 'block' ? { 'aria-haspopup': 'dialog' as const } : {}),
                 'aria-label': label,
                 onKeyDown: (e: ReactKeyboardEvent<HTMLDivElement>) => handleItemKeyDown(e, it.id),
@@ -375,8 +388,26 @@ export function FleetTimeline({
         views={operatorViews(timelineEnabled)}
       />
       {/* #1349: name the whole board as a region so a screen-reader user gets a
-          landmark to jump to and a label for the mouse-only canvas the lib renders. */}
-      <section ref={regionRef} tabIndex={-1} aria-label={t('board.label', { range: toolbarLabel })}>
+          landmark to jump to and a label for the mouse-only canvas the lib renders.
+          #1503: describe the region with the roving hint (heard when focus lands here — the
+          #1471 restore entry point) so the arrow-key affordance is discoverable.
+
+          A11y waiver (#1503) — NO container role="grid": react-calendar-timeline positions
+          bars ABSOLUTELY over a single canvas, not nested in per-row/per-cell DOM, so a
+          faithful grid (rows of gridcells) has nothing clean to attach to and would fight the
+          lib, risking the #1349 button semantics and #1470 roving focus. No ACCESS is lost —
+          #1349 already exposes every bar as a role="button" a browse-mode AT user reaches
+          element-by-element; the arrow-key roving is a focus-mode optimization we instead
+          advertise via aria-keyshortcuts + this description. */}
+      <section
+        ref={regionRef}
+        tabIndex={-1}
+        aria-label={t('board.label', { range: toolbarLabel })}
+        aria-describedby={keyboardHintId}
+      >
+        <span id={keyboardHintId} className="sr-only">
+          {t('board.keyboardHint')}
+        </span>
         <Timeline
           groups={groups}
           items={items}

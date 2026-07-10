@@ -298,6 +298,7 @@
         },
         "board": {
           "label": "Fleet planning board, {range}",
+          "keyboardHint": "Use the arrow keys to move between bookings; press Enter or Space to open one.",
           "bookingBar": "{vehicle}. Booking: {renter}, {status}, {range}",
           "blockBar": "{vehicle}. {kind} block: {title}, {range}"
         }

@@ -298,6 +298,7 @@
         },
         "board": {
           "label": "车队排期板，{range}",
+          "keyboardHint": "使用方向键在预订之间移动，按 Enter 或空格键打开预订。",
           "bookingBar": "{vehicle}。预订：{renter}，{status}，{range}",
           "blockBar": "{vehicle}。{kind}封锁：{title}，{range}"
         }
