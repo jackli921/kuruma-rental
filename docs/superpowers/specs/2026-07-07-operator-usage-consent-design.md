@@ -225,3 +225,51 @@ never author into a void that renters can't yet see.
 - Type name **locked to `OPERATOR_RENTAL_TERMS`** (v1.1). Alternatives considered and rejected:
   `OPERATOR_TERMS` (ambiguous vs the existing `OPERATOR_AGREEMENT` type), `OPERATOR_USAGE_CONSENT`
   (wordier enum literal).
+
+## 14. Slice B — renter acceptance at booking-create (revised design, 2026-07-09)
+
+Slice A (operator authoring) shipped (PR #1501). Slice B seals the renter's acceptance of an operator's
+published `OPERATOR_RENTAL_TERMS` document atomically inside the booking-create transaction. Below is the
+design of record after an architect review (2026-07-09) folded four correctness fixes into the earlier §9
+Phase-B sketch. The plan is `docs/superpowers/plans/2026-07-09-consent-slice-b.md`.
+
+**Owner-locked product decisions (2026-07-09):**
+1. Capture = explicit flag + snapshot-current. The client sends the version it displayed; the server snapshots
+   that exact published `(version, locale)` doc at seal time.
+2. Checkout UX = modal on Reserve. Renter clicks Reserve; if the operator has published terms, a modal shows
+   the terms + an agree control; agreeing submits. No terms → Reserve submits directly.
+3. Stays dark. No flag flips in Slice B; GA is a separate #1476 follow-up.
+
+**Architect fixes folded in:**
+- **C1 (version pinning, was CRITICAL).** A bare boolean lets the server seal + HMAC-sign whatever is "latest"
+  at submit — text the renter may never have seen if the operator republished mid-checkout. The client now
+  PINS the displayed version: request field `operatorRentalTermsAcceptedVersion` (+ the displayed `locale`).
+  The server 422s `terms-changed` when `pinned !== latest`, and 422s `terms-required` when a published doc
+  exists and no pin was sent. Only the exact pinned `(version, locale)` doc is snapshotted + signed.
+- **H1 (server enforcement flag).** The Slice A `VITE_FEATURE_OPERATOR_TERMS` gate is web-only; the API would
+  otherwise require terms for any operator with a PUBLISHED row regardless of the flag. Add a NEW additive
+  `serverOnly` flag `OPERATOR_TERMS_ENFORCEMENT` (registry `serverDefault: false`, `runtimeControlled: true`,
+  mirrors `SHARED_CATALOG`). It gates BOTH `OperatorTermsService.publish` (no published row can exist while
+  enforcement is off → no 422 is possible) AND the booking-time require branch. Slice A's web flag is
+  untouched; GA flips both flags together (out of scope here).
+- **H2 (renter-self-serve only).** `submitInTx` is shared by MANUAL/walk-in/TRIP_COM creates, which would 422
+  on the operator's own terms. Mirror the disclaimer rule: require operator-terms acceptance ONLY when
+  `input.source === 'DIRECT' && !input.walkInCustomer`. All other create paths skip the resolve+require.
+- **H3 (sign outside the tx).** `resolveSigningKey()` throws in production when `CONSENT_SIGNING_KEY` is unset;
+  throwing inside the booking tx 500s every booking after doing+rolling-back tx work. Resolve the key ONCE at
+  the top of `create()` (outside the tx) so a missing key fails fast; do the doc read + snapshot + HMAC + insert
+  inside the tx (cheap, and where `operatorId`/`booking.id` are known). Add `CONSENT_SIGNING_KEY` to the
+  `deploy.yml` presence check.
+
+**Also folded (MEDIUM/LOW):** M1 add a presentation `locale` to the booking request; M2 one shared pure
+`buildSignedAcceptance()` assembler used by both `ConsentService` and the booking path (one signer, one
+snapshot shape); M3 make the subject-shape check a TOTAL function `expectedSubjectShape(type)` (fail-closed;
+this is also what makes `POST /consent/accept` reject `OPERATOR_RENTAL_TERMS` with a clean 400 — no bookingId
+in that payload); M4 narrow `TransactionRepos.consentRepo` to a 4-method `Pick<>` and make the drizzle repo's
+`runTx` ctor arg optional (so the tx factory constructs it with no bogus sentinel); L1 rename the generalized
+seal `consent_unique_booking_liability` → `consent_unique_booking_type`.
+
+**Confirmed sound (unchanged):** the schema move (generalize the booking seal to `unique(bookingId, consentType)`,
+widen the liability CHECK to include `OPERATOR_RENTAL_TERMS`) is additive — the acceptance row keeps
+`operatorId = NULL`, so the entire `OPERATOR_AGREEMENT` half of the schema is untouched (predicate math verified).
+The operator is recovered for governance by joining `documentId → consent_documents.operatorId`.
