@@ -11,12 +11,13 @@ import {
 } from './enums'
 
 describe('consent enums', () => {
-  it('exposes the four consent document types', () => {
+  it('exposes all consent document types', () => {
     expect(CONSENT_TYPES).toEqual([
       'RENTER_TOS',
       'PRIVACY_POLICY',
       'RENTER_LIABILITY',
       'OPERATOR_AGREEMENT',
+      'OPERATOR_RENTAL_TERMS',
     ])
   })
 
@@ -57,5 +58,14 @@ describe('review enums', () => {
       'value',
       'ruleAdherence',
     ])
+  })
+})
+
+describe('OPERATOR_RENTAL_TERMS consent type', () => {
+  it('is a registered consent type', () => {
+    expect(CONSENT_TYPES).toContain('OPERATOR_RENTAL_TERMS')
+  })
+  it('is per-event (accepted on every booking, like liability)', () => {
+    expect(CONSENT_CARDINALITY.OPERATOR_RENTAL_TERMS).toBe('PER_EVENT')
   })
 })

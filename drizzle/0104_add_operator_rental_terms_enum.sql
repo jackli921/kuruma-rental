@@ -1,0 +1,1 @@
+ALTER TYPE "public"."consent_type" ADD VALUE 'OPERATOR_RENTAL_TERMS';

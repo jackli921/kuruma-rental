@@ -12,6 +12,7 @@ function doc(over: Partial<ConsentDocument> = {}): ConsentDocument {
     type: 'RENTER_TOS',
     version: '1.0',
     locale: 'en',
+    operatorId: null,
     title: 'Terms',
     body: 'body',
     acceptanceLabel: 'I accept',
@@ -210,6 +211,12 @@ describe('ConsentService.recordAcceptance — concurrent-race catch path', () =>
       findAcceptancesByUser: (...args) => realRepo.findAcceptancesByUser(...args),
       findAcceptancesByBooking: (...args) => realRepo.findAcceptancesByBooking(...args),
       findAcceptances: (...args) => realRepo.findAcceptances(...args),
+      findLatestPublishedVersionForOperator: (...args) =>
+        realRepo.findLatestPublishedVersionForOperator(...args),
+      findPublishedOperatorDocument: (...args) => realRepo.findPublishedOperatorDocument(...args),
+      findOperatorDocuments: (...args) => realRepo.findOperatorDocuments(...args),
+      replaceOperatorDraftRows: (...args) => realRepo.replaceOperatorDraftRows(...args),
+      setOperatorVersionStatus: (...args) => realRepo.setOperatorVersionStatus(...args),
     }
 
     const svc = new ConsentService(wrappedRepo, () => KEY)
