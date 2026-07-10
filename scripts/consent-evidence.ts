@@ -2,11 +2,11 @@ import { DrizzleConsentRepository } from '../packages/api/src/repositories/drizz
 import { ConsentEvidenceService } from '../packages/api/src/services/consent-evidence'
 import { resolveSigningKey } from '../packages/api/src/services/consent-signing'
 // Usage: bun run consent:evidence -- <acceptanceId> | --user <id> | --booking <id>
-import { getDb } from '../packages/shared/src/db'
+import { getDb, runTx } from '../packages/shared/src/db'
 
 async function main() {
   const [a, b] = process.argv.slice(2)
-  const repo = new DrizzleConsentRepository(getDb())
+  const repo = new DrizzleConsentRepository(getDb(), runTx)
   const svc = new ConsentEvidenceService(repo, (keyId) => {
     const k = resolveSigningKey()
     return k && k.keyId === keyId ? k : undefined

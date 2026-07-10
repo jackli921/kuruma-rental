@@ -18,7 +18,7 @@ const client = postgres(url, { max: 1 })
 // Cast to Db (NeonHttp type) — postgres-js is structurally compatible for the
 // query methods DrizzleConsentRepository uses (select/insert/delete).
 const db = drizzle(client, { schema }) as unknown as Db
-const repo = new DrizzleConsentRepository(db)
+const repo = new DrizzleConsentRepository(db, (fn) => db.transaction(fn))
 
 const createdDocIds: string[] = []
 const createdAcceptanceIds: string[] = []
