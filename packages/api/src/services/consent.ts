@@ -62,13 +62,20 @@ export class ConsentService {
     if (doc.status !== 'PUBLISHED' || doc.effectiveFrom > meta.now)
       return { ok: false, status: 409, error: 'DOCUMENT_NOT_ACCEPTABLE' }
 
+    // OPERATOR_RENTAL_TERMS is minted ONLY inside the booking transaction (sub-slice 4:
+    // buildSignedAcceptance → consentRepo.createAcceptance), where the version is pinned and
+    // signed against the exact booking. recordAcceptance is the self-serve accept path, so it
+    // must refuse it outright — defense-in-depth against a future acceptSchema that carries a
+    // bookingId (today the route can't, so the shape-check below would also 400, via null bookingId).
+    if (doc.type === 'OPERATOR_RENTAL_TERMS')
+      return { ok: false, status: 400, error: 'OPERATOR_TERMS_NOT_SELF_MINTABLE' }
+
     const bookingId = input.bookingId ?? null
     const operatorId = input.operatorId ?? null
     // Subject-shape pre-check (the DB CHECKs are the real seal; this returns a clean 400).
-    // Mirrors consent_liability_booking_chk (widened §4.4) + consent_operator_agreement_chk:
-    // the per-booking types (RENTER_LIABILITY, OPERATOR_RENTAL_TERMS) require a bookingId and
-    // no operatorId; OPERATOR_AGREEMENT requires an operatorId and no bookingId.
-    const requiresBooking = doc.type === 'RENTER_LIABILITY' || doc.type === 'OPERATOR_RENTAL_TERMS'
+    // OPERATOR_RENTAL_TERMS (the other per-booking type) is refused above, so on this path only
+    // RENTER_LIABILITY carries a bookingId; OPERATOR_AGREEMENT requires an operatorId and no bookingId.
+    const requiresBooking = doc.type === 'RENTER_LIABILITY'
     const requiresOperator = doc.type === 'OPERATOR_AGREEMENT'
     if (requiresBooking !== (bookingId !== null) || requiresOperator !== (operatorId !== null))
       return { ok: false, status: 400, error: 'SUBJECT_SHAPE_INVALID' }
