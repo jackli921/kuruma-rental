@@ -7,7 +7,7 @@ import {
   InMemoryAddOnTemplateRepository,
 } from '../../src/repositories/in-memory'
 import { AddOnService } from '../../src/services/add-on'
-import { fakeDescriptionTranslator } from '../helpers/fake-translator'
+import { fakeDescriptionTranslator, sourceOnlyTranslator } from '../helpers/fake-translator'
 
 const uniqueViolation = () =>
   Object.assign(new Error('duplicate key value violates unique constraint'), {
@@ -390,6 +390,124 @@ describe('AddOnService', () => {
       )
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.status).toBe(409)
+    })
+
+    it('re-fills en/zh when a self-authored description changes (Model B)', async () => {
+      const created = await service.create(
+        ctxFor(opA),
+        { operatorId: opA, nameI18n: { en: 'GPS' }, descriptionOverride: null, priceJpy: 1500 },
+        'en',
+      )
+      if (!created.ok) throw new Error('seed failed')
+      const result = await service.update(
+        ctxFor(opA),
+        created.option.id,
+        { descriptionOverride: { en: 'New copy' } },
+        'en',
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.option.descriptionOverride).toEqual({
+          en: 'New copy',
+          ja: 'ja:New copy',
+          zh: 'zh:New copy',
+        })
+      }
+    })
+
+    it('does NOT re-translate when the source is unchanged and the bag is complete', async () => {
+      const translator = fakeDescriptionTranslator()
+      const fillSpy = vi.spyOn(translator, 'fill')
+      const svc = new AddOnService(repo, new InMemoryAddOnTemplateRepository(), translator)
+      const created = await svc.create(
+        ctxFor(opA),
+        {
+          operatorId: opA,
+          nameI18n: { en: 'GPS' },
+          descriptionOverride: { en: 'Copy' },
+          priceJpy: 1500,
+        },
+        'en',
+      )
+      if (!created.ok) throw new Error('seed failed')
+      fillSpy.mockClear() // ignore the create-time fill
+      // The web client re-sends the full merged bag; source slot unchanged.
+      const result = await svc.update(
+        ctxFor(opA),
+        created.option.id,
+        { descriptionOverride: { en: 'Copy', ja: 'ja:Copy', zh: 'zh:Copy' } },
+        'en',
+      )
+      expect(fillSpy).not.toHaveBeenCalled()
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.option.descriptionOverride).toEqual({
+          en: 'Copy',
+          ja: 'ja:Copy',
+          zh: 'zh:Copy',
+        })
+      }
+    })
+
+    it('does NOT translate on a price-only update (descriptionOverride untouched)', async () => {
+      const translator = fakeDescriptionTranslator()
+      const fillSpy = vi.spyOn(translator, 'fill')
+      const svc = new AddOnService(repo, new InMemoryAddOnTemplateRepository(), translator)
+      const created = await svc.create(
+        ctxFor(opA),
+        {
+          operatorId: opA,
+          nameI18n: { en: 'GPS' },
+          descriptionOverride: { en: 'Copy' },
+          priceJpy: 1500,
+        },
+        'en',
+      )
+      if (!created.ok) throw new Error('seed failed')
+      fillSpy.mockClear()
+      await svc.update(ctxFor(opA), created.option.id, { priceJpy: 3000 }, 'en')
+      expect(fillSpy).not.toHaveBeenCalled()
+    })
+
+    it('persists the source slot and returns ok when every translation fails', async () => {
+      const svc = new AddOnService(
+        repo,
+        new InMemoryAddOnTemplateRepository(),
+        sourceOnlyTranslator(),
+      )
+      const created = await svc.create(
+        ctxFor(opA),
+        { operatorId: opA, nameI18n: { en: 'GPS' }, descriptionOverride: null, priceJpy: 1500 },
+        'en',
+      )
+      if (!created.ok) throw new Error('seed failed')
+      const result = await svc.update(
+        ctxFor(opA),
+        created.option.id,
+        { descriptionOverride: { en: 'Only English survives' } },
+        'en',
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok)
+        expect(result.option.descriptionOverride).toEqual({ en: 'Only English survives' })
+    })
+
+    it('stores a PICKED row description update VERBATIM — no MT (HIGH-1)', async () => {
+      const translator = fakeDescriptionTranslator()
+      const fillSpy = vi.spyOn(translator, 'fill')
+      const svc = new AddOnService(repo, new InMemoryAddOnTemplateRepository(), translator)
+      const created = await svc.create(ctxFor(opA), createInput(opA, CHILD_SEAT), 'en')
+      if (!created.ok) throw new Error('seed failed')
+      fillSpy.mockClear()
+      const result = await svc.update(
+        ctxFor(opA),
+        created.option.id,
+        { descriptionOverride: { en: 'Picked note' } },
+        'en',
+      )
+      expect(fillSpy).not.toHaveBeenCalled()
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.option.descriptionOverride).toEqual({ en: 'Picked note' })
     })
   })
 

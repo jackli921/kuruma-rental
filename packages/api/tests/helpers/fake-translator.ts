@@ -18,3 +18,12 @@ export function fakeDescriptionTranslator(): DescriptionTranslator {
     },
   }
 }
+
+/** Simulates a total provider outage: fill returns only the source slot. */
+export function sourceOnlyTranslator(): DescriptionTranslator {
+  return {
+    fill: async (sourceLocale: Locale, sourceText: string): Promise<LocalizedTextOverride> => ({
+      [sourceLocale]: sourceText,
+    }),
+  }
+}

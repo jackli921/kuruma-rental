@@ -1,4 +1,4 @@
-import type { Locale } from '@kuruma/shared/i18n/locales'
+import { type Locale, SUPPORTED_LOCALES } from '@kuruma/shared/i18n/locales'
 import type { LocalizedText, LocalizedTextOverride } from '@kuruma/shared/i18n/localized-text'
 import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import type { OperatorAddOnData } from '@kuruma/shared/types/add-on'
@@ -65,6 +65,14 @@ const NOT_FOUND_MESSAGE = 'Add-on not found'
 
 const isUniqueViolation = (err: unknown): boolean => pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION
 
+// A description bag is COMPLETE when every supported locale carries text. Skips
+// re-translation on an unchanged self-authored save; an INCOMPLETE stored bag (a
+// prior save dropped a locale) therefore retries MT. noUncheckedIndexedAccess:
+// bag[locale] is string | undefined.
+function isDescriptionComplete(bag: LocalizedTextOverride): boolean {
+  return SUPPORTED_LOCALES.every((locale) => Boolean(bag[locale]))
+}
+
 /**
  * Project a joined read row to the operator wire DTO, resolving the template
  * name/description to the caller locale (catalog i18n slice 2). The multi-locale
@@ -127,16 +135,21 @@ export class AddOnService {
    * - No source slot (HIGH-2): verbatim — `?locale=` defaults to `en` and the API
    *   is source-agnostic (Trip.com), so a ja-only bag sent without `?locale=ja`
    *   must not be coerced to null / re-based.
+   * - Unchanged source + complete stored bag (update): keep the stored bag, no MT.
    */
   private async resolveDescriptionOverride(
     isSelfAuthored: boolean,
     locale: Locale,
     incoming: LocalizedTextOverride | null,
+    existingBag: LocalizedTextOverride | null,
   ): Promise<LocalizedTextOverride | null> {
     if (!isSelfAuthored) return incoming
     if (incoming === null) return null
     const sourceText = incoming[locale]
     if (!sourceText) return incoming
+    if (existingBag && existingBag[locale] === sourceText && isDescriptionComplete(existingBag)) {
+      return existingBag
+    }
     return this.descriptionTranslator.fill(locale, sourceText)
   }
 
@@ -152,6 +165,7 @@ export class AddOnService {
       data.nameI18n != null,
       locale,
       data.descriptionOverride,
+      null,
     )
     const resolved: AddOnCreate = { ...data, descriptionOverride }
     if (data.nameI18n) return this.createSelfAuthored(resolved, data.nameI18n, locale)
@@ -291,6 +305,20 @@ export class AddOnService {
         }
       }
       fields.name = nextName
+    }
+
+    // #1318: MT-fill on a self-authored description change. Runs AFTER the name
+    // dup-check so a 409 name clash doesn't waste a ~6s provider round-trip.
+    // `undefined` = field untouched (never translate on a price-only edit). A
+    // picked row / cleared bag / absent source slot stores verbatim; MT owns the
+    // non-source locales, so a caller's non-source values are re-derived (Model B).
+    if (data.descriptionOverride !== undefined) {
+      fields.descriptionOverride = await this.resolveDescriptionOverride(
+        existing.templateId === null,
+        locale,
+        data.descriptionOverride,
+        existing.descriptionOverride,
+      )
     }
 
     try {
