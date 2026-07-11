@@ -86,7 +86,12 @@ export interface ConsentRepository {
     userId: string,
     documentId: string,
   ): Promise<ConsentAcceptance | undefined>
-  findBookingAcceptance(bookingId: string): Promise<ConsentAcceptance | undefined>
+  /** A booking can hold two per-booking (PER_EVENT) acceptances (liability + operator-terms),
+   *  so the idempotency lookup is keyed on (bookingId, consentType), not bookingId alone (§6 H3). */
+  findBookingAcceptance(
+    bookingId: string,
+    consentType: ConsentType,
+  ): Promise<ConsentAcceptance | undefined>
   findOperatorDocumentAcceptance(
     operatorId: string,
     documentId: string,
