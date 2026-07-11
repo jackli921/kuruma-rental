@@ -36,7 +36,7 @@ export function EditAddOnDialog({ addOn, onOpenChange, pickedOperatorId }: EditA
 
   const { mutateAsync, isPending, error } = useMutation({
     mutationFn: (data: UpdateAddOnInput) =>
-      updateAddOn(addOn?.id ?? '', data, csrfToken, pickedOperatorId),
+      updateAddOn(addOn?.id ?? '', data, csrfToken, pickedOperatorId, locale),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADDON_QUERY_KEY })
       onOpenChange(false)
