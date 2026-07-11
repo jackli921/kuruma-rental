@@ -8,6 +8,7 @@ import {
 import { AddOnService } from '../../src/services/add-on'
 import { AddOnTemplateService } from '../../src/services/add-on-template'
 import type { AddOnTemplate } from '../../src/stores'
+import { fakeDescriptionTranslator } from '../helpers/fake-translator'
 
 const row = (over: Partial<AddOnTemplate>): AddOnTemplate => {
   const now = new Date()
@@ -110,7 +111,7 @@ describe('AddOnTemplateService.listForPicker — already-offered exclusion (P1-3
     addOnRepo = new InMemoryAddOnRepository()
     const templateRepo = new InMemoryAddOnTemplateRepository()
     templateService = new AddOnTemplateService(templateRepo, addOnRepo)
-    addOnService = new AddOnService(addOnRepo, templateRepo)
+    addOnService = new AddOnService(addOnRepo, templateRepo, fakeDescriptionTranslator())
   })
 
   it('excludes a template the target operator already offers on an ACTIVE row', async () => {

@@ -7,6 +7,7 @@ import {
   InMemoryAddOnTemplateRepository,
 } from '../../src/repositories/in-memory'
 import { AddOnService } from '../../src/services/add-on'
+import { fakeDescriptionTranslator } from '../helpers/fake-translator'
 
 const uniqueViolation = () =>
   Object.assign(new Error('duplicate key value violates unique constraint'), {
@@ -52,7 +53,11 @@ describe('AddOnService', () => {
 
   beforeEach(() => {
     repo = new InMemoryAddOnRepository()
-    service = new AddOnService(repo, new InMemoryAddOnTemplateRepository())
+    service = new AddOnService(
+      repo,
+      new InMemoryAddOnTemplateRepository(),
+      fakeDescriptionTranslator(),
+    )
   })
 
   describe('create', () => {
@@ -113,6 +118,7 @@ describe('AddOnService', () => {
       const svc = new AddOnService(
         new InMemoryAddOnRepository(),
         new InMemoryAddOnTemplateRepository(store),
+        fakeDescriptionTranslator(),
       )
       const result = await svc.create(ctxFor(opA), createInput(opA, ETC_CARD), LOCALE)
       expect(result.ok).toBe(false)
@@ -152,8 +158,11 @@ describe('AddOnService', () => {
     })
 
     it('rejects a template-picked create when the shared catalog is disabled (#1437)', async () => {
-      const off = new AddOnService(repo, new InMemoryAddOnTemplateRepository(), () =>
-        Promise.resolve(false),
+      const off = new AddOnService(
+        repo,
+        new InMemoryAddOnTemplateRepository(),
+        fakeDescriptionTranslator(),
+        () => Promise.resolve(false),
       )
       const result = await off.create(ctxFor(opA), createInput(opA, CHILD_SEAT), LOCALE)
       expect(result.ok).toBe(false)
@@ -165,8 +174,11 @@ describe('AddOnService', () => {
 
     it('still allows a self-authored create when the shared catalog is disabled (#1437)', async () => {
       // The escape hatch must survive the kill-switch: operators can always self-author.
-      const off = new AddOnService(repo, new InMemoryAddOnTemplateRepository(), () =>
-        Promise.resolve(false),
+      const off = new AddOnService(
+        repo,
+        new InMemoryAddOnTemplateRepository(),
+        fakeDescriptionTranslator(),
+        () => Promise.resolve(false),
       )
       const result = await off.create(
         ctxFor(opA),
@@ -216,6 +228,70 @@ describe('AddOnService', () => {
         expect(result.status).toBe(409)
         expect(result.error).toBe('You already offer an add-on with this name')
       }
+    })
+
+    it('fills en/zh from a ja-authored self-authored description (Model B)', async () => {
+      const translator = fakeDescriptionTranslator()
+      const fillSpy = vi.spyOn(translator, 'fill')
+      const svc = new AddOnService(repo, new InMemoryAddOnTemplateRepository(), translator)
+      const result = await svc.create(
+        ctxFor(opA),
+        {
+          operatorId: opA,
+          nameI18n: { en: 'GPS unit' },
+          descriptionOverride: { ja: 'ポータブルGPS' },
+          priceJpy: 1500,
+        },
+        'ja',
+      )
+      expect(fillSpy).toHaveBeenCalledWith('ja', 'ポータブルGPS')
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.option.descriptionOverride).toEqual({
+          ja: 'ポータブルGPS',
+          en: 'en:ポータブルGPS',
+          zh: 'zh:ポータブルGPS',
+        })
+      }
+    })
+
+    it('stores a PICKED row description VERBATIM — no MT (HIGH-1)', async () => {
+      const translator = fakeDescriptionTranslator()
+      const fillSpy = vi.spyOn(translator, 'fill')
+      const svc = new AddOnService(repo, new InMemoryAddOnTemplateRepository(), translator)
+      const result = await svc.create(
+        ctxFor(opA),
+        {
+          operatorId: opA,
+          templateId: CHILD_SEAT,
+          descriptionOverride: { en: 'My note' },
+          priceJpy: 1500,
+        },
+        'en',
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.option.descriptionOverride).toEqual({ en: 'My note' })
+      expect(fillSpy).not.toHaveBeenCalled()
+    })
+
+    it('stores a self-authored bag VERBATIM when the ?locale slot is absent (HIGH-2)', async () => {
+      const translator = fakeDescriptionTranslator()
+      const fillSpy = vi.spyOn(translator, 'fill')
+      const svc = new AddOnService(repo, new InMemoryAddOnTemplateRepository(), translator)
+      // ja-only bag, but ?locale defaults to en -> sourceText = bag.en = undefined.
+      const result = await svc.create(
+        ctxFor(opA),
+        {
+          operatorId: opA,
+          nameI18n: { en: 'GPS' },
+          descriptionOverride: { ja: '日本語のみ' },
+          priceJpy: 1500,
+        },
+        'en',
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.option.descriptionOverride).toEqual({ ja: '日本語のみ' })
+      expect(fillSpy).not.toHaveBeenCalled()
     })
   })
 
@@ -359,7 +435,11 @@ describe('AddOnService — update/archive bind to the picked operator (#1456)', 
 
   beforeEach(() => {
     repo = new InMemoryAddOnRepository()
-    service = new AddOnService(repo, new InMemoryAddOnTemplateRepository())
+    service = new AddOnService(
+      repo,
+      new InMemoryAddOnTemplateRepository(),
+      fakeDescriptionTranslator(),
+    )
   })
 
   // Self-authored so the seed needs no template setup and survives the kill-switch.

@@ -17,6 +17,7 @@ import {
   fleetWriteDenialResult,
 } from '../tenancy'
 import { resolveAddOnDescription, resolveAddOnName } from './add-on-resolve'
+import type { DescriptionTranslator } from './description-translation'
 
 export type AddOnResult =
   | { ok: true; option: OperatorAddOnData }
@@ -91,6 +92,10 @@ export class AddOnService {
   constructor(
     private readonly repo: AddOnRepository,
     private readonly templateRepo: AddOnTemplateRepository,
+    // #1318: REQUIRED (no default). A no-op default would fail to degraded output
+    // (source-only, no error) on a forgotten wiring; a required param fails at
+    // compile time instead. Wired in index.ts; tests pass a fake explicitly.
+    private readonly descriptionTranslator: DescriptionTranslator,
     private readonly isSharedCatalogEnabled: () => Promise<boolean> = () => Promise.resolve(true),
   ) {}
 
@@ -114,6 +119,28 @@ export class AddOnService {
   }
 
   /**
+   * Model B fill (#1318). MT owns the non-source locales of a SELF-AUTHORED
+   * description, refreshed on every save. Returns the bag to persist.
+   *
+   * - Picked rows (HIGH-1): verbatim — their other locales resolve through the
+   *   curated template description; MT would shadow human text with machine text.
+   * - No source slot (HIGH-2): verbatim — `?locale=` defaults to `en` and the API
+   *   is source-agnostic (Trip.com), so a ja-only bag sent without `?locale=ja`
+   *   must not be coerced to null / re-based.
+   */
+  private async resolveDescriptionOverride(
+    isSelfAuthored: boolean,
+    locale: Locale,
+    incoming: LocalizedTextOverride | null,
+  ): Promise<LocalizedTextOverride | null> {
+    if (!isSelfAuthored) return incoming
+    if (incoming === null) return null
+    const sourceText = incoming[locale]
+    if (!sourceText) return incoming
+    return this.descriptionTranslator.fill(locale, sourceText)
+  }
+
+  /**
    * `data.operatorId` is resolved by the route (resolveOperatorIdForWrite), so the
    * service stays auth-mechanism-agnostic. A create is PICKED (`templateId`) or
    * SELF-AUTHORED (`nameI18n`) — the route validator guarantees exactly one; branch
@@ -121,7 +148,13 @@ export class AddOnService {
    * for callers that bypass the validator (never null-name-insert).
    */
   async create(_ctx: CallerContext, data: AddOnCreate, locale: Locale): Promise<AddOnResult> {
-    if (data.nameI18n) return this.createSelfAuthored(data, data.nameI18n, locale)
+    const descriptionOverride = await this.resolveDescriptionOverride(
+      data.nameI18n != null,
+      locale,
+      data.descriptionOverride,
+    )
+    const resolved: AddOnCreate = { ...data, descriptionOverride }
+    if (data.nameI18n) return this.createSelfAuthored(resolved, data.nameI18n, locale)
     if (data.templateId) {
       // Kill-switch: picking from the shared catalog is server-enforced. When off, the
       // operator must self-author (the escape hatch above stays open). Checked here, so
@@ -131,7 +164,7 @@ export class AddOnService {
       if (!(await this.isSharedCatalogEnabled())) {
         return { ok: false, error: CATALOG_DISABLED_MESSAGE, status: 422 }
       }
-      return this.createFromTemplate(data, data.templateId, locale)
+      return this.createFromTemplate(resolved, data.templateId, locale)
     }
     return { ok: false, error: MISSING_IDENTITY_MESSAGE, status: 400 }
   }
