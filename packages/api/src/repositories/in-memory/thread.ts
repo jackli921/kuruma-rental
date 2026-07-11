@@ -12,34 +12,56 @@ export class InMemoryThreadRepository implements ThreadRepository {
   async findAll(
     ctx: CallerContext,
   ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>> {
+    return this.scopedThreads(ctx).map((thread) => this.hydrate(thread))
+  }
+
+  // #1476: page limit/offset over the in-scope set instead of the service loading
+  // everything and slicing. Mirrors the Drizzle SQL LIMIT/OFFSET + COUNT — same
+  // deterministic order (newest createdAt first, id as the tiebreaker) so a
+  // stable page boundary can't split a createdAt tie differently across repos.
+  async findPage(
+    ctx: CallerContext,
+    { limit, offset }: { limit: number; offset: number },
+  ): Promise<{
+    threads: Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>
+    total: number
+  }> {
+    const scoped = this.scopedThreads(ctx)
+    const ordered = [...scoped].sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id),
+    )
+    const page = ordered.slice(offset, offset + limit).map((thread) => this.hydrate(thread))
+    return { threads: page, total: scoped.length }
+  }
+
+  // The threads visible to the caller under its read scope (#1205): admin sees
+  // all, an operator only its own tenant, a renter only threads it participates
+  // in, a tokenless operator nothing. Shared by findAll and findPage.
+  private scopedThreads(ctx: CallerContext): Thread[] {
     const scope = threadReadScope(ctx)
     if (scope.kind === 'none') return []
-    let filteredThreads: Thread[]
-
-    if (scope.kind === 'all') {
-      filteredThreads = [...this.threads.values()]
-    } else if (scope.kind === 'operator') {
-      filteredThreads = [...this.threads.values()].filter((t) => t.operatorId === scope.operatorId)
-    } else {
-      const threadIds = new Set(
-        [...this.participants.values()]
-          .filter((p) => p.userId === scope.userId)
-          .map((p) => p.threadId),
-      )
-      filteredThreads = [...this.threads.values()].filter((t) => threadIds.has(t.id))
+    if (scope.kind === 'all') return [...this.threads.values()]
+    if (scope.kind === 'operator') {
+      return [...this.threads.values()].filter((t) => t.operatorId === scope.operatorId)
     }
+    const threadIds = new Set(
+      [...this.participants.values()]
+        .filter((p) => p.userId === scope.userId)
+        .map((p) => p.threadId),
+    )
+    return [...this.threads.values()].filter((t) => threadIds.has(t.id))
+  }
 
-    return filteredThreads.map((thread) => {
-      const threadParticipants = [...this.participants.values()].filter(
-        (p) => p.threadId === thread.id,
-      )
-      const threadMessages = [...this.messages.values()]
+  private hydrate(
+    thread: Thread,
+  ): Thread & { participants: ThreadParticipant[]; lastMessage: Message | null } {
+    const participants = [...this.participants.values()].filter((p) => p.threadId === thread.id)
+    const lastMessage =
+      [...this.messages.values()]
         .filter((m) => m.threadId === thread.id)
         .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-      const lastMessage = threadMessages.at(-1) ?? null
-
-      return { ...thread, participants: threadParticipants, lastMessage }
-    })
+        .at(-1) ?? null
+    return { ...thread, participants, lastMessage }
   }
 
   async findById(

@@ -1,6 +1,6 @@
 import type { RunTx } from '@kuruma/shared/db'
 import { messages, threadParticipants, threads } from '@kuruma/shared/db/schema'
-import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm'
 import { type CallerContext, requireOperatorScope } from '../../middleware/auth'
 import type { Message, Thread, ThreadParticipant } from '../../stores'
 import { threadReadScope } from '../../tenancy'
@@ -58,16 +58,86 @@ export class DrizzleThreadRepository implements ThreadRepository {
         .where(inArray(threads.id, threadIds))).map(toThread)
     }
 
+    return this.hydrate(threadRows)
+  }
+
+  // #1476: page the caller's in-scope threads with limit/offset + the total count
+  // pushed into SQL, so the service never materialises every in-scope thread (a
+  // PLATFORM_ADMIN `all` scope would otherwise scan platform-wide per GET /threads).
+  // Ordered newest createdAt first with id as the tiebreaker for a stable page
+  // boundary; the in-memory repo mirrors the same order.
+  async findPage(
+    ctx: CallerContext,
+    { limit, offset }: { limit: number; offset: number },
+  ): Promise<{
+    threads: Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>
+    total: number
+  }> {
+    const scope = threadReadScope(ctx)
+    if (scope.kind === 'none') return { threads: [], total: 0 }
+
+    const order = [desc(threads.createdAt), desc(threads.id)] as const
+    let total: number
+    let threadRows: Thread[]
+
+    if (scope.kind === 'all') {
+      total = (await this.db.select({ value: count() }).from(threads))[0]?.value ?? 0
+      threadRows = (await this.db
+        .select(threadColumns)
+        .from(threads)
+        .orderBy(...order)
+        .limit(limit)
+        .offset(offset)).map(toThread)
+    } else if (scope.kind === 'operator') {
+      const where = eq(threads.operatorId, scope.operatorId)
+      total = (await this.db.select({ value: count() }).from(threads).where(where))[0]?.value ?? 0
+      threadRows = (await this.db
+        .select(threadColumns)
+        .from(threads)
+        .where(where)
+        .orderBy(...order)
+        .limit(limit)
+        .offset(offset)).map(toThread)
+    } else {
+      // participant: join through thread_participants (one row per thread, given the
+      // (threadId,userId) unique) so limit/offset + the count stay in SQL.
+      const where = eq(threadParticipants.userId, scope.userId)
+      total =
+        (await this.db
+          .select({ value: count() })
+          .from(threads)
+          .innerJoin(threadParticipants, eq(threadParticipants.threadId, threads.id))
+          .where(where))[0]?.value ?? 0
+      threadRows = (
+        (await this.db
+          .select(threadColumns)
+          .from(threads)
+          .innerJoin(threadParticipants, eq(threadParticipants.threadId, threads.id))
+          .where(where)
+          .orderBy(...order)
+          .limit(limit)
+          .offset(offset)) as Array<Parameters<typeof toThread>[0]>
+      ).map(toThread)
+    }
+
+    return { threads: await this.hydrate(threadRows), total }
+  }
+
+  // Attach each thread's participants and most-recent message in two batched
+  // round-trips. Shared by findAll and findPage so both shape rows identically.
+  private async hydrate(
+    threadRows: Thread[],
+  ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>> {
     const threadIds = threadRows.map((t) => t.id)
     if (threadIds.length === 0) return []
 
-    // Step 3: fetch all participants for those threads in one round-trip.
+    // Fetch all participants for those threads in one round-trip.
     const participantRows = (await this.db
       .select(participantColumns)
       .from(threadParticipants)
       .where(inArray(threadParticipants.threadId, threadIds))).map(toThreadParticipant)
 
-    // Step 4: fetch only the latest message per thread.
+    // Fetch only the latest message per thread.
     const lastMessageRows = await this.db.execute<RawMessageRow>(sql`
       SELECT DISTINCT ON ("threadId")
         "id", "threadId", "senderId", "content", "sourceLanguage", "translations", "createdAt"

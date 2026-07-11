@@ -46,8 +46,9 @@ export class MessageService {
     limit: number,
     offset: number,
   ): Promise<{ threads: ThreadListItem[]; total: number }> {
-    const all = await this.threadRepo.findAll(ctx)
-    return { threads: all.slice(offset, offset + limit), total: all.length }
+    // #1476: limit/offset + the total count are pushed into the repository query
+    // instead of loading every in-scope thread and slicing here.
+    return this.threadRepo.findPage(ctx, { limit, offset })
   }
 
   async getThread(ctx: CallerContext, id: string): Promise<ThreadDetail | undefined> {
