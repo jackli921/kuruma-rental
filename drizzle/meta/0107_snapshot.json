@@ -1,6 +1,6 @@
 {
-  "id": "0adcbad4-8fed-4408-91ff-6de971dd1eb2",
-  "prevId": "a28cc812-018c-48bf-90e9-676b15b95197",
+  "id": "bd29700e-ce25-4031-bd8d-2eff23969aa9",
+  "prevId": "0adcbad4-8fed-4408-91ff-6de971dd1eb2",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5258,7 +5258,7 @@
       "checkConstraints": {
         "consent_liability_booking_chk": {
           "name": "consent_liability_booking_chk",
-          "value": "(\"consent_acceptances\".\"consentType\" IN ('RENTER_LIABILITY', 'OPERATOR_RENTAL_TERMS')) = (\"consent_acceptances\".\"bookingId\" IS NOT NULL)"
+          "value": "(\"consent_acceptances\".\"consentType\"::text IN ('RENTER_LIABILITY', 'OPERATOR_RENTAL_TERMS')) = (\"consent_acceptances\".\"bookingId\" IS NOT NULL)"
         },
         "consent_operator_agreement_chk": {
           "name": "consent_operator_agreement_chk",

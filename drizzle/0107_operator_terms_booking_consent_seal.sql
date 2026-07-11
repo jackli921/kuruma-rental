@@ -1,4 +1,4 @@
 ALTER TABLE "consent_acceptances" DROP CONSTRAINT "consent_liability_booking_chk";--> statement-breakpoint
 DROP INDEX "consent_unique_booking_liability";--> statement-breakpoint
 CREATE UNIQUE INDEX "consent_unique_booking_liability" ON "consent_acceptances" USING btree ("bookingId","consentType") WHERE "consent_acceptances"."bookingId" IS NOT NULL;--> statement-breakpoint
-ALTER TABLE "consent_acceptances" ADD CONSTRAINT "consent_liability_booking_chk" CHECK (("consent_acceptances"."consentType" IN ('RENTER_LIABILITY', 'OPERATOR_RENTAL_TERMS')) = ("consent_acceptances"."bookingId" IS NOT NULL));
+ALTER TABLE "consent_acceptances" ADD CONSTRAINT "consent_liability_booking_chk" CHECK (("consent_acceptances"."consentType"::text IN ('RENTER_LIABILITY', 'OPERATOR_RENTAL_TERMS')) = ("consent_acceptances"."bookingId" IS NOT NULL));
