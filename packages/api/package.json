@@ -8,6 +8,7 @@
     "dev": "wrangler dev",
     "build": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy --outdir dist --var SENTRY_RELEASE:$(git rev-parse HEAD)",
+    "deploy:production": "wrangler deploy --env production --outdir dist --var SENTRY_RELEASE:$(git rev-parse HEAD)",
     "sentry:sourcemaps": "sentry-cli sourcemaps upload --org \"$SENTRY_ORG\" --project \"$SENTRY_PROJECT_API\" --release \"$SENTRY_RELEASE\" dist",
     "test": "vitest run",
     "test:watch": "vitest",
