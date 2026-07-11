@@ -750,6 +750,13 @@
       "when": 1783468694544,
       "tag": "0106_consent_published_immutable",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1783780779564,
+      "tag": "0107_operator_terms_booking_consent_seal",
+      "breakpoints": true
     }
   ]
 }

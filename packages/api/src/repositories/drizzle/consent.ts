@@ -149,11 +149,19 @@ export class DrizzleConsentRepository implements ConsentRepository {
     return row ? toAcceptance(row) : undefined
   }
 
-  async findBookingAcceptance(bookingId: string): Promise<ConsentAcceptance | undefined> {
+  async findBookingAcceptance(
+    bookingId: string,
+    consentType: ConsentType,
+  ): Promise<ConsentAcceptance | undefined> {
     const [row] = await this.db
       .select()
       .from(consentAcceptances)
-      .where(eq(consentAcceptances.bookingId, bookingId))
+      .where(
+        and(
+          eq(consentAcceptances.bookingId, bookingId),
+          eq(consentAcceptances.consentType, consentType),
+        ),
+      )
       .limit(1)
     return row ? toAcceptance(row) : undefined
   }
