@@ -1,3 +1,4 @@
+import { captureHandledError } from '@/lib/observability/sentry'
 import {
   FEATURE_FLAGS,
   type FeatureFlagKey,
@@ -33,6 +34,7 @@ const BUILD_TIME_READERS: Partial<Record<FeatureFlagKey, () => boolean>> = {
   MULTI_CURRENCY: () => isEnvTrue(import.meta.env.VITE_FEATURE_MULTI_CURRENCY),
   OPERATOR_TODAY: () => isEnvTrue(import.meta.env.VITE_FEATURE_OPERATOR_TODAY),
   CALENDAR_QUICKVIEW: () => isEnvTrue(import.meta.env.VITE_FEATURE_CALENDAR_QUICKVIEW),
+  OPERATOR_TERMS: () => isEnvTrue(import.meta.env.VITE_FEATURE_OPERATOR_TERMS),
 }
 
 export function isBuildTimeEnabled(key: FeatureFlagKey): boolean {
@@ -82,12 +84,29 @@ function parseOverrides(body: unknown): FeatureFlagOverrides {
 /**
  * Read the runtime override map. Fail-safe: any transport or shape error yields
  * an empty map, so the UI falls back to build-time defaults rather than breaking.
+ *
+ * The try/catch matters because route flag GATES fetchQuery() this (not just the
+ * provider's error-tolerant useQuery): a bare fetch rejection (offline, DNS, abort)
+ * would otherwise propagate through fetchQuery and throw the whole route to its error
+ * boundary. Swallowing to {} keeps a gate degrading to the build-time default instead.
+ *
+ * Because we swallow rather than reject, React Query's retry never fires and the whole
+ * runtime-flag control plane can silently degrade to build defaults. So each fail-safe
+ * exit reports to Sentry first: the degradation stays observable instead of invisible.
  */
 export async function fetchFeatureFlagOverrides(): Promise<FeatureFlagOverrides> {
-  const response = await fetch(`${getApiBaseUrl()}/feature-flags`, { credentials: 'include' })
-  if (!response.ok) return {}
-  const body: unknown = await response.json()
-  return parseOverrides(body)
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/feature-flags`, { credentials: 'include' })
+    if (!response.ok) {
+      captureHandledError(new Error(`feature-flags fetch failed: ${response.status}`))
+      return {}
+    }
+    const body: unknown = await response.json()
+    return parseOverrides(body)
+  } catch (error) {
+    captureHandledError(error)
+    return {}
+  }
 }
 
 export function featureFlagsQueryOptions() {
@@ -98,5 +117,10 @@ export function featureFlagsQueryOptions() {
     // First paint uses the build-time default (no flash, no async gate on boot);
     // the map reconciles to server overrides when the query resolves.
     initialData: {},
+    // ...but mark that initialData stale (React Query otherwise stamps supplied
+    // initialData as fetched "now"), so refetchOnMount pulls the runtime override on
+    // every fresh load instead of serving the baked-in defaults for staleTime. Without
+    // this a switchboard flip is invisible for ~60s on any fresh page load (#1486/#1476).
+    initialDataUpdatedAt: 0,
   })
 }

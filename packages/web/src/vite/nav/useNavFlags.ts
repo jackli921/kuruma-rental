@@ -12,6 +12,7 @@ export function useBusinessNavFlags(): BusinessNavFlags {
     messaging: useFeatureFlag('MESSAGING'),
     operatorTeam: useFeatureFlag('OPERATOR_TEAM'),
     operatorSettings: useFeatureFlag('OPERATOR_SETTINGS'),
+    operatorTerms: useFeatureFlag('OPERATOR_TERMS'),
   }
 }
 

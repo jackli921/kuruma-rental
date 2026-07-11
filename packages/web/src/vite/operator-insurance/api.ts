@@ -2,6 +2,8 @@ import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import { type WithOperatorId, buildScopeParam } from '@/vite/operator-context'
 import { INSURANCE_STATUSES } from '@kuruma/shared/enums'
+import { DEFAULT_LOCALE, type Locale } from '@kuruma/shared/i18n/locales'
+import { localizedTextSchema } from '@kuruma/shared/i18n/localized-text'
 import type { InsuranceOptionData } from '@kuruma/shared/types/insurance-option'
 import type {
   CreateInsuranceOptionInput,
@@ -22,12 +24,15 @@ export type { CreateInsuranceOptionInput, UpdateInsuranceOptionInput }
 
 // JSON-serialized InsuranceOption — dates arrive as ISO strings. Pinned to the
 // shared wire DTO with `satisfies` (#847) so a producer-side field drift fails to
-// compile here, not silently as a runtime ParseError. The API row type is fenced
-// to the same DTO in api `wire-contract.test.ts`, closing the seam at both ends.
+// compile here, not silently as a runtime ParseError. Catalog i18n (slice 3b): the
+// server resolves the self-authored `nameI18n` bundle to `?locale=` and returns a
+// single `resolvedName`; the raw bundle rides along so the edit form can prefill
+// each locale slot.
 const insuranceOptionSchema = z.object({
   id: z.string(),
   operatorId: z.string(),
-  name: z.string(),
+  resolvedName: z.string(),
+  nameI18n: localizedTextSchema.nullable(),
   description: z.string().nullable(),
   dailyPriceJpy: z.number(),
   // null = full cover (no deductible).
@@ -45,23 +50,27 @@ export const INSURANCE_QUERY_KEY = ['operator-insurance'] as const
 // `includeAll=true` — the bypass-role read default that satisfies the API's
 // cross-operator guard (this is what clears the admin 400; the parameterless read
 // previously sent neither flag). An operator session ignores it and auto-scopes.
+// `?locale=` resolves the self-authored name server-side (slice 3b); absent ⇒ EN.
 export async function fetchInsuranceOptions(
   pickedOperatorId?: string,
+  locale?: Locale,
 ): Promise<InsuranceOptionData[]> {
+  const localeParam = locale ? `&locale=${locale}` : ''
   const res = await fetch(
-    `${getApiBaseUrl()}/insurance-options?includeArchived=true&${buildScopeParam(pickedOperatorId)}`,
+    `${getApiBaseUrl()}/insurance-options?includeArchived=true&${buildScopeParam(pickedOperatorId)}${localeParam}`,
     { credentials: 'include' },
   )
   return unwrap(res, insuranceOptionSchema.array())
 }
 
-// The picked operator id is part of the cache key so switching context refetches
-// (and never serves another tenant's cached list). Optional param keeps any
-// no-arg caller working.
-export function insuranceOptionsQueryOptions(pickedOperatorId?: string) {
+// The picked operator id AND the locale are part of the cache key so switching
+// context or language refetches (and never serves another tenant's / locale's
+// cached list). Optional params keep any no-arg caller working.
+export function insuranceOptionsQueryOptions(pickedOperatorId?: string, locale?: Locale) {
+  const resolvedLocale = locale ?? DEFAULT_LOCALE
   return queryOptions({
-    queryKey: [...INSURANCE_QUERY_KEY, pickedOperatorId ?? 'all'] as const,
-    queryFn: () => fetchInsuranceOptions(pickedOperatorId),
+    queryKey: [...INSURANCE_QUERY_KEY, pickedOperatorId ?? 'all', resolvedLocale] as const,
+    queryFn: () => fetchInsuranceOptions(pickedOperatorId, resolvedLocale),
   })
 }
 

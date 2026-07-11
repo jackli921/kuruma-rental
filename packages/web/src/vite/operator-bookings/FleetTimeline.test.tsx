@@ -6,6 +6,7 @@ import en from '../../../messages/en.json'
 import { FleetTimeline } from './FleetTimeline'
 import type { CalendarBookingRow } from './api'
 import type { BlockCalendarEvent } from './calendar-events'
+import { shiftCalendarDate } from './calendar-view'
 
 const VEHICLES = [
   { id: 'v1', name: 'Corolla' },
@@ -184,6 +185,21 @@ describe('FleetTimeline keyboard + ARIA (#1349)', () => {
     expect(onSelectEvent).not.toHaveBeenCalled()
   })
 
+  it('promises a dialog only on block bars — a booking bar navigates, so it must not', () => {
+    // aria-haspopup="dialog" is a contract that activation opens an overlay. A block bar
+    // opens BlockDetailDialog (true); a booking bar navigates to a full page (false), so
+    // announcing a dialog would misinform screen-reader users — the defect this GA-gate fixes.
+    const blk = block({ id: 'blk7', title: 'Bodywork', reason: 'Bodywork', kind: 'MAINTENANCE' })
+    renderTimeline([row({ id: 'b1', renterName: 'Alice' })], { blocks: [blk] })
+    expect(screen.getByRole('button', { name: /Maintenance block: Bodywork/ })).toHaveAttribute(
+      'aria-haspopup',
+      'dialog',
+    )
+    expect(screen.getByRole('button', { name: /Booking: Alice/ })).not.toHaveAttribute(
+      'aria-haspopup',
+    )
+  })
+
   it('makes a booking exactly one keyboard stop, aria-hiding the redundant turnaround tail', () => {
     // Booked + tail both in-window: the booked band is the sole button; the tail bar
     // still renders for mouse users but is removed from the a11y tree (no second stop).
@@ -202,5 +218,242 @@ describe('FleetTimeline keyboard + ARIA (#1349)', () => {
   it('labels the whole board as a region for screen-reader navigation', () => {
     renderTimeline([row({ id: 'b1', renterName: 'Alice' })])
     expect(screen.getByRole('region', { name: /Fleet planning board/ })).toBeInTheDocument()
+  })
+})
+
+// #1471 (follow-up to #1349): after a date-range nav, keyboard/screen-reader focus can be
+// orphaned to <body>. When focus sat on a booking bar and that booking leaves the new
+// window, buildTimelineLayout clamps it out, React unmounts the focused bar node, and the
+// browser drops focus to <body>. It surfaces with VoiceOver/Safari, where clicking the
+// toolbar's Next does not first move focus to the button; Chromium masks it by focusing the
+// button on click. The board must return focus to the labelled region — a stable anchor
+// that always exists — while leaving focus alone when a live control (the Next button)
+// drove the nav.
+//
+// These `rerender` on the same tree, so they cover the in-place re-render path (the norm).
+// They lean on jsdom reverting document.activeElement to <body> when the focused node is
+// removed — which matches real browsers and is the load-bearing precondition. The slow-nav
+// remount path (route pendingComponent swap) is out of scope here and tracked in #1489.
+describe('FleetTimeline focus restoration after date navigation (#1471)', () => {
+  const DATE0 = new Date('2026-07-01T00:00:00.000Z')
+  // +14 days: Alice's 2026-07-03 booking falls wholly before the new window, so its bar
+  // (and the node that held focus) is removed — the reported focus-loss trigger.
+  const DATE_NEXT = shiftCalendarDate('timeline', DATE0, 1)
+  const alice = (): CalendarBookingRow => row({ id: 'b1', renterName: 'Alice' })
+
+  function element(date: Date, rows: CalendarBookingRow[]) {
+    return (
+      <IntlProvider locale="en" messages={en}>
+        <FleetTimeline
+          rows={rows}
+          vehicles={VEHICLES}
+          blocks={[]}
+          date={date}
+          locale="en"
+          onViewChange={vi.fn()}
+          onDateChange={vi.fn()}
+          onSelectEvent={vi.fn()}
+          onSelectBlock={vi.fn()}
+        />
+      </IntlProvider>
+    )
+  }
+
+  it('returns focus to the board region when a nav orphans the focused bar', () => {
+    const { rerender } = render(element(DATE0, [alice()]))
+    const bar = screen.getByRole('button', { name: /Booking: Alice/ })
+    bar.focus()
+    expect(bar).toHaveFocus()
+
+    rerender(element(DATE_NEXT, [alice()]))
+
+    // The booking left the window, so the bar that held focus is unmounted...
+    expect(screen.queryByRole('button', { name: /Booking: Alice/ })).not.toBeInTheDocument()
+    // ...and focus is reclaimed to the always-present region, not dropped to <body>.
+    expect(screen.getByRole('region', { name: /Fleet planning board/ })).toHaveFocus()
+  })
+
+  it('leaves focus on the toolbar control that drove the nav — never steals it', () => {
+    // When the Next button itself held focus (it survives the re-render), the restoration
+    // must not yank focus to the region, or rapid prev/next navigation would break. Guards
+    // against the fix regressing to an unconditional "always focus the region on nav".
+    const { rerender } = render(element(DATE0, [alice()]))
+    const next = screen.getByRole('button', { name: 'Next' })
+    next.focus()
+    expect(next).toHaveFocus()
+
+    rerender(element(DATE_NEXT, [alice()]))
+
+    expect(next).toHaveFocus()
+  })
+})
+
+// #1470 (follow-up to #1349): #1349 made every bar its own tab stop, so a dense board is
+// 100-200 sequential Tab presses. A roving tabindex collapses the board to ONE tab stop —
+// exactly one bar is tabIndex=0 at a time — and arrow keys move focus between bars in a 2D
+// grid (Left/Right along a row, Up/Down to the nearest-in-time bar in an adjacent row). The
+// pure timeline-roving tests pin the geometry; these pin that the shell wires keys to focus
+// and roves the single stop to follow it.
+describe('FleetTimeline roving tabindex (#1470)', () => {
+  // Alice (v1, Jul 3) and Bob (v1, Jul 5) share a row; Carol (v2, Jul 4) is the row below.
+  // Reading order is v1-then-v2, by start within a row: [Alice, Bob, Carol].
+  const alice = () => row({ id: 'b1', renterName: 'Alice', vehicleId: 'v1' })
+  const bob = () =>
+    row({
+      id: 'b2',
+      renterName: 'Bob',
+      vehicleId: 'v1',
+      startAt: '2026-07-05T09:00:00.000Z',
+      endAt: '2026-07-06T09:00:00.000Z',
+      effectiveEndAt: '2026-07-06T09:00:00.000Z',
+    })
+  const carol = () =>
+    row({
+      id: 'b3',
+      renterName: 'Carol',
+      vehicleId: 'v2',
+      startAt: '2026-07-04T09:00:00.000Z',
+      endAt: '2026-07-05T09:00:00.000Z',
+      effectiveEndAt: '2026-07-05T09:00:00.000Z',
+    })
+
+  const bar = (name: RegExp) => screen.getByRole('button', { name })
+  const tabbableBars = () =>
+    Array.from(document.querySelectorAll<HTMLElement>('[data-bar-id]')).filter(
+      (el) => el.getAttribute('tabindex') === '0',
+    )
+
+  it('collapses the board to one tab stop — only the first bar is tabIndex 0', () => {
+    renderTimeline([alice(), bob(), carol()])
+    const stops = tabbableBars()
+    expect(stops).toHaveLength(1)
+    expect(stops[0]).toHaveAttribute('data-bar-id', 'b1')
+    expect(bar(/Booking: Bob/)).toHaveAttribute('tabindex', '-1')
+    expect(bar(/Booking: Carol/)).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('ArrowRight moves focus to the next bar in the same row', () => {
+    renderTimeline([alice(), bob(), carol()])
+    bar(/Booking: Alice/).focus()
+    fireEvent.keyDown(bar(/Booking: Alice/), { key: 'ArrowRight' })
+    expect(bar(/Booking: Bob/)).toHaveFocus()
+  })
+
+  it('ArrowLeft clamps at the first bar in a row — no wrap into the previous row', () => {
+    renderTimeline([alice(), bob(), carol()])
+    bar(/Booking: Alice/).focus()
+    fireEvent.keyDown(bar(/Booking: Alice/), { key: 'ArrowLeft' })
+    expect(bar(/Booking: Alice/)).toHaveFocus()
+  })
+
+  it('ArrowDown crosses to the nearest-in-time bar in the row below', () => {
+    renderTimeline([alice(), bob(), carol()])
+    bar(/Booking: Alice/).focus()
+    fireEvent.keyDown(bar(/Booking: Alice/), { key: 'ArrowDown' })
+    expect(bar(/Booking: Carol/)).toHaveFocus()
+  })
+
+  it('roves the single tabIndex 0 stop to follow focus after an arrow move', () => {
+    renderTimeline([alice(), bob(), carol()])
+    bar(/Booking: Alice/).focus()
+    fireEvent.keyDown(bar(/Booking: Alice/), { key: 'ArrowRight' })
+    const stops = tabbableBars()
+    expect(stops).toHaveLength(1)
+    expect(stops[0]).toHaveAttribute('data-bar-id', 'b2')
+    expect(bar(/Booking: Alice/)).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('ArrowUp crosses to the nearest bar in the row above', () => {
+    // Only Alice in v1, so the nearest bar above Carol (v2) is unambiguous — pins Up wiring
+    // without leaning on the tie-break (covered in the pure tests).
+    renderTimeline([alice(), carol()])
+    bar(/Booking: Carol/).focus()
+    fireEvent.keyDown(bar(/Booking: Carol/), { key: 'ArrowUp' })
+    expect(bar(/Booking: Alice/)).toHaveFocus()
+  })
+
+  it('prevents the default page scroll on a handled arrow key', () => {
+    renderTimeline([alice(), bob(), carol()])
+    const target = bar(/Booking: Alice/)
+    target.focus()
+    const ev = createEvent.keyDown(target, { key: 'ArrowDown' })
+    fireEvent(target, ev)
+    expect(ev.defaultPrevented).toBe(true)
+  })
+
+  // The load-bearing contract between roving (#1470) and focus restoration (#1471): after an
+  // arrow move puts the stop on a bar, a date nav that drops that bar must re-home the sole
+  // tabIndex=0 to the new first bar (never a dead id, so Tab still enters) AND hand focus to
+  // the region — the two mechanisms cooperating, not fighting.
+  //
+  // Scope: this pins FleetTimeline IN ISOLATION. In the full app the #1489 app-wide
+  // RouteAnnouncer defers to this restore — it wraps <Outlet>, so its layout effect fires
+  // AFTER this component's and only acts as the cold-remount fallback (#1508). So the
+  // integrated behaviour matches this test: the board region wins, not the sr-only anchor.
+  it('re-homes the stop to the first bar and restores region focus when a nav drops the active bar', () => {
+    const DATE0 = new Date('2026-07-01T00:00:00.000Z')
+    const DATE_NEXT = shiftCalendarDate('timeline', DATE0, 1)
+    // Dave is out of the DATE0 window (early-July) but inside the +14d window, so he is the
+    // only bar left after the nav — the fallback target for the roving stop.
+    const dave = () =>
+      row({
+        id: 'b4',
+        renterName: 'Dave',
+        vehicleId: 'v1',
+        startAt: '2026-07-20T09:00:00.000Z',
+        endAt: '2026-07-21T09:00:00.000Z',
+        effectiveEndAt: '2026-07-21T09:00:00.000Z',
+      })
+    const el = (date: Date) => (
+      <IntlProvider locale="en" messages={en}>
+        <FleetTimeline
+          rows={[alice(), carol(), dave()]}
+          vehicles={VEHICLES}
+          blocks={[]}
+          date={date}
+          locale="en"
+          onViewChange={vi.fn()}
+          onDateChange={vi.fn()}
+          onSelectEvent={vi.fn()}
+          onSelectBlock={vi.fn()}
+        />
+      </IntlProvider>
+    )
+    const { rerender } = render(el(DATE0))
+
+    bar(/Booking: Alice/).focus()
+    fireEvent.keyDown(bar(/Booking: Alice/), { key: 'ArrowDown' })
+    expect(bar(/Booking: Carol/)).toHaveFocus() // Carol is now the roving stop
+
+    rerender(el(DATE_NEXT))
+
+    expect(screen.queryByRole('button', { name: /Booking: Carol/ })).not.toBeInTheDocument()
+    const stops = tabbableBars()
+    expect(stops).toHaveLength(1)
+    expect(stops[0]).toHaveAttribute('data-bar-id', 'b4') // fell back to the new first bar
+    expect(screen.getByRole('region', { name: /Fleet planning board/ })).toHaveFocus()
+  })
+})
+
+// #1503 (follow-up to #1470): the roving arrow-key affordance is invisible to a screen-reader
+// user until they guess it exists. This advertises it two ways: the board region carries an
+// accessible description naming the arrow keys (heard when focus lands on the region — the
+// #1471 restore entry point), and each interactive bar declares aria-keyshortcuts so a
+// focus-mode user who Tabs to a bar hears exactly which keys move focus. The keys named are
+// the ones handleItemKeyDown actually wires (#1470), so the advertisement is truthful.
+describe('FleetTimeline keyboard discoverability (#1503)', () => {
+  it('describes the board region with the arrow-key roving affordance', () => {
+    renderTimeline([row({ id: 'b1', renterName: 'Alice' })])
+    expect(
+      screen.getByRole('region', { name: /Fleet planning board/ }),
+    ).toHaveAccessibleDescription(/arrow keys/i)
+  })
+
+  it('advertises the exact roving shortcuts on each interactive bar', () => {
+    renderTimeline([row({ id: 'b1', renterName: 'Alice' })])
+    expect(screen.getByRole('button', { name: /Booking: Alice/ })).toHaveAttribute(
+      'aria-keyshortcuts',
+      'ArrowRight ArrowLeft ArrowDown ArrowUp Home End',
+    )
   })
 })

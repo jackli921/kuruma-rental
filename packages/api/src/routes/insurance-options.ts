@@ -5,7 +5,6 @@ import {
 } from '@kuruma/shared/validators/insurance-option'
 import { Hono } from 'hono'
 import {
-  FLEET_WRITE_ROLES,
   MANAGEMENT_READ_ROLES,
   requireAuth,
   requireUser,
@@ -22,7 +21,9 @@ import {
   parseBody,
   parseCrossOperatorRead,
   parseId,
+  parseLocale,
   parseScopedCreate,
+  requireFleetWriteRole,
   stripUndefined,
 } from './helpers'
 
@@ -45,10 +46,13 @@ export function createInsuranceOptionRoutes(
       // operator-private config (unlike the public vehicle catalog).
       if (!MANAGEMENT_READ_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
+      const locale = parseLocale(c)
+      if (!locale.ok) return locale.response
+
       const ctx = toCallerContext(user)
       const filters: InsuranceOptionFilters = { ...parseArchivableFilters(c) }
 
-      return ok(c, await service.findAll(ctx, parseCrossOperatorRead(c), filters))
+      return ok(c, await service.findAll(ctx, parseCrossOperatorRead(c), filters, locale.locale))
     })
     .get('/insurance-options/:id', async (c) => {
       const user = requireUser(c)
@@ -57,13 +61,20 @@ export function createInsuranceOptionRoutes(
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
 
-      const option = await service.findById(toCallerContext(user), idResult.id)
+      const locale = parseLocale(c)
+      if (!locale.ok) return locale.response
+
+      const option = await service.findById(toCallerContext(user), idResult.id, locale.locale)
       if (!option) return fail(c, 'Insurance option not found', 404)
       return ok(c, option)
     })
     .post('/insurance-options', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
+
+      const locale = parseLocale(c)
+      if (!locale.ok) return locale.response
 
       const ctx = toCallerContext(user)
       const parsed = await parseScopedCreate(
@@ -75,20 +86,24 @@ export function createInsuranceOptionRoutes(
       if (!parsed.ok) return parsed.response
       const { data: d, operatorId } = parsed
 
-      const result = await service.create(ctx, {
-        operatorId,
-        name: d.name,
-        description: d.description ?? null,
-        dailyPriceJpy: d.dailyPriceJpy,
-        deductibleJpy: d.deductibleJpy ?? null,
-        status: 'ACTIVE',
-      })
+      const result = await service.create(
+        ctx,
+        {
+          operatorId,
+          nameI18n: d.nameI18n,
+          description: d.description ?? null,
+          dailyPriceJpy: d.dailyPriceJpy,
+          deductibleJpy: d.deductibleJpy ?? null,
+        },
+        locale.locale,
+      )
       if (!result.ok) return failResult(c, result)
       return ok(c, result.option, 201)
     })
     .patch('/insurance-options/:id', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
@@ -96,22 +111,30 @@ export function createInsuranceOptionRoutes(
       const parsed = await parseBody(c, updateInsuranceOptionSchema)
       if (!parsed.ok) return parsed.response
 
+      const locale = parseLocale(c)
+      if (!locale.ok) return locale.response
+
       const result = await service.update(
         toCallerContext(user),
         idResult.id,
         stripUndefined(parsed.data),
+        locale.locale,
       )
       if (!result.ok) return failResult(c, result)
       return ok(c, result.option)
     })
     .delete('/insurance-options/:id', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
 
-      const result = await service.archive(toCallerContext(user), idResult.id)
+      const locale = parseLocale(c)
+      if (!locale.ok) return locale.response
+
+      const result = await service.archive(toCallerContext(user), idResult.id, locale.locale)
       if (!result.ok) return failResult(c, result)
       return ok(c, result.option)
     })

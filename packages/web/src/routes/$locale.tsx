@@ -5,6 +5,7 @@ import { CurrencyProvider } from '@/vite/currency'
 import { isLocale } from '@/vite/i18n/locale'
 import { messagesQueryOptions } from '@/vite/i18n/messages'
 import { Navbar } from '@/vite/nav/Navbar'
+import { RouteAnnouncer } from '@/vite/nav/RouteAnnouncer'
 import { Outlet, createFileRoute, notFound } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { IntlProvider } from 'use-intl'
@@ -35,7 +36,14 @@ function LocaleLayout() {
           <ViewModeProvider>
             <LayoutPreferenceProvider>
               <Navbar />
-              <Outlet />
+              {/* #1489/#1508: app-wide focus-on-navigate anchor; mounted here (a stable parent
+                  that survives child route + pendingComponent swaps) so a navigation never
+                  strands screen-reader focus on <body>. It WRAPS <Outlet> (not a preceding
+                  sibling) so its restore effect fires AFTER any per-component restorer nested
+                  inside — the announcer is the fallback, the more-specific restorer wins. */}
+              <RouteAnnouncer>
+                <Outlet />
+              </RouteAnnouncer>
             </LayoutPreferenceProvider>
           </ViewModeProvider>
         </CurrencyProvider>

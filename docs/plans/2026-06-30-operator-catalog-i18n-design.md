@@ -1,5 +1,8 @@
 # Operator Catalog Content i18n (add-ons + insurance)
 
+> **Superseded 2026-07-07 by `docs/plans/2026-07-03-operator-custom-items-and-catalog-killswitch.md`.**
+> That revision pivoted the operator catalog to **purely self-authored** names (`nameI18n`) instead of the platform-template picker this doc designs. The picker was retired for add-ons (slice 1) and insurance (slice 3), so the **template backfill/audit code and the once-planned PR2 `templateId` NOT-NULL flip / `name`-column drop were abandoned, and the backfill/audit deleted in slice 3c (#1437).** `templateId` plus the `insurance_templates`/`add_on_templates` tables stay as dormant, nullable scaffolding (never dropped - that would be destructive). Everything below is kept for design history; where it says a column becomes NOT NULL "in PR2 (slice 5)", that flip is not happening.
+
 Status: design COMPLETE - v6 (round-6: owner P1/P2/P3 - keeper tiebreaker reads pre-migration `description` not the not-yet-populated `descriptionOverride`, a shared `DbOrTx` backfill handle type, and the corrected `requirePlatformRead`/`requirePlatformAdmin` guard names; all folded - see "## Round 6 review findings"). v5/v4 folded. Ready to implement slice 1.
 Date: 2026-06-30.
 Branch-off: implement off `develop` (post-#1109), where all `booking-creation.ts`/`storefronts.ts` cites resolve; the `docs/dashboard-buildout-plan` branch this was authored on is many commits behind and shows the pre-#1109 layout.

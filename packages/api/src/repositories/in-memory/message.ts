@@ -1,4 +1,9 @@
-import { type CallerContext, PRIVILEGED_ROLES, requireOperatorScope } from '../../middleware/auth'
+import {
+  type CallerContext,
+  NotFoundError,
+  PRIVILEGED_ROLES,
+  requireOperatorScope,
+} from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Message } from '../../stores'
 import { threadReadScope } from '../../tenancy'
@@ -53,6 +58,11 @@ export class InMemoryMessageRepository implements MessageRepository {
     idempotencyKey?: string | null,
   ): Promise<MessageCreateResult> {
     requireOperatorScope(ctx)
+    // Defense-in-depth (#1205): refuse a write to a thread the caller can't reach,
+    // mirroring the Drizzle self-guard. findById is already scoped and in-memory
+    // cheap here, so a foreign thread reads as missing (NotFoundError -> 404).
+    const reachable = await this.threadRepo.findById(ctx, threadId)
+    if (!reachable) throw new NotFoundError('Thread not found')
     if (idempotencyKey && this.idempotencyIndex.has(idempotencyKey)) {
       const err = new Error('unique_idempotency_key violation') as Error & { code: string }
       err.code = PG_ERROR.UNIQUE_VIOLATION
@@ -66,7 +76,6 @@ export class InMemoryMessageRepository implements MessageRepository {
       content,
       sourceLanguage: null,
       translations: {},
-      idempotencyKey: idempotencyKey ?? null,
       createdAt: new Date(),
     }
     // A renter send (participant scope) bumps the operator's tenant-level unread;

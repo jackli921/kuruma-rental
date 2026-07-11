@@ -32,7 +32,10 @@ export function OperatorInsuranceView({ options, scope }: OperatorInsuranceViewP
   const [archiving, setArchiving] = useState<InsuranceOptionData | null>(null)
 
   // API already returns name-asc, but defend against drift.
-  const sorted = useMemo(() => [...options].sort((a, b) => a.name.localeCompare(b.name)), [options])
+  const sorted = useMemo(
+    () => [...options].sort((a, b) => a.resolvedName.localeCompare(b.resolvedName)),
+    [options],
+  )
 
   return (
     <div className="space-y-6">

@@ -18,8 +18,6 @@
     "./db/seed-data": "./src/db/seed-data/index.ts",
     "./db/seed-id": "./src/db/seed-id.ts",
     "./db/backfill-regions": "./src/db/backfill-regions.ts",
-    "./db/backfill-catalog-templates": "./src/db/backfill-catalog-templates.ts",
-    "./db/backfill-insurance-templates": "./src/db/backfill-insurance-templates.ts",
     "./db/backfill-photo-refs": "./src/db/backfill-photo-refs.ts",
     "./db/backfill-vehicle-expiry": "./src/db/backfill-vehicle-expiry.ts",
     "./validators/auth": "./src/validators/auth.ts",
@@ -83,7 +81,8 @@
     "./validators/translation": "./src/validators/translation.ts",
     "./validators/document": "./src/validators/document.ts",
     "./validators/provider-invite": "./src/validators/provider-invite.ts",
-    "./validators/feature-flags": "./src/validators/feature-flags.ts"
+    "./validators/feature-flags": "./src/validators/feature-flags.ts",
+    "./validators/consent-documents": "./src/validators/consent-documents.ts"
   },
   "scripts": {
     "test": "vitest run",

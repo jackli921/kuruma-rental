@@ -1,3 +1,4 @@
+import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -8,7 +9,20 @@ import { createTranslateRoutes } from '../../src/routes/translate'
 import { MessageTranslationService } from '../../src/services/message-translation'
 import { testAuthMiddleware } from '../helpers/auth'
 
-function appWith(messageRepo: InMemoryMessageRepository) {
+/** In-process stand-in for the CF native rate-limit binding: counts per key and
+ *  denies past `limit`, mirroring the vehicle-photo rate-limit test double. */
+function createFakeLimiter(limit: number): RateLimitBinding {
+  const counts = new Map<string, number>()
+  return {
+    async limit({ key }) {
+      const next = (counts.get(key) ?? 0) + 1
+      counts.set(key, next)
+      return { success: next <= limit }
+    },
+  }
+}
+
+function appWith(messageRepo: InMemoryMessageRepository, limiter?: RateLimitBinding) {
   const a = new Hono()
   const service = new MessageTranslationService(messageRepo, {
     translate: async (text, _src, target) => ({
@@ -17,7 +31,7 @@ function appWith(messageRepo: InMemoryMessageRepository) {
     }),
   })
   a.use('*', testAuthMiddleware('u1', 'RENTER'))
-  a.route('/', createTranslateRoutes(service))
+  a.route('/', createTranslateRoutes(service, limiter))
   return a
 }
 
@@ -97,5 +111,38 @@ describe('POST /messages/:id/translate', () => {
       body: JSON.stringify({ targetLanguage: 'xx' }),
     })
     expect(res.status).toBe(400)
+  })
+
+  // Messaging GA hardening (Refs #1476): each uncached (message, language) hits an
+  // external translation provider, so cap it per authenticated user (per-user beats
+  // the global per-IP limiter behind NAT). The limiter runs before the handler.
+  it('returns 429 once the per-user translate limit is exceeded', async () => {
+    const app = appWith(messageRepo, createFakeLimiter(1))
+
+    const first = await app.request(`/messages/${messageId}/translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetLanguage: 'en' }),
+    })
+    const second = await app.request(`/messages/${messageId}/translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetLanguage: 'zh' }),
+    })
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(429)
+  })
+
+  it('does not rate-limit when no binding is injected (local dev)', async () => {
+    const app = appWith(messageRepo)
+    for (let i = 0; i < 3; i++) {
+      const res = await app.request(`/messages/${messageId}/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetLanguage: 'en' }),
+      })
+      expect(res.status).toBe(200)
+    }
   })
 })

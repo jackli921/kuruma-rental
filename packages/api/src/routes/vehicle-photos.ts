@@ -1,6 +1,6 @@
 import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
 import { type Context, Hono } from 'hono'
-import { STAFF_ROLES, requireUser, toCallerContext } from '../middleware/auth'
+import { requireUser, toCallerContext } from '../middleware/auth'
 import {
   MAX_FILE_SIZE,
   MAX_PHOTOS_PER_VEHICLE,
@@ -13,6 +13,7 @@ import {
   ok,
   parseId,
   rejectOversizedBody,
+  requireFleetWriteRole,
 } from './helpers'
 
 // Up to MAX_PHOTOS_PER_VEHICLE files per request; cap the whole multipart body
@@ -41,7 +42,8 @@ export function createVehiclePhotoRoutes(
   return app
     .post('/vehicles/:id/photos', async (c) => {
       const user = requireUser(c)
-      if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
       const ctx = toCallerContext(user)
 
       const idResult = parseId(c)
@@ -62,7 +64,8 @@ export function createVehiclePhotoRoutes(
     })
     .delete('/vehicles/:id/photos', async (c) => {
       const user = requireUser(c)
-      if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
       const ctx = toCallerContext(user)
 
       const idResult = parseId(c)

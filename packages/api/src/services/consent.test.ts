@@ -12,6 +12,7 @@ function doc(over: Partial<ConsentDocument> = {}): ConsentDocument {
     type: 'RENTER_TOS',
     version: '1.0',
     locale: 'en',
+    operatorId: null,
     title: 'Terms',
     body: 'body',
     acceptanceLabel: 'I accept',
@@ -162,6 +163,42 @@ describe('ConsentService.recordAcceptance — subject-shape validation', () => {
     )
     expect(r).toMatchObject({ ok: false, status: 400, error: 'SUBJECT_SHAPE_INVALID' })
   })
+
+  it('refuses OPERATOR_RENTAL_TERMS on the self-serve accept path (booking-path only)', async () => {
+    // Operator-terms is minted only inside the booking tx (sub-slice 4). recordAcceptance is
+    // the /consent/accept path, so it refuses the type outright — never a self-serve mint.
+    const repo = new InMemoryConsentRepository([
+      doc({ id: 'doc_terms_v1_en', type: 'OPERATOR_RENTAL_TERMS' }),
+    ])
+    const svc = new ConsentService(repo, () => KEY)
+    const r = await svc.recordAcceptance(
+      { documentId: 'doc_terms_v1_en', userId: 'user_1', actorRole: 'RENTER' },
+      { now: NOW },
+    )
+    expect(r).toMatchObject({ ok: false, status: 400, error: 'OPERATOR_TERMS_NOT_SELF_MINTABLE' })
+  })
+
+  it('refuses OPERATOR_RENTAL_TERMS even when a bookingId is supplied (defense-in-depth)', async () => {
+    // Guards the footgun: if a future acceptSchema ever carried a bookingId, a renter still
+    // cannot self-mint a signed operator-terms acceptance and bypass the booking-tx version pin.
+    const repo = new InMemoryConsentRepository([
+      doc({ id: 'doc_terms_v1_en', type: 'OPERATOR_RENTAL_TERMS' }),
+    ])
+    const svc = new ConsentService(repo, () => KEY)
+    const r = await svc.recordAcceptance(
+      {
+        documentId: 'doc_terms_v1_en',
+        userId: 'user_1',
+        actorRole: 'RENTER',
+        bookingId: 'booking_terms',
+      },
+      { now: NOW },
+    )
+    expect(r).toMatchObject({ ok: false, status: 400, error: 'OPERATOR_TERMS_NOT_SELF_MINTABLE' })
+    expect(
+      await repo.findBookingAcceptance('booking_terms', 'OPERATOR_RENTAL_TERMS'),
+    ).toBeUndefined()
+  })
 })
 
 describe('ConsentService.recordAcceptance — concurrent-race catch path', () => {
@@ -210,6 +247,12 @@ describe('ConsentService.recordAcceptance — concurrent-race catch path', () =>
       findAcceptancesByUser: (...args) => realRepo.findAcceptancesByUser(...args),
       findAcceptancesByBooking: (...args) => realRepo.findAcceptancesByBooking(...args),
       findAcceptances: (...args) => realRepo.findAcceptances(...args),
+      findLatestPublishedVersionForOperator: (...args) =>
+        realRepo.findLatestPublishedVersionForOperator(...args),
+      findPublishedOperatorDocument: (...args) => realRepo.findPublishedOperatorDocument(...args),
+      findOperatorDocuments: (...args) => realRepo.findOperatorDocuments(...args),
+      replaceOperatorDraftRows: (...args) => realRepo.replaceOperatorDraftRows(...args),
+      setOperatorVersionStatus: (...args) => realRepo.setOperatorVersionStatus(...args),
     }
 
     const svc = new ConsentService(wrappedRepo, () => KEY)

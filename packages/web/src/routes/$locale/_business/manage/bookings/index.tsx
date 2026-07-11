@@ -2,7 +2,6 @@ import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import {
   featureFlagsQueryOptions,
-  isCalendarQuickViewEnabled,
   isVisibleToViewer,
   resolveFeatureFlag,
   useFeatureFlag,
@@ -96,8 +95,12 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
   loader: async ({ context, deps }) => {
     // Warm the SAME range the component renders. The landing view depends on the
     // now-runtime-toggleable fleet-timeline flag (#1322), so read its effective value
-    // from the overrides map (warmed app-wide by FeatureFlagsProvider) to match.
-    const overrides = await context.queryClient.ensureQueryData(featureFlagsQueryOptions())
+    // to match. Use fetchQuery, not ensureQueryData (#1486): the flag map is seeded with
+    // a stale empty override, which ensureQueryData would return as-is on a hard load ->
+    // the warmer would pick the range from the build-time default while the component
+    // (via the refetching provider) renders from the live override, warming the wrong
+    // range. fetchQuery honors the stale seed and pulls the real override first.
+    const overrides = await context.queryClient.fetchQuery(featureFlagsQueryOptions())
     const timelineEnabled = resolveFeatureFlag(overrides, 'FLEET_TIMELINE')
     const view = parseCalendarView(deps.view, timelineEnabled)
     const { from, to } = calendarRange(view, parseCalendarDate(deps.date))
@@ -146,8 +149,9 @@ export function OperatorBookingsRoute() {
 
   // The booking quick-view chip (#1282) is gated OFF for the beta MVP (#1329). When
   // off, a booking band is a plain link-less span, so booking navigation moves back
-  // to the rbc event-click (handleSelectEvent) — the pre-#1282 baseline.
-  const quickViewEnabled = isCalendarQuickViewEnabled()
+  // to the rbc event-click (handleSelectEvent) — the pre-#1282 baseline. Read via the
+  // runtime hook (#1479) so the /admin switchboard toggles it live.
+  const quickViewEnabled = useFeatureFlag('CALENDAR_QUICKVIEW')
 
   // Block dialogs (#1101): a schedule (create) form with an optional slot prefill,
   // and a click-to-view detail keyed on the selected block.

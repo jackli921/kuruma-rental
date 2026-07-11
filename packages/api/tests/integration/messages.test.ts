@@ -16,7 +16,13 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { CallerContext } from '../../src/middleware/auth'
 import { DrizzleMessageRepository, DrizzleThreadRepository } from '../../src/repositories/drizzle'
 import type { Db } from '../../src/repositories/drizzle'
-import { cleanupMessaging, createTestUsers, testDb } from './messaging-setup'
+import {
+  cleanupMessaging,
+  cleanupOperators,
+  createTestOperators,
+  createTestUsers,
+  testDb,
+} from './messaging-setup'
 
 // thread/message create open interactive transactions; inject a postgres-js
 // runner so they use the test DB over TCP instead of the default neon-serverless
@@ -29,10 +35,15 @@ const messageRepo = new DrizzleMessageRepository(txDb, runOnTestDb)
 const ctx = (userId: string): CallerContext => ({ userId, role: 'RENTER' })
 
 const createdUserIds: string[] = []
+const createdOperatorIds: string[] = []
 
 afterEach(async () => {
+  // Order matters: threads reference operators via an ON DELETE restrict FK, so
+  // clear the messaging rows (which drop the threads) before the operators.
   await cleanupMessaging(createdUserIds)
+  await cleanupOperators(createdOperatorIds)
   createdUserIds.length = 0
+  createdOperatorIds.length = 0
 })
 
 describe('DrizzleThreadRepository', () => {
@@ -117,6 +128,66 @@ describe('DrizzleThreadRepository', () => {
 
       const result = await threadRepo.findAll(ctx(loner!))
       expect(result).toEqual([])
+    })
+  })
+
+  // #1476: limit/offset + the total count are pushed into SQL so GET /threads
+  // never materialises every in-scope thread. Same contract the in-memory repo
+  // mirrors (src/repositories/in-memory/thread.test.ts).
+  describe('findPage', () => {
+    it('applies limit/offset in the query and returns the in-scope total, newest first', async () => {
+      const [alice, bob] = await createTestUsers(2)
+      createdUserIds.push(alice!, bob!)
+
+      const ids: string[] = []
+      for (let i = 0; i < 5; i++) {
+        const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+        ids.push(thread.id)
+        await new Promise((r) => setTimeout(r, 5)) // distinct createdAt for stable order
+      }
+
+      const page = await threadRepo.findPage(ctx(alice!), { limit: 2, offset: 1 })
+      expect(page.total).toBe(5)
+      expect(page.threads).toHaveLength(2)
+
+      // A full sweep is the reverse of insertion order (newest createdAt first)
+      // with no gaps or duplicates across page boundaries.
+      const p1 = await threadRepo.findPage(ctx(alice!), { limit: 2, offset: 0 })
+      const p2 = await threadRepo.findPage(ctx(alice!), { limit: 2, offset: 2 })
+      const p3 = await threadRepo.findPage(ctx(alice!), { limit: 2, offset: 4 })
+      const swept = [...p1.threads, ...p2.threads, ...p3.threads].map((t) => t.id)
+      expect(swept).toEqual([...ids].reverse())
+      expect(p3.threads).toHaveLength(1)
+    })
+
+    it('scopes total and page to the caller (no cross-participant leak)', async () => {
+      const [alice, bob, carol] = await createTestUsers(3)
+      createdUserIds.push(alice!, bob!, carol!)
+
+      const aliceThread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+      // A thread alice is NOT part of must not count toward her total or page.
+      await threadRepo.create(ctx(bob!), null, [bob!, carol!])
+
+      const page = await threadRepo.findPage(ctx(alice!), { limit: 10, offset: 0 })
+      expect(page.total).toBe(1)
+      expect(page.threads.map((t) => t.id)).toEqual([aliceThread.id])
+    })
+
+    it('hydrates participants and the most recent message per page row', async () => {
+      const [alice, bob] = await createTestUsers(2)
+      createdUserIds.push(alice!, bob!)
+
+      const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+      await messageRepo.create(ctx(alice!), thread.id, 'first')
+      await new Promise((r) => setTimeout(r, 5))
+      await messageRepo.create(ctx(bob!), thread.id, 'second')
+
+      const page = await threadRepo.findPage(ctx(alice!), { limit: 10, offset: 0 })
+      expect(page.threads).toHaveLength(1)
+      const t = page.threads[0]!
+      expect(t.participants).toHaveLength(2)
+      expect(t.lastMessage).not.toBeNull()
+      expect(t.lastMessage!.content).toBe('second')
     })
   })
 
@@ -329,6 +400,156 @@ describe('persistence across repo instances (the whole point of #28)', () => {
     expect(found).toBeDefined()
     expect(found!.messages).toHaveLength(1)
     expect(found!.messages[0]!.content).toBe('before restart')
+  })
+})
+
+// Operator tenant isolation against real Postgres (#1205). The Drizzle read scope
+// `threads.operatorId = ctx.operatorId` IS the cross-tenant renter-PII boundary, but
+// before this block it had ZERO real-pg coverage — every other ctx here is a RENTER,
+// so deleting the operator filter from the Drizzle repos would have shipped green.
+// An operator reads by TENANT, not participant membership, so the operator caller
+// needs no users row: its userId never reaches a FK on these read/markAsRead paths.
+describe('operator tenant isolation (#1205, real-pg)', () => {
+  const opCtx = (operatorId: string): CallerContext => ({
+    userId: `op-caller-${operatorId}`,
+    role: 'OPERATOR_OWNER',
+    operatorId,
+  })
+
+  // Seed a booking-less thread owned by `operatorId` with a renter participant and
+  // one renter message (the renter send bumps the tenant-level unread 0 -> 1).
+  async function seedOperatorThread(
+    operatorId: string,
+    idempotencyKey: string | null = null,
+  ): Promise<{ threadId: string; messageId: string; idempotencyKey: string | null }> {
+    const [renter, staff] = await createTestUsers(2)
+    createdUserIds.push(renter!, staff!)
+    const thread = await threadRepo.create(
+      ctx(renter!),
+      null,
+      [renter!, staff!],
+      idempotencyKey,
+      operatorId,
+    )
+    const { message } = await messageRepo.create(ctx(renter!), thread.id, 'renter question')
+    return { threadId: thread.id, messageId: message.id, idempotencyKey }
+  }
+
+  it("cannot read another operator's thread (findAll / findById / findByThreadId)", async () => {
+    const [opA, opB] = await createTestOperators(2)
+    createdOperatorIds.push(opA!, opB!)
+    const b = await seedOperatorThread(opB!)
+
+    // findAll: A sees none of B's threads; B sees exactly its own.
+    expect(await threadRepo.findAll(opCtx(opA!))).toEqual([])
+    expect((await threadRepo.findAll(opCtx(opB!))).map((t) => t.id)).toEqual([b.threadId])
+
+    // findById: A gets undefined; B gets the thread.
+    expect(await threadRepo.findById(opCtx(opA!), b.threadId)).toBeUndefined()
+    expect((await threadRepo.findById(opCtx(opB!), b.threadId))?.id).toBe(b.threadId)
+
+    // findByThreadId (message listing): A gets []; B gets the message.
+    expect(await messageRepo.findByThreadId(opCtx(opA!), b.threadId)).toEqual([])
+    expect(
+      (await messageRepo.findByThreadId(opCtx(opB!), b.threadId)).map((m) => m.content),
+    ).toEqual(['renter question'])
+  })
+
+  it("cannot resolve another operator's message by id", async () => {
+    const [opA, opB] = await createTestOperators(2)
+    createdOperatorIds.push(opA!, opB!)
+    const b = await seedOperatorThread(opB!)
+
+    expect(await messageRepo.findById(opCtx(opA!), b.messageId)).toBeUndefined()
+    expect((await messageRepo.findById(opCtx(opB!), b.messageId))?.id).toBe(b.messageId)
+  })
+
+  it("cannot resolve another operator's thread by idempotency key", async () => {
+    // findByIdempotencyKey has its own operator filter (a replayed key must not
+    // leak another tenant's thread, #328 + #1205) — cover it like the other reads.
+    const [opA, opB] = await createTestOperators(2)
+    createdOperatorIds.push(opA!, opB!)
+    const key = `idem-${crypto.randomUUID()}`
+    const b = await seedOperatorThread(opB!, key)
+
+    expect(await threadRepo.findByIdempotencyKey(opCtx(opA!), key)).toBeUndefined()
+    expect((await threadRepo.findByIdempotencyKey(opCtx(opB!), key))?.id).toBe(b.threadId)
+  })
+
+  it("cannot post a message into another operator's thread — the repo write self-guards (F2)", async () => {
+    // The route's getThread gate is the primary block, but the repo must not trust
+    // it: a caller that reaches messageRepo.create directly still cannot inject a
+    // message cross-tenant (a foreign thread reads as missing).
+    const [opA, opB] = await createTestOperators(2)
+    createdOperatorIds.push(opA!, opB!)
+    const b = await seedOperatorThread(opB!)
+
+    // Real sender users (messages.senderId FKs into users, unlike the scoped reads)
+    // so the ONLY thing stopping a cross-tenant write is the reachability guard —
+    // not an incidental FK failure on a synthetic id.
+    const [senderA, senderB] = await createTestUsers(2)
+    createdUserIds.push(senderA!, senderB!)
+    const ctxA: CallerContext = { userId: senderA!, role: 'OPERATOR_OWNER', operatorId: opA! }
+    const ctxB: CallerContext = { userId: senderB!, role: 'OPERATOR_OWNER', operatorId: opB! }
+
+    // Operator A (a fully valid caller) still cannot inject into B's thread.
+    await expect(messageRepo.create(ctxA, b.threadId, 'cross-tenant intrusion')).rejects.toThrow(
+      'Thread not found',
+    )
+    expect(
+      (await messageRepo.findByThreadId(opCtx(opB!), b.threadId)).map((m) => m.content),
+    ).toEqual(['renter question'])
+
+    // Positive control: operator B can still reply in its own thread.
+    const { message } = await messageRepo.create(ctxB, b.threadId, 'operator reply')
+    expect(message.content).toBe('operator reply')
+  })
+
+  it("cannot reply in another operator's thread — the route's findById 404 gate returns undefined", async () => {
+    // POST /threads/:id/messages runs getThread -> threadRepo.findById first and
+    // 404s before createMessage. So findById being undefined for operator A on
+    // operator B's thread IS the real-pg proof that A cannot reply in it (the repo
+    // create itself trusts the pre-checked threadId — the gate lives in the read).
+    const [opA, opB] = await createTestOperators(2)
+    createdOperatorIds.push(opA!, opB!)
+    const b = await seedOperatorThread(opB!)
+
+    expect(await threadRepo.findById(opCtx(opA!), b.threadId)).toBeUndefined()
+  })
+
+  it("markAsRead cannot clear another operator's tenant unread", async () => {
+    const [opA, opB] = await createTestOperators(2)
+    createdOperatorIds.push(opA!, opB!)
+    const b = await seedOperatorThread(opB!)
+
+    // The renter send set B's tenant-level unread to 1.
+    expect((await threadRepo.findById(opCtx(opB!), b.threadId))?.operatorUnreadCount).toBe(1)
+
+    // Operator A's markAsRead is a scoped no-op: its WHERE operatorId = A misses B's thread.
+    await threadRepo.markAsRead(opCtx(opA!), b.threadId)
+    expect((await threadRepo.findById(opCtx(opB!), b.threadId))?.operatorUnreadCount).toBe(1)
+
+    // Positive control: B clears its own tenant unread to 0.
+    await threadRepo.markAsRead(opCtx(opB!), b.threadId)
+    expect((await threadRepo.findById(opCtx(opB!), b.threadId))?.operatorUnreadCount).toBe(0)
+  })
+
+  it('an operator missing its operatorId is fail-closed — reads nothing', async () => {
+    const [opB] = await createTestOperators(1)
+    createdOperatorIds.push(opB!)
+    const b = await seedOperatorThread(opB!)
+
+    // No operatorId => threadReadScope returns { kind: 'none' } => every read is empty.
+    const noneCtx: CallerContext = { userId: 'unscoped-operator', role: 'OPERATOR_OWNER' }
+
+    expect(await threadRepo.findAll(noneCtx)).toEqual([])
+    expect(await threadRepo.findById(noneCtx, b.threadId)).toBeUndefined()
+    expect(await messageRepo.findById(noneCtx, b.messageId)).toBeUndefined()
+    expect(await messageRepo.findByThreadId(noneCtx, b.threadId)).toEqual([])
+
+    // Positive control: the same thread IS readable by its scoped owning operator,
+    // so the empty reads above are the missing-scope path, not a global lockout.
+    expect((await threadRepo.findById(opCtx(opB!), b.threadId))?.id).toBe(b.threadId)
   })
 })
 

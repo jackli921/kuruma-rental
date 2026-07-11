@@ -1,11 +1,12 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { RouteRetryError } from '@/vite/RouteRetryError'
+import { DEFAULT_LOCALE, isLocale } from '@/vite/i18n/locale'
 import { useOperatorScope } from '@/vite/operator-context'
 import { OperatorInsuranceView } from '@/vite/operator-insurance/OperatorInsuranceView'
 import { insuranceOptionsQueryOptions } from '@/vite/operator-insurance/api'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute } from '@tanstack/react-router'
-import { useTranslations } from 'use-intl'
+import { useLocale, useTranslations } from 'use-intl'
 
 // Operator insurance-option management (#530). URL `/<locale>/manage/insurance`
 // — behind the `_business` guard, so only business roles reach it. Tenant scoping
@@ -19,8 +20,10 @@ export const Route = createFileRoute('/$locale/_business/manage/insurance')({
   loaderDeps: ({ search }: { search: { operator?: string | undefined } }) => ({
     operator: search.operator,
   }),
-  loader: ({ context, deps }) =>
-    context.queryClient.ensureQueryData(insuranceOptionsQueryOptions(deps.operator)),
+  loader: ({ context, deps, params }) => {
+    const locale = isLocale(params.locale) ? params.locale : DEFAULT_LOCALE
+    return context.queryClient.ensureQueryData(insuranceOptionsQueryOptions(deps.operator, locale))
+  },
   pendingComponent: PageSkeleton,
   errorComponent: OperatorInsuranceError,
   component: OperatorInsuranceRoute,
@@ -29,7 +32,11 @@ export const Route = createFileRoute('/$locale/_business/manage/insurance')({
 function OperatorInsuranceRoute() {
   const t = useTranslations('business.insurance')
   const scope = useOperatorScope()
-  const { data: options } = useSuspenseQuery(insuranceOptionsQueryOptions(scope.pickedOperatorId))
+  const rawLocale = useLocale()
+  const locale = isLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE
+  const { data: options } = useSuspenseQuery(
+    insuranceOptionsQueryOptions(scope.pickedOperatorId, locale),
+  )
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">

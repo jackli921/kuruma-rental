@@ -88,6 +88,7 @@
     "classes": "车型",
     "locations": "取还点",
     "insurance": "保险",
+    "terms": "租赁条款",
     "fees": "费用",
     "addOns": "附加项目",
     "menu": "菜单",
@@ -104,7 +105,8 @@
     "newBookings": "{count} 个新订单",
     "unreadMessages": "{count} 条未读消息",
     "settings": "设置",
-    "team": "团队"
+    "team": "团队",
+    "routeAnnouncerLabel": "页面内容"
   },
   "acriss": {
     "MCAR": "微型车",
@@ -296,6 +298,7 @@
         },
         "board": {
           "label": "车队排期板，{range}",
+          "keyboardHint": "使用方向键在预订之间移动，按 Enter 或空格键打开预订。",
           "bookingBar": "{vehicle}。预订：{renter}，{status}，{range}",
           "blockBar": "{vehicle}。{kind}封锁：{title}，{range}"
         }
@@ -744,8 +747,10 @@
         "noDeductible": "无免赔额（全额承保）"
       },
       "form": {
-        "name": "选项名称",
-        "namePlaceholder": "例如：标准保险",
+        "nameEn": "名称（英文）",
+        "nameJa": "名称（日文）",
+        "nameZh": "名称（中文）",
+        "customNameNudge": "日文或中文留空时，游客将看到英文。填写两者可覆盖更多租客。",
         "description": "描述",
         "descriptionPlaceholder": "例如：包含车辆损失免责（CDW）。",
         "dailyPrice": "每日价格（日元）",
@@ -754,6 +759,38 @@
         "deductibleHint": "若为无免赔额的全额承保，请保持关闭。",
         "deductible": "免赔额（日元）",
         "save": "保存选项",
+        "saving": "保存中...",
+        "cancel": "取消"
+      }
+    },
+    "terms": {
+      "title": "租赁条款",
+      "subtitle": "编写租客预订车辆时需要同意的租赁协议。",
+      "addOption": "新条款",
+      "addSubtitle": "编写租赁条款的新草稿。",
+      "editDraft": "编辑草稿",
+      "editSubtitle": "更新租赁条款草稿。",
+      "publish": "发布",
+      "publishing": "发布中...",
+      "archiveAction": "归档",
+      "archiveTitle": "归档版本 {version}？",
+      "archiveDescription": "租客将不再看到此版本。它将保留在列表中供您查阅。",
+      "archiveConfirm": "归档",
+      "archiving": "归档中...",
+      "empty": "暂无租赁条款。租客目前只能看到平台条款。",
+      "loadError": "无法加载租赁条款",
+      "retry": "重试",
+      "effectiveFrom": "自 {date} 起生效",
+      "status": { "DRAFT": "草稿", "PUBLISHED": "已发布", "ARCHIVED": "已归档" },
+      "form": {
+        "localeEn": "英语（必填）",
+        "localeJa": "日语",
+        "localeZh": "中文",
+        "localeNudge": "日语或中文为空时，游客将看到英语版本。请完整填写语言内容后方可使用。",
+        "docTitle": "标题",
+        "body": "条款内容",
+        "acceptanceLabel": "同意复选框标签",
+        "save": "保存草稿",
         "saving": "保存中...",
         "cancel": "取消"
       }

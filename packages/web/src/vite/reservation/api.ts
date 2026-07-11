@@ -39,10 +39,10 @@ export type ReservationInsuranceOption = StorefrontInsuranceData
 // cross-tenant leaks). A 404 (unknown/archived storefront) surfaces as an
 // ApiError so the wizard loader can bounce the renter back to search.
 //
-// Catalog i18n slice 2 (#1315): add-on name/description are templated + resolved
-// server-side to `?locale=`, so the renter read threads its route locale (absent
-// ⇒ server default EN). A bad locale is a 400 the server never caches, so the
-// wizard only ever passes a validated `Locale`. Insurance stays EN until slice 3.
+// Catalog i18n (#1315 add-ons slice 2, #1437 insurance slice 3b): add-on and
+// insurance names are resolved server-side to `?locale=`, so the renter read
+// threads its route locale (absent ⇒ server default EN). A bad locale is a 400 the
+// server never caches, so the wizard only ever passes a validated `Locale`.
 export async function fetchAddOns(
   locationId: string,
   locale?: Locale,
@@ -57,9 +57,11 @@ export async function fetchAddOns(
 
 export async function fetchInsuranceOptions(
   locationId: string,
+  locale?: Locale,
 ): Promise<ReservationInsuranceOption[]> {
+  const localeParam = locale ? `?locale=${locale}` : ''
   const res = await fetch(
-    `${getApiBaseUrl()}/storefronts/${encodeURIComponent(locationId)}/insurance-options`,
+    `${getApiBaseUrl()}/storefronts/${encodeURIComponent(locationId)}/insurance-options${localeParam}`,
     { credentials: 'include' },
   )
   return unwrap(res, reservationInsuranceOptionSchema.array())

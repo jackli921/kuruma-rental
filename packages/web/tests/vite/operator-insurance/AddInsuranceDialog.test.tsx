@@ -13,12 +13,14 @@ vi.mock('@/vite/session', () => ({
 }))
 
 const SAVE = en.business.insurance.form.save
-const NAME_LABEL = en.business.insurance.form.name
+// #1437 slice 3: the single name input is now the en slot of a self-authored bundle.
+const NAME_LABEL = en.business.insurance.form.nameEn
 
 const createdRow = {
   id: 'ins1',
   operatorId: 'op_9',
-  name: 'Full cover',
+  resolvedName: 'Full cover',
+  nameI18n: { en: 'Full cover' },
   description: null,
   dailyPriceJpy: 0,
   deductibleJpy: null,
@@ -61,7 +63,7 @@ describe('AddInsuranceDialog create body scoping (P1a)', () => {
 
     expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('/insurance-options')
     expect(fetchSpy.mock.calls[0]?.[1]?.method).toBe('POST')
-    expect(postedBody()).toMatchObject({ name: 'Full cover', operatorId: 'op_9' })
+    expect(postedBody()).toMatchObject({ nameI18n: { en: 'Full cover' }, operatorId: 'op_9' })
   })
 
   it('omits operatorId when no operator is picked (operator session auto-scopes)', async () => {
@@ -69,6 +71,6 @@ describe('AddInsuranceDialog create body scoping (P1a)', () => {
     await submitWithName('Full cover')
 
     expect(postedBody()).not.toHaveProperty('operatorId')
-    expect(postedBody()).toMatchObject({ name: 'Full cover' })
+    expect(postedBody()).toMatchObject({ nameI18n: { en: 'Full cover' } })
   })
 })

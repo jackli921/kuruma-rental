@@ -1,12 +1,23 @@
+import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
 import { sendMessageSchema } from '@kuruma/shared/validators/message'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { requireUser, toCallerContext } from '../middleware/auth'
 import type { MessageService } from '../services/message'
 import { fail, ok, parseBody, parseId, parsePagination } from './helpers'
 
-export function createMessageRoutes(service: MessageService) {
+export function createMessageRoutes(service: MessageService, sendLimiter?: RateLimitBinding) {
+  const app = new Hono()
+
+  // Cap message sends per authenticated user so one account can't flood a thread.
+  // Per-user (not per-IP) so NAT'd callers get independent budgets; the global
+  // RATE_LIMITER still covers the per-IP case. Absent binding = unthrottled dev.
+  const userKey = (c: Context) => requireUser(c).id
+  if (sendLimiter) {
+    app.use('/threads/:id/messages', rateLimit(sendLimiter, userKey))
+  }
+
   return (
-    new Hono()
+    app
       .get('/threads', async (c) => {
         const ctx = toCallerContext(requireUser(c))
 

@@ -114,6 +114,7 @@ function makeInsurance(
   return ctx.insuranceOptionRepo.create({
     operatorId,
     name: 'CDW',
+    nameI18n: null,
     description: null,
     dailyPriceJpy: 1500,
     deductibleJpy: null,

@@ -12,6 +12,7 @@ import {
   type InsuranceOptionData,
   updateInsuranceOption,
 } from '@/vite/operator-insurance/api'
+import { buildNameBundle } from '@/vite/operator-insurance/name-bundle'
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
@@ -40,7 +41,7 @@ export function EditInsuranceDialog({ option, onOpenChange }: EditInsuranceDialo
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('editOption')}</DialogTitle>
-          <DialogDescription>{option?.name}</DialogDescription>
+          <DialogDescription>{option?.resolvedName}</DialogDescription>
         </DialogHeader>
         {error && (
           <p className="text-sm text-destructive px-1">
@@ -51,13 +52,22 @@ export function EditInsuranceDialog({ option, onOpenChange }: EditInsuranceDialo
           <InsuranceForm
             key={option.id}
             onSubmit={async (data) => {
-              await mutateAsync(data)
+              await mutateAsync({
+                nameI18n: buildNameBundle(data.nameEn, data.nameJa, data.nameZh),
+                description: data.description.trim() || null,
+                dailyPriceJpy: data.dailyPriceJpy,
+                deductibleJpy: data.deductibleJpy,
+              })
             }}
             onCancel={() => onOpenChange(false)}
             isSubmitting={isPending}
             defaultValues={{
-              name: option.name,
-              description: option.description,
+              // Prefill the locale slots; a legacy row (nameI18n null) seeds `en`
+              // from the server-resolved name so a price-only edit needn't re-type it.
+              nameEn: option.nameI18n?.en ?? option.resolvedName,
+              nameJa: option.nameI18n?.ja ?? '',
+              nameZh: option.nameI18n?.zh ?? '',
+              description: option.description ?? '',
               dailyPriceJpy: option.dailyPriceJpy,
               deductibleJpy: option.deductibleJpy,
             }}

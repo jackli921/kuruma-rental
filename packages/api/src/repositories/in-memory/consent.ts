@@ -1,4 +1,4 @@
-import type { ConsentType } from '@kuruma/shared/enums'
+import type { ConsentDocStatus, ConsentType } from '@kuruma/shared/enums'
 import { PG_ERROR } from '../../pg-errors'
 import type { ConsentAcceptance, ConsentDocument } from '../../stores'
 import type {
@@ -6,6 +6,7 @@ import type {
   ConsentAcceptanceQuery,
   ConsentRepository,
   NewConsentAcceptance,
+  NewConsentDocument,
 } from '../types'
 import { CONSENT_ACCEPTANCE_LIST_LIMIT } from '../types-consent'
 
@@ -74,8 +75,11 @@ export class InMemoryConsentRepository implements ConsentRepository {
     )
   }
 
-  async findBookingAcceptance(bookingId: string): Promise<ConsentAcceptance | undefined> {
-    return this.acceptances.find((a) => a.bookingId === bookingId)
+  async findBookingAcceptance(
+    bookingId: string,
+    consentType: ConsentType,
+  ): Promise<ConsentAcceptance | undefined> {
+    return this.acceptances.find((a) => a.bookingId === bookingId && a.consentType === consentType)
   }
 
   async findOperatorDocumentAcceptance(
@@ -138,15 +142,139 @@ export class InMemoryConsentRepository implements ConsentRepository {
     return row
   }
 
+  async findLatestPublishedVersionForOperator(
+    operatorId: string,
+    type: ConsentType,
+    now: Date,
+  ): Promise<string | undefined> {
+    return [...this.docs.values()]
+      .filter(
+        (d) =>
+          d.operatorId === operatorId &&
+          d.type === type &&
+          d.status === 'PUBLISHED' &&
+          d.effectiveFrom <= now,
+      )
+      .map((d) => d.version)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .at(-1)
+  }
+
+  async findPublishedOperatorDocument(
+    operatorId: string,
+    type: ConsentType,
+    version: string,
+    locale: string,
+  ): Promise<ConsentDocument | undefined> {
+    return [...this.docs.values()].find(
+      (d) =>
+        d.operatorId === operatorId &&
+        d.type === type &&
+        d.version === version &&
+        d.locale === locale &&
+        d.status === 'PUBLISHED',
+    )
+  }
+
+  async findOperatorDocuments(operatorId: string, type: ConsentType): Promise<ConsentDocument[]> {
+    return [...this.docs.values()].filter((d) => d.operatorId === operatorId && d.type === type)
+  }
+
+  async replaceOperatorDraftRows(
+    operatorId: string,
+    type: ConsentType,
+    version: string,
+    rows: NewConsentDocument[],
+  ): Promise<ConsentDocument[]> {
+    // Mirror the drizzle atomic rewrite + its unique seal (#1498): drop the prior
+    // DRAFT of this version, then insert — throwing the SAME 23505 / constraint
+    // name the real DB would if a surviving row already occupies (operatorId,
+    // type, version, locale). Keeps the InMemory <-> Drizzle parity the suite asserts.
+    //
+    // Validate BEFORE mutating so a clash aborts with the existing draft intact —
+    // the drizzle path runs delete+insert in one runTx, so a 23505 on insert rolls
+    // the delete back. `survivors` = everything that is NOT a prior DRAFT of this exact
+    // version (those rows are the ones being replaced); a new row clashes iff it matches
+    // a survivor, or a same-locale sibling already in this batch (the partial unique
+    // index rejects an intra-batch (operatorId,type,version,locale) dup too).
+    const isPriorDraft = (d: ConsentDocument) =>
+      d.operatorId === operatorId &&
+      d.type === type &&
+      d.version === version &&
+      d.status === 'DRAFT'
+    const survivors = [...this.docs.values()].filter((d) => !isPriorDraft(d))
+    const seen = new Set<string>()
+    for (const r of rows) {
+      const key = `${r.operatorId}|${r.type}|${r.version}|${r.locale}`
+      const clash =
+        seen.has(key) ||
+        survivors.some(
+          (d) =>
+            d.operatorId === r.operatorId &&
+            d.type === r.type &&
+            d.version === r.version &&
+            d.locale === r.locale,
+        )
+      if (clash) throw uniqueViolation('consent_documents_operator_tvl_unique')
+      seen.add(key)
+    }
+    for (const [id, d] of this.docs) {
+      if (isPriorDraft(d)) this.docs.delete(id)
+    }
+    const created: ConsentDocument[] = rows.map((r) => ({
+      ...r,
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }))
+    for (const d of created) this.docs.set(d.id, d)
+    return created
+  }
+
+  async setOperatorVersionStatus(p: {
+    operatorId: string
+    type: ConsentType
+    version: string
+    from: ConsentDocStatus
+    to: ConsentDocStatus
+    publishedAt: Date | null
+    now: Date
+  }): Promise<ConsentDocument[]> {
+    const updated: ConsentDocument[] = []
+    for (const [id, d] of this.docs) {
+      if (
+        d.operatorId === p.operatorId &&
+        d.type === p.type &&
+        d.version === p.version &&
+        d.status === p.from
+      ) {
+        const next: ConsentDocument = {
+          ...d,
+          status: p.to,
+          updatedAt: p.now,
+          publishedAt: p.publishedAt ?? d.publishedAt,
+        }
+        this.docs.set(id, next)
+        updated.push(next)
+      }
+    }
+    return updated
+  }
+
   // Priority early-returns are correct ONLY because the DB CHECK constraints
   // consent_liability_booking_chk and consent_operator_agreement_chk make the three
-  // partial-unique predicates mutually disjoint: bookingId≠null implies RENTER_LIABILITY,
-  // operatorId≠null implies OPERATOR_AGREEMENT, and the two are mutually exclusive.
-  // This in-memory double does NOT re-enforce those CHECKs — it assumes callers construct
-  // shape-valid rows. The Task 9 ConsentService subject-shape pre-check is the enforcing guard.
+  // partial-unique predicates mutually disjoint: bookingId≠null implies a per-booking type
+  // (RENTER_LIABILITY or OPERATOR_RENTAL_TERMS), operatorId≠null implies OPERATOR_AGREEMENT,
+  // and the two are mutually exclusive. This in-memory double does NOT re-enforce those CHECKs —
+  // it assumes callers construct shape-valid rows. The ConsentService subject-shape pre-check is
+  // the enforcing guard.
   private assertUnique(d: NewConsentAcceptance): void {
     if (d.bookingId !== null) {
-      if (this.acceptances.some((a) => a.bookingId === d.bookingId))
+      // §4.6: the seal is (bookingId, consentType) — liability and operator-terms coexist on
+      // one booking, but a duplicate of the SAME type on the same booking collides.
+      if (
+        this.acceptances.some((a) => a.bookingId === d.bookingId && a.consentType === d.consentType)
+      )
         throw uniqueViolation('consent_unique_booking_liability')
       return
     }

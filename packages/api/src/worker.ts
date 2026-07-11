@@ -18,7 +18,9 @@ import {
   buildNotificationRetryService,
   createApp,
 } from './index'
+import { reportStrandedFunds } from './observability/money-alerts'
 import { type SentryRuntimeEnv, resolveSentryOptions } from './observability/sentry-options'
+import { refundReconcilerStrandedAlert } from './services/payment/cancellation-refund-reconciler'
 
 let cachedApp: AppType | null = null
 
@@ -27,6 +29,22 @@ function getApp(): AppType {
     cachedApp = createApp()
   }
   return cachedApp
+}
+
+/**
+ * Wrap a cron job with an optional pure `alert` policy over its summary. Pre-computing the
+ * alert here keeps the loop below type-safe without casts (each job captures its own summary
+ * type S) while the escalation itself stays one place. A non-null alert means the job found a
+ * money-stuck / needs-a-human condition that must page beyond the info-level summary log.
+ */
+function cronJob<S>(name: string, run: () => Promise<S>, alert?: (summary: S) => string | null) {
+  return {
+    name,
+    execute: async (): Promise<{ summary: S; alert: string | null }> => {
+      const summary = await run()
+      return { summary, alert: alert?.(summary) ?? null }
+    },
+  }
 }
 
 const handler = {
@@ -51,14 +69,22 @@ const handler = {
     // captures them.
     const errors: unknown[] = []
     for (const job of [
-      { name: 'compliance-digest', run: () => buildComplianceDigestService().run() },
-      { name: 'refund-reconciler', run: () => buildCancellationRefundReconciler().run() },
-      { name: 'notification-retry', run: () => buildNotificationRetryService().run() },
-      { name: 'review-reveal-sweep', run: () => buildReviewRevealSweep().run() },
+      cronJob('compliance-digest', () => buildComplianceDigestService().run()),
+      cronJob(
+        'refund-reconciler',
+        () => buildCancellationRefundReconciler().run(),
+        refundReconcilerStrandedAlert,
+      ),
+      cronJob('notification-retry', () => buildNotificationRetryService().run()),
+      cronJob('review-reveal-sweep', () => buildReviewRevealSweep().run()),
     ]) {
       try {
-        const summary = await job.run()
+        const { summary, alert } = await job.execute()
         console.info(`[cron:${job.name}]`, JSON.stringify(summary))
+        // A completed-but-money-stuck sweep does NOT throw (poison rows are isolated), so
+        // it never reaches the catch below. Escalate the alert explicitly or it stays a
+        // console.info line that pages nobody.
+        if (alert) reportStrandedFunds(`[cron:${job.name}] ${alert}`, { summary })
       } catch (err) {
         console.error(`[cron:${job.name}] failed`, err)
         errors.push(err)

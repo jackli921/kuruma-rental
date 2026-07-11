@@ -12,6 +12,7 @@ import {
   INSURANCE_QUERY_KEY,
   createInsuranceOption,
 } from '@/vite/operator-insurance/api'
+import { buildNameBundle } from '@/vite/operator-insurance/name-bundle'
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
@@ -62,7 +63,13 @@ export function AddInsuranceDialog({
         )}
         <InsuranceForm
           onSubmit={async (data) => {
-            await mutateAsync(pickedOperatorId ? { ...data, operatorId: pickedOperatorId } : data)
+            const body: CreateInsuranceOptionInput = {
+              nameI18n: buildNameBundle(data.nameEn, data.nameJa, data.nameZh),
+              description: data.description.trim() || null,
+              dailyPriceJpy: data.dailyPriceJpy,
+              deductibleJpy: data.deductibleJpy,
+            }
+            await mutateAsync(pickedOperatorId ? { ...body, operatorId: pickedOperatorId } : body)
           }}
           onCancel={() => handleOpenChange(false)}
           isSubmitting={isPending}

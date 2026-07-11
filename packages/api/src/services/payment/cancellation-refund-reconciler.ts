@@ -10,6 +10,21 @@ export interface CancellationRefundReconcilerSummary {
   pending: number
 }
 
+/**
+ * Pure alert policy (Functional Core): a non-zero `failed` count means Stripe REJECTED
+ * one or more refunds, leaving those bookings stuck at REFUND_DUE and EXCLUDED from every
+ * later sweep (`drizzle/refund-reconciler.ts` filters out FAILED receipts) — so this run's
+ * summary is the ONLY signal the money is stranded. Returns the human-facing alert message,
+ * or null when the sweep drove no failures. Kept pure so the worker's Sentry wiring stays a
+ * one-liner (Imperative Shell) and the policy is unit-testable without the cron.
+ */
+export function refundReconcilerStrandedAlert(
+  summary: CancellationRefundReconcilerSummary,
+): string | null {
+  if (summary.failed <= 0) return null
+  return `${summary.failed} cancellation refund(s) FAILED at Stripe and are stranded at REFUND_DUE — manual reconciliation needed`
+}
+
 /** The one entry point the reconciler drives — the idempotent core shared with the
  *  eager fire (PaymentService satisfies this). Narrow by design (ISP): the backstop
  *  needs only to (re-)drive a refund, not the coordinator's `isBookingPaid` read. */

@@ -96,10 +96,20 @@ export function createStorefrontRoutes(
       const idResult = parseId(c, 'locationId')
       if (!idResult.ok) return idResult.response
 
+      // Catalog i18n (slice 3b): resolve names to the renter's locale. Parse
+      // BEFORE cachePublic — a bad ?locale= is a 400 that must never be cached
+      // (a cached error would pin the miss edge-wide until TTL).
+      const locale = parseLocale(c)
+      if (!locale.ok) return locale.response
+
       // The ACTIVE coverage a renter can add when booking at this storefront
       // (#392). Public + active-only + single-operator — see the service for the
       // [P0] seal rationale. 404 mirrors the vehicles route (unknown/archived).
-      const result = await detailService.getInsuranceOptions(PUBLIC_CONTEXT, idResult.id)
+      const result = await detailService.getInsuranceOptions(
+        PUBLIC_CONTEXT,
+        idResult.id,
+        locale.locale,
+      )
       if (!result.ok) return failResult(c, result)
       cachePublic(c, CACHE_SECONDS)
       return ok(c, result.data)

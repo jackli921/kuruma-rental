@@ -47,11 +47,13 @@ export class VehiclePhotoService {
       validated.push(result.ok)
     }
 
-    // #1260: the STAFF_ROLES gate is platform-only, so a PLATFORM_ADMIN reads
-    // every operator's vehicles and findById hands it any of them by raw id.
-    // Bind this photo write to the operator it picked. Placed after byte
-    // validation but before any R2 put, so a denied cross-tenant request never
-    // persists an object (mirrors MaintenanceService.toggleStatus).
+    // #1260/#1406: the FLEET_WRITE_ROLES gate admits all-scope platform admins AND
+    // tenant operators. An all-scope caller reads every operator's vehicles and
+    // findById hands it any of them by raw id, so bind this write to the operator it
+    // picked; an operator caller is already clamped to its own tenant by the scoped
+    // findById and the guard no-ops for it. Placed after byte validation but before
+    // any R2 put, so a denied cross-tenant request never persists an object (mirrors
+    // MaintenanceService.toggleStatus).
     const existing = await this.repo.findById(ctx, vehicleId)
     if (!existing) return { ok: false, status: 404, error: 'Vehicle not found' }
     const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)
@@ -113,11 +115,13 @@ export class VehiclePhotoService {
     url: string,
     actingOperatorId?: string,
   ): Promise<DeleteResult> {
-    // #1260: same acting-operator binding as uploadPhotos. Without it a platform
-    // admin could delete ANY operator's photo by raw id + url — the scoped
-    // removePhotoByUrl below clamps operator callers, but an `all`-scope caller
-    // needs the target operator named first. Denial uses the caller's own
-    // "Photo not found" so there is no cross-tenant existence oracle.
+    // #1260/#1406: same acting-operator binding as uploadPhotos. The
+    // FLEET_WRITE_ROLES gate admits operators (clamped to their own tenant by the
+    // scoped findById + removePhotoByUrl) AND all-scope platform admins. Without
+    // this bind an all-scope caller could delete ANY operator's photo by raw id +
+    // url, so it must name the target operator first; the guard no-ops for operator
+    // callers. Denial uses the caller's own "Photo not found" so there is no
+    // cross-tenant existence oracle.
     const existing = await this.repo.findById(ctx, vehicleId)
     if (!existing) return { ok: false, status: 404, error: 'Photo not found' }
     const denial = assertFleetWriteWithinOperator(ctx, existing.operatorId, actingOperatorId)

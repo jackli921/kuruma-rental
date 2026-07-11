@@ -55,6 +55,7 @@ import { createMessageRoutes } from './routes/messages'
 import { createNotificationRoutes } from './routes/notifications'
 import { createOperatorApplicationRoutes } from './routes/operator-applications'
 import { createOperatorTeamRoutes } from './routes/operator-team'
+import { createOperatorTermsRoutes } from './routes/operator-terms'
 import { createOperatorRoutes } from './routes/operators'
 import { createOverviewRoutes } from './routes/overview'
 import { createPaymentAnomalyRoutes } from './routes/payment-anomalies'
@@ -92,6 +93,7 @@ import { ConsentGateService } from './services/consent-gate'
 import { ConsentGovernanceService } from './services/consent-governance'
 import { resolveSigningKey } from './services/consent-signing'
 import { CustomerService } from './services/customer'
+import { MachineDescriptionTranslator } from './services/description-translation'
 import { documentVerificationGate } from './services/document-verification-gate'
 import type { EmailSender } from './services/email/email-sender'
 import { makeEnsureThread } from './services/ensure-thread'
@@ -116,6 +118,7 @@ import {
 } from './services/operator-recipients'
 import { OperatorSummaryService } from './services/operator-summary'
 import { OperatorTeamService } from './services/operator-team'
+import { OperatorTermsService } from './services/operator-terms'
 import { OverviewService } from './services/overview'
 import { PaymentAnomalyService } from './services/payment-anomaly'
 import { CancellationRefundReconciler } from './services/payment/cancellation-refund-reconciler'
@@ -206,6 +209,14 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const operatorApplicationLimiter =
     overrides?.operatorApplicationLimiter ??
     ((globalThis as Record<string, unknown>).OPERATOR_APPLICATION_LIMITER as
+      | RateLimitBinding
+      | undefined)
+  const messageSendLimiter =
+    overrides?.messageSendLimiter ??
+    ((globalThis as Record<string, unknown>).MESSAGE_SEND_LIMITER as RateLimitBinding | undefined)
+  const messageTranslateLimiter =
+    overrides?.messageTranslateLimiter ??
+    ((globalThis as Record<string, unknown>).MESSAGE_TRANSLATE_LIMITER as
       | RateLimitBinding
       | undefined)
 
@@ -393,15 +404,16 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     availabilityRepo,
     operatorRepo,
   )
-  // Messaging: if a staff user id is configured, every confirmed booking
-  // auto-creates a renter/staff thread for coordination (design doc
-  // `docs/plans/2026-04-14-messaging-design.md`).
-  const staffUserId = process.env.DEFAULT_STAFF_ID
+  // Messaging: every confirmed booking auto-creates the renter's coordination
+  // thread. Operators read-scope by thread.operatorId (#1205), so the thread
+  // carries the renter alone — the old shared DEFAULT_STAFF_ID participant
+  // (one global staff user seeded into EVERY tenant's threads) was dead weight
+  // and a latent cross-tenant membership, so it is gone.
   // Single post-commit seam (#393): thread autocreate (#335) + outbound
   // notifications, awaited in the service, each caught-and-logged. The dispatcher
   // wiring is shared with the #1125 retry-sweep cron via resolveNotificationDispatcher.
   const notificationDispatcher = resolveNotificationDispatcher(repos, emailSender, webBaseUrl)
-  const ensureThread = staffUserId ? makeEnsureThread({ threadRepo, staffUserId }) : async () => {}
+  const ensureThread = makeEnsureThread({ threadRepo })
   const postCommit = new BookingPostCommitDispatcher(ensureThread, notificationDispatcher)
   const renterDocumentService = new RenterDocumentService(renterDocumentRepo, documentStorage)
   // #459: gate new bookings on renter document verification only when the flag
@@ -483,6 +495,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
     resolveOperatorIdForWrite(ctx, inputOperatorId)
+  const operatorTermsService = new OperatorTermsService(consentRepo)
   const vehicleService = new VehicleService(vehicleRepo, resolveWriteOperatorId, photosPublicUrl)
   const locationService = new LocationService(locationRepo, bookingRepo, cachedGeocoder, regionRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
@@ -491,7 +504,12 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // off) and the add-on create path (reject a templateId when off) gate on ONE narrow
   // thunk (ISP) rather than the whole FeatureFlagsService.
   const isSharedCatalogEnabled = () => featureFlagsService.isEnabled('SHARED_CATALOG')
-  const addOnService = new AddOnService(addOnRepo, addOnTemplateRepo, isSharedCatalogEnabled)
+  const addOnService = new AddOnService(
+    addOnRepo,
+    addOnTemplateRepo,
+    new MachineDescriptionTranslator(translationProvider),
+    isSharedCatalogEnabled,
+  )
   const addOnTemplateService = new AddOnTemplateService(
     addOnTemplateRepo,
     addOnRepo,
@@ -601,12 +619,15 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createFeatureFlagsRoutes(featureFlagsService))
     .route('/', createAdminOverviewRoutes(adminOverviewService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
-    .route('/', createMessageRoutes(messageService))
+    .route('/', createMessageRoutes(messageService, messageSendLimiter))
     .route('/', createConsentRoutes(consentService))
     .route('/', createAdminConsentRoutes(consentGovernanceService))
     .route(
       '/',
-      createTranslateRoutes(new MessageTranslationService(messageRepo, translationProvider)),
+      createTranslateRoutes(
+        new MessageTranslationService(messageRepo, translationProvider),
+        messageTranslateLimiter,
+      ),
     )
     .route('/', createCustomerRoutes(customerService))
     .route('/', createUserRoutes(userDirectoryService))
@@ -614,6 +635,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createLocationRoutes(locationService, resolveWriteOperatorId))
     .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))
     .route('/', createAddOnRoutes(addOnService, resolveWriteOperatorId))
+    .route('/', createOperatorTermsRoutes(operatorTermsService, resolveWriteOperatorId))
     .route('/', createAddOnTemplateRoutes(addOnTemplateService))
     .route('/', createAdminTemplateRoutes(templateLibraryService))
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))

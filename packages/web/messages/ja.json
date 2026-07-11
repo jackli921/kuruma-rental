@@ -88,6 +88,7 @@
     "classes": "クラス",
     "locations": "拠点",
     "insurance": "保険",
+    "terms": "レンタル規約",
     "fees": "料金",
     "addOns": "オプション",
     "menu": "メニュー",
@@ -104,7 +105,8 @@
     "newBookings": "新規予約 {count}件",
     "unreadMessages": "未読メッセージ {count}件",
     "settings": "設定",
-    "team": "チーム"
+    "team": "チーム",
+    "routeAnnouncerLabel": "ページコンテンツ"
   },
   "acriss": {
     "MCAR": "ミニ",
@@ -296,6 +298,7 @@
         },
         "board": {
           "label": "配車ボード、{range}",
+          "keyboardHint": "矢印キーで予約間を移動し、Enterキーまたはスペースキーで予約を開きます。",
           "bookingBar": "{vehicle}。予約: {renter}、{status}、{range}",
           "blockBar": "{vehicle}。{kind}ブロック: {title}、{range}"
         }
@@ -744,8 +747,10 @@
         "noDeductible": "免責なし（フルカバー）"
       },
       "form": {
-        "name": "オプション名",
-        "namePlaceholder": "例：標準補償",
+        "nameEn": "名称（英語）",
+        "nameJa": "名称（日本語）",
+        "nameZh": "名称（中国語）",
+        "customNameNudge": "日本語・中国語が空欄の場合、旅行者には英語が表示されます。両方入力するとより多くの利用者に届きます。",
         "description": "説明",
         "descriptionPlaceholder": "例：車両損害補償（CDW）を含みます。",
         "dailyPrice": "1日あたりの料金（円）",
@@ -754,6 +759,38 @@
         "deductibleHint": "免責なしのフルカバーの場合はオフのままにします。",
         "deductible": "免責額（円）",
         "save": "オプションを保存",
+        "saving": "保存中...",
+        "cancel": "キャンセル"
+      }
+    },
+    "terms": {
+      "title": "レンタル規約",
+      "subtitle": "お客様が車を予約する際に同意するレンタル規約を作成してください。",
+      "addOption": "新しい規約",
+      "addSubtitle": "レンタル規約の新しいドラフトを作成します。",
+      "editDraft": "ドラフトを編集",
+      "editSubtitle": "レンタル規約のドラフトを更新します。",
+      "publish": "公開",
+      "publishing": "公開中...",
+      "archiveAction": "アーカイブ",
+      "archiveTitle": "バージョン {version} をアーカイブしますか？",
+      "archiveDescription": "お客様にはこのバージョンが表示されなくなります。記録として一覧に残ります。",
+      "archiveConfirm": "アーカイブ",
+      "archiving": "アーカイブ中...",
+      "empty": "レンタル規約がまだありません。現在、お客様にはプラットフォームの規約のみ表示されています。",
+      "loadError": "レンタル規約を読み込めませんでした",
+      "retry": "再試行",
+      "effectiveFrom": "{date} から有効",
+      "status": { "DRAFT": "ドラフト", "PUBLISHED": "公開中", "ARCHIVED": "アーカイブ済み" },
+      "form": {
+        "localeEn": "英語（必須）",
+        "localeJa": "日本語",
+        "localeZh": "中国語",
+        "localeNudge": "日本語または中国語が空白の場合、観光客には英語が表示されます。言語を使用するには完全に入力してください。",
+        "docTitle": "タイトル",
+        "body": "規約の本文",
+        "acceptanceLabel": "同意チェックボックスのラベル",
+        "save": "ドラフトを保存",
         "saving": "保存中...",
         "cancel": "キャンセル"
       }

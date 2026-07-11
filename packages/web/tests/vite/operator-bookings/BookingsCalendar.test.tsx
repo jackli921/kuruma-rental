@@ -1,4 +1,5 @@
 import { todayInJst } from '@/lib/datetime'
+import { FeatureFlagsProvider } from '@/vite/config'
 import { BookingsCalendar } from '@/vite/operator-bookings/BookingsCalendar'
 import type {
   BlockCalendarEvent,
@@ -6,6 +7,8 @@ import type {
   CalendarItem,
   CalendarResource,
 } from '@/vite/operator-bookings/calendar-events'
+import type { FeatureFlagOverrides } from '@kuruma/shared/feature-flags/registry'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import type { EventProps, SlotInfo } from 'react-big-calendar'
@@ -194,6 +197,43 @@ describe('BookingsCalendar event rendering (quick-view chip vs block band)', () 
     )
   }
 
+  // Runtime-override proof (#1479): CALENDAR_QUICKVIEW is now read via useFeatureFlag,
+  // so a server override must beat the build-time env. Render the calendar inside the
+  // real FeatureFlagsProvider with the ['feature-flags'] cache seeded (fresh for
+  // staleTime -> no network), so components.event captures the OVERRIDDEN flag; then
+  // render that event component in isolation. The same seam the #1322 flags use.
+  function renderEventWithOverride(item: CalendarItem, overrides: FeatureFlagOverrides) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    queryClient.setQueryData(['feature-flags'], overrides)
+    render(
+      <QueryClientProvider client={queryClient}>
+        <IntlProvider locale="en" messages={enMessages}>
+          <FeatureFlagsProvider>
+            <BookingsCalendar
+              events={[] as readonly CalendarItem[]}
+              resources={[] as readonly CalendarResource[]}
+              view="week"
+              date={new Date('2026-07-01T00:00:00.000Z')}
+              locale="en"
+              onViewChange={vi.fn()}
+              onDateChange={vi.fn()}
+              onSelectEvent={vi.fn()}
+            />
+          </FeatureFlagsProvider>
+        </IntlProvider>
+      </QueryClientProvider>,
+    )
+    const EventComp = (
+      calendarProps.components as { event: ComponentType<EventProps<CalendarItem>> }
+    ).event
+    return render(
+      <IntlProvider locale="en" messages={enMessages}>
+        {/* biome-ignore lint/suspicious/noExplicitAny: rbc injects the rest of EventProps at runtime */}
+        <EventComp {...({ event: item, title: item.title } as any)} />
+      </IntlProvider>,
+    )
+  }
+
   it('wires a custom event component onto rbc', () => {
     renderCalendar(vi.fn())
     expect(typeof (calendarProps.components as { event?: unknown }).event).toBe('function')
@@ -214,6 +254,19 @@ describe('BookingsCalendar event rendering (quick-view chip vs block band)', () 
   it('renders a booking as a plain band (no chip) when the quick-view flag is OFF (#1329)', () => {
     vi.stubEnv('VITE_FEATURE_CALENDAR_QUICKVIEW', undefined)
     const { container } = renderEvent(bookingItem)
+    expect(within(container).queryByRole('button')).toBeNull()
+    expect(within(container).getByText('Jane Doe')).toBeInTheDocument()
+  })
+
+  it('renders the quick-view chip when the CALENDAR_QUICKVIEW runtime override is ON despite the build-time env being OFF (#1479)', () => {
+    vi.stubEnv('VITE_FEATURE_CALENDAR_QUICKVIEW', undefined)
+    const { container } = renderEventWithOverride(bookingItem, { CALENDAR_QUICKVIEW: true })
+    expect(within(container).getByRole('button', { name: /Jane Doe/ })).toBeInTheDocument()
+  })
+
+  it('renders a booking as a plain band when the CALENDAR_QUICKVIEW runtime override is OFF despite the build-time env being ON (#1479)', () => {
+    vi.stubEnv('VITE_FEATURE_CALENDAR_QUICKVIEW', 'true')
+    const { container } = renderEventWithOverride(bookingItem, { CALENDAR_QUICKVIEW: false })
     expect(within(container).queryByRole('button')).toBeNull()
     expect(within(container).getByText('Jane Doe')).toBeInTheDocument()
   })

@@ -88,6 +88,7 @@
     "classes": "Classes",
     "locations": "Locations",
     "insurance": "Insurance",
+    "terms": "Rental terms",
     "fees": "Fees",
     "addOns": "Add-ons",
     "menu": "Menu",
@@ -104,7 +105,8 @@
     "newBookings": "{count, plural, one {# new booking} other {# new bookings}}",
     "unreadMessages": "{count, plural, one {# unread message} other {# unread messages}}",
     "settings": "Settings",
-    "team": "Team"
+    "team": "Team",
+    "routeAnnouncerLabel": "Page content"
   },
   "acriss": {
     "MCAR": "Mini",
@@ -296,6 +298,7 @@
         },
         "board": {
           "label": "Fleet planning board, {range}",
+          "keyboardHint": "Use the arrow keys to move between bookings; press Enter or Space to open one.",
           "bookingBar": "{vehicle}. Booking: {renter}, {status}, {range}",
           "blockBar": "{vehicle}. {kind} block: {title}, {range}"
         }
@@ -744,8 +747,10 @@
         "noDeductible": "No deductible (full cover)"
       },
       "form": {
-        "name": "Option name",
-        "namePlaceholder": "e.g. Standard Cover",
+        "nameEn": "Name (English)",
+        "nameJa": "Name (Japanese)",
+        "nameZh": "Name (Chinese)",
+        "customNameNudge": "Tourists see English wherever Japanese or Chinese is blank. Fill both to reach more renters.",
         "description": "Description",
         "descriptionPlaceholder": "e.g. Covers collision damage waiver.",
         "dailyPrice": "Daily price (yen)",
@@ -754,6 +759,38 @@
         "deductibleHint": "Leave off for full cover with no deductible.",
         "deductible": "Deductible (yen)",
         "save": "Save option",
+        "saving": "Saving...",
+        "cancel": "Cancel"
+      }
+    },
+    "terms": {
+      "title": "Rental terms",
+      "subtitle": "Write the rental agreement renters accept when they book your cars.",
+      "addOption": "New terms",
+      "addSubtitle": "Write a new draft of your rental terms.",
+      "editDraft": "Edit draft",
+      "editSubtitle": "Update your draft rental terms.",
+      "publish": "Publish",
+      "publishing": "Publishing...",
+      "archiveAction": "Archive",
+      "archiveTitle": "Archive version {version}?",
+      "archiveDescription": "Renters will no longer see this version. It stays in the list for your records.",
+      "archiveConfirm": "Archive",
+      "archiving": "Archiving...",
+      "empty": "No rental terms yet. Renters currently see only the platform terms.",
+      "loadError": "Couldn't load rental terms",
+      "retry": "Try again",
+      "effectiveFrom": "Effective {date}",
+      "status": { "DRAFT": "Draft", "PUBLISHED": "Published", "ARCHIVED": "Archived" },
+      "form": {
+        "localeEn": "English (required)",
+        "localeJa": "Japanese",
+        "localeZh": "Chinese",
+        "localeNudge": "Tourists see English wherever Japanese or Chinese is blank. Fill a language fully to use it.",
+        "docTitle": "Title",
+        "body": "Terms text",
+        "acceptanceLabel": "Agreement checkbox label",
+        "save": "Save draft",
         "saving": "Saving...",
         "cancel": "Cancel"
       }

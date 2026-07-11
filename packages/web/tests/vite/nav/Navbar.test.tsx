@@ -121,11 +121,12 @@ describe('Navbar', () => {
 
   it('shows the dashboard, operator bookings + fleet + classes + insurance links and business markers for a business user', () => {
     mockUseBadge.mockReturnValue({ count: 3 })
-    // Team + Settings + Messages are post-MVP add-ons gated behind feature flags;
-    // turn them on so this "full operator nav" assertion sees every route.
+    // Team + Settings + Messages + Rental terms are post-MVP add-ons gated behind
+    // feature flags; turn them all on so this "full operator nav" assertion sees every route.
     vi.stubEnv('VITE_FEATURE_OPERATOR_TEAM', 'true')
     vi.stubEnv('VITE_FEATURE_OPERATOR_SETTINGS', 'true')
     vi.stubEnv('VITE_FEATURE_MESSAGING', 'true')
+    vi.stubEnv('VITE_FEATURE_OPERATOR_TERMS', 'true')
     const { container } = renderNavbar(business)
     expect(screen.getByText('Dashboard').closest('a')).toHaveAttribute(
       'data-to',
@@ -156,6 +157,11 @@ describe('Navbar', () => {
     expect(screen.getByText('Insurance').closest('a')).toHaveAttribute(
       'data-to',
       '/$locale/manage/insurance',
+    )
+    // operator rental-terms authoring lives at /manage/terms (shown only because the flag above is on).
+    expect(screen.getByText('Rental terms').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/manage/terms',
     )
     // #530: operator pricing config (fees) lives at /manage/fees.
     expect(screen.getByText('Fees').closest('a')).toHaveAttribute('data-to', '/$locale/manage/fees')
@@ -194,22 +200,24 @@ describe('Navbar', () => {
     expect(screen.getAllByRole('status')).toHaveLength(1)
   })
 
-  it('hides Team + Settings nav in the beta MVP demo (their post-MVP flags are off)', () => {
+  it('hides Team + Settings + Terms nav in the beta MVP demo (their post-MVP flags are off)', () => {
     vi.stubEnv('VITE_FEATURE_OPERATOR_TEAM', undefined)
     vi.stubEnv('VITE_FEATURE_OPERATOR_SETTINGS', undefined)
+    vi.stubEnv('VITE_FEATURE_OPERATOR_TERMS', undefined)
     renderNavbar(business)
     // The MVP operator routes still render…
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
     expect(screen.getByText('Bookings')).toBeInTheDocument()
-    // …but the three post-MVP add-on routes are filtered out of the rendered nav.
+    // …but the four post-MVP add-on routes are filtered out of the rendered nav.
     // Messaging (#1205) is OFF in beta for an operator too (only the platform admin
-    // previews it), so it drops out alongside Team + Settings.
+    // previews it), so it drops out alongside Team + Settings + Rental terms.
     expect(screen.queryByText('Team')).toBeNull()
     expect(screen.queryByText('Settings')).toBeNull()
     expect(screen.queryByText('Messages')).toBeNull()
+    expect(screen.queryByText('Rental terms')).toBeNull()
     expect(screen.getByTestId('mobile-menu')).toHaveAttribute(
       'data-nav-count',
-      String(businessNavItems.length - 3),
+      String(businessNavItems.length - 4),
     )
   })
 

@@ -25,7 +25,12 @@ afterEach(() => fetchMock.mockReset())
 const option = {
   id: 'ins_1',
   operatorId: 'op_1',
-  name: 'Full cover',
+  // #1437 slice 3b: the read carries the resolved label (`resolvedName`) plus the
+  // raw self-authored bundle (`nameI18n`). A faithful row so the schema's
+  // localizedTextSchema actually parses (an omitted bundle would 500 the read as a
+  // ParseError).
+  resolvedName: 'Full cover',
+  nameI18n: { en: 'Full cover' },
   description: null,
   dailyPriceJpy: 2000,
   deductibleJpy: null,
@@ -63,6 +68,13 @@ describe('fetchInsuranceOptions', () => {
     expect(url).toContain('includeArchived=true')
   })
 
+  it('threads ?locale= so the server resolves resolvedName to the caller language (#1437)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [] }))
+    await fetchInsuranceOptions('op_9', 'ja')
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('locale=ja')
+  })
+
   it('throws an ApiError carrying the status on a failure envelope', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: false, error: 'Forbidden' }, 403))
     await expect(fetchInsuranceOptions()).rejects.toThrow('Forbidden')
@@ -81,7 +93,7 @@ describe('createInsuranceOption', () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: option }, 201))
 
     const input = {
-      name: 'Full cover',
+      nameI18n: { en: 'Full cover' },
       description: null,
       dailyPriceJpy: 2000,
       deductibleJpy: null,
@@ -101,9 +113,9 @@ describe('createInsuranceOption', () => {
     fetchMock.mockResolvedValue(
       jsonResponse({ success: false, error: 'A plan with this name already exists' }, 409),
     )
-    await expect(createInsuranceOption({ name: 'dupe', dailyPriceJpy: 1 }, 'csrf')).rejects.toThrow(
-      'already exists',
-    )
+    await expect(
+      createInsuranceOption({ nameI18n: { en: 'dupe' }, dailyPriceJpy: 1 }, 'csrf'),
+    ).rejects.toThrow('already exists')
   })
 })
 
@@ -125,7 +137,7 @@ describe('updateInsuranceOption', () => {
 
   it('encodes the id into the path', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: option }))
-    await updateInsuranceOption('a/b', { name: 'x' }, 'csrf')
+    await updateInsuranceOption('a/b', { nameI18n: { en: 'x' } }, 'csrf')
     const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/insurance-options/a%2Fb')
   })
@@ -152,11 +164,16 @@ describe('archiveInsuranceOption', () => {
 describe('insuranceOptionsQueryOptions', () => {
   it('exposes the stable INSURANCE_QUERY_KEY prefix so writes can invalidate every scope', () => {
     // INSURANCE_QUERY_KEY is the prefix; the per-scope key appends the picked
-    // operator (or 'all') so switching context refetches without serving another
-    // tenant's cached list. A prefix invalidate
-    // (invalidateQueries({ queryKey: INSURANCE_QUERY_KEY })) still clears all scopes.
+    // operator (or 'all') AND the locale (default 'en') so switching context or
+    // language refetches without serving another tenant's / locale's cached list. A
+    // prefix invalidate (invalidateQueries({ queryKey: INSURANCE_QUERY_KEY })) still
+    // clears all scopes.
     expect(INSURANCE_QUERY_KEY).toEqual(['operator-insurance'])
-    expect(insuranceOptionsQueryOptions().queryKey).toEqual(['operator-insurance', 'all'])
-    expect(insuranceOptionsQueryOptions('op_9').queryKey).toEqual(['operator-insurance', 'op_9'])
+    expect(insuranceOptionsQueryOptions().queryKey).toEqual(['operator-insurance', 'all', 'en'])
+    expect(insuranceOptionsQueryOptions('op_9', 'ja').queryKey).toEqual([
+      'operator-insurance',
+      'op_9',
+      'ja',
+    ])
   })
 })

@@ -18,6 +18,7 @@ export const businessNavItems = [
   { to: '/$locale/manage/classes', labelKey: 'classes' },
   { to: '/$locale/manage/locations', labelKey: 'locations' },
   { to: '/$locale/manage/insurance', labelKey: 'insurance' },
+  { to: '/$locale/manage/terms', labelKey: 'terms' },
   { to: '/$locale/manage/fees', labelKey: 'fees' },
   { to: '/$locale/manage/add-ons', labelKey: 'addOns' },
   { to: '/$locale/manage/messages', labelKey: 'messages' },
@@ -35,6 +36,7 @@ export interface BusinessNavFlags {
   readonly messaging: boolean
   readonly operatorTeam: boolean
   readonly operatorSettings: boolean
+  readonly operatorTerms: boolean
 }
 
 // Post-MVP routes the beta demo hides behind a feature flag (billable add-ons).
@@ -52,6 +54,7 @@ export function visibleBusinessNavItems(
     '/$locale/manage/messages': (r) => isVisibleToViewer(flags.messaging, r),
     '/$locale/manage/team': () => flags.operatorTeam,
     '/$locale/manage/settings': () => flags.operatorSettings,
+    '/$locale/manage/terms': () => flags.operatorTerms,
   }
   return businessNavItems.filter((item) => navItemGates[item.to]?.(role) ?? true)
 }

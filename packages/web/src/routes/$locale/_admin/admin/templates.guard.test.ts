@@ -11,9 +11,9 @@ import { Route } from './templates'
 // platform-admin membership) still redirects away when the flag is off. SHARED_CATALOG is
 // serverOnly + serverDefault ON, so the default admits and only an explicit override closes.
 function runGuard(overrides: FeatureFlagOverrides = {}): Promise<unknown> {
-  const ensureQueryData = async (opts: { queryKey: readonly unknown[] }) =>
+  const fetchQuery = async (opts: { queryKey: readonly unknown[] }) =>
     opts.queryKey[0] === 'feature-flags' ? overrides : undefined
-  const context = { queryClient: { ensureQueryData } }
+  const context = { queryClient: { fetchQuery } }
   // Minimal stub — the real beforeLoad arg carries more, but the guard only touches these.
   return (Route.options.beforeLoad as (arg: unknown) => Promise<unknown>)({
     context,

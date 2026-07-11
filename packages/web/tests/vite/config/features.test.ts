@@ -1,5 +1,4 @@
 import {
-  isCalendarQuickViewEnabled,
   isCancellationEnabled,
   isFleetTimelineEnabled,
   isMessagingEnabled,
@@ -8,7 +7,6 @@ import {
   isOperatorManualBookingEnabled,
   isOperatorSettingsEnabled,
   isOperatorTeamEnabled,
-  isOperatorTodayEnabled,
   isRenterDocumentsEnabled,
   isReviewsEnabled,
 } from '@/vite/config/features'
@@ -28,8 +26,6 @@ const FLAGS = [
   { name: 'VITE_FEATURE_REVIEWS', read: isReviewsEnabled },
   { name: 'VITE_FEATURE_FLEET_TIMELINE', read: isFleetTimelineEnabled },
   { name: 'VITE_FEATURE_MULTI_CURRENCY', read: isMultiCurrencyEnabled },
-  { name: 'VITE_FEATURE_OPERATOR_TODAY', read: isOperatorTodayEnabled },
-  { name: 'VITE_FEATURE_CALENDAR_QUICKVIEW', read: isCalendarQuickViewEnabled },
 ] as const
 
 describe('post-MVP feature flags', () => {

@@ -135,6 +135,7 @@ export const insuranceOptionColumns = {
   id: insuranceOptions.id,
   operatorId: insuranceOptions.operatorId,
   name: insuranceOptions.name,
+  nameI18n: insuranceOptions.nameI18n,
   description: insuranceOptions.description,
   dailyPriceJpy: insuranceOptions.dailyPriceJpy,
   deductibleJpy: insuranceOptions.deductibleJpy,
@@ -324,7 +325,6 @@ export const messageColumns = {
   content: messages.content,
   sourceLanguage: messages.sourceLanguage,
   translations: messages.translations,
-  idempotencyKey: messages.idempotencyKey,
   createdAt: messages.createdAt,
 }
 
@@ -475,6 +475,7 @@ export function toInsuranceOption(r: InsuranceOptionRow): InsuranceOption {
     id: r.id,
     operatorId: r.operatorId,
     name: r.name,
+    nameI18n: r.nameI18n,
     description: r.description,
     dailyPriceJpy: r.dailyPriceJpy,
     deductibleJpy: r.deductibleJpy,
@@ -798,7 +799,6 @@ export type RawMessageRow = {
   content: string
   sourceLanguage: string | null
   translations: Record<string, string>
-  idempotencyKey: string | null
   createdAt: Date
 }
 
@@ -812,7 +812,6 @@ export function normaliseMessage(row: RawMessageRow): Message {
     content: row.content,
     sourceLanguage: row.sourceLanguage,
     translations: row.translations,
-    idempotencyKey: row.idempotencyKey ?? null,
     createdAt: row.createdAt,
   }
 }

@@ -8,13 +8,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // not the same guarantee as blocking the route. Since #1322 the guard reads the
 // runtime override (effective = override ?? build-time env ?? false).
 const beforeLoad = Route.options.beforeLoad as (input: {
-  context: { queryClient: { ensureQueryData: (opts: unknown) => Promise<FeatureFlagOverrides> } }
+  context: { queryClient: { fetchQuery: (opts: unknown) => Promise<FeatureFlagOverrides> } }
   params: { locale: string }
 }) => Promise<void>
 
 function runGuard(overrides: FeatureFlagOverrides): Promise<void> {
-  const ensureQueryData = vi.fn().mockResolvedValue(overrides)
-  return beforeLoad({ context: { queryClient: { ensureQueryData } }, params: { locale: 'en' } })
+  const fetchQuery = vi.fn().mockResolvedValue(overrides)
+  return beforeLoad({ context: { queryClient: { fetchQuery } }, params: { locale: 'en' } })
 }
 
 describe('/manage/team feature-flag guard', () => {

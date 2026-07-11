@@ -59,7 +59,10 @@ function wrapper({ children }: { children: ReactNode }) {
 const option = {
   id: 'ins_1',
   operatorId: 'op_1',
-  name: 'Full cover',
+  // 3b: the row renders from the server-resolved `resolvedName`; a legacy null
+  // bundle is valid (the server resolved it from the `name` mirror).
+  resolvedName: 'Full cover',
+  nameI18n: null,
   description: 'Everything covered',
   dailyPriceJpy: 2000,
   deductibleJpy: null,
@@ -86,8 +89,8 @@ describe('OperatorInsuranceView', () => {
   })
 
   it('sorts options by name ascending', () => {
-    const b = { ...option, id: 'b', name: 'Basic' }
-    const z = { ...option, id: 'z', name: 'Zen' }
+    const b = { ...option, id: 'b', resolvedName: 'Basic' }
+    const z = { ...option, id: 'z', resolvedName: 'Zen' }
     render(<OperatorInsuranceView options={[z, b]} scope={writeScope} />, { wrapper })
     const headings = screen.getAllByRole('heading').map((h) => h.textContent)
     expect(headings).toEqual(['Basic', 'Zen'])
@@ -97,17 +100,22 @@ describe('OperatorInsuranceView', () => {
     const user = userEvent.setup()
     render(<OperatorInsuranceView options={[]} scope={writeScope} />, { wrapper })
 
-    expect(screen.queryByLabelText('form.name')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('form.nameEn')).not.toBeInTheDocument()
     // The page Add button and the dialog title share the 'addOption' key; click
     // the button (the only one before the dialog opens).
     await user.click(screen.getByRole('button', { name: 'addOption' }))
 
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByLabelText('form.name')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('form.nameEn')).toBeInTheDocument()
   })
 
   it('disables the archive action for an already-archived option', () => {
-    const archived = { ...option, id: 'arch', name: 'Old plan', status: 'ARCHIVED' as const }
+    const archived = {
+      ...option,
+      id: 'arch',
+      resolvedName: 'Old plan',
+      status: 'ARCHIVED' as const,
+    }
     render(<OperatorInsuranceView options={[archived]} scope={writeScope} />, { wrapper })
     expect(screen.getByRole('button', { name: 'archiveAction' })).toBeDisabled()
   })

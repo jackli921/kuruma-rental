@@ -29,6 +29,8 @@ export const consentDocuments = pgTable(
     type: consentTypeEnum('type').notNull(),
     version: text('version').notNull(),
     locale: text('locale').notNull(),
+    // Platform docs stay NULL; operator-authored rental-terms set it (§4.2).
+    operatorId: text('operatorId').references(() => operators.id, { onDelete: 'restrict' }),
     title: text('title').notNull(),
     body: text('body').notNull(),
     acceptanceLabel: text('acceptanceLabel').notNull(),
@@ -40,10 +42,19 @@ export const consentDocuments = pgTable(
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    unique('consent_documents_type_version_locale_unique').on(t.type, t.version, t.locale),
+    // §4.3 — two partial uniques (a single nullable-column unique would let duplicate
+    // platform rows in, since Postgres treats NULLs as distinct).
+    uniqueIndex('consent_documents_platform_tvl_unique')
+      .on(t.type, t.version, t.locale)
+      .where(sql`${t.operatorId} IS NULL`),
+    uniqueIndex('consent_documents_operator_tvl_unique')
+      .on(t.operatorId, t.type, t.version, t.locale)
+      .where(sql`${t.operatorId} IS NOT NULL`),
     // Redundant vs PK, but it is the composite-FK target that keeps acceptances' denormalized
     // `consentType` honest (§4.1 sync seal).
     unique('consent_documents_id_type_unique').on(t.id, t.type),
+    // FK-covering index (lint:fk-indexes).
+    index('consent_documents_operator_idx').on(t.operatorId),
   ],
 )
 
@@ -83,9 +94,18 @@ export const consentAcceptances = pgTable(
       name: 'consent_acceptances_document_type_fk',
     }).onDelete('restrict'),
     // Row-shape invariants (DB-enforced, not service-promised).
+    // §4.4 — widened for Slice B: operator-terms is the second per-booking (PER_EVENT)
+    // consent, so a bookingId is now valid for RENTER_LIABILITY OR OPERATOR_RENTAL_TERMS,
+    // and still required for both / forbidden for every other type.
+    // The `::text` cast is load-bearing, not cosmetic: OPERATOR_RENTAL_TERMS is added to the
+    // consent_type enum in migration 0104, and drizzle's migrator applies a fresh history in ONE
+    // transaction. Referencing the value as an enum literal here would trip Postgres' "unsafe use
+    // of new enum value" (a value added by ALTER TYPE ADD VALUE cannot be used in the same tx that
+    // added it), failing `db:migrate`/CI/deploy on any fresh DB. Comparing the column as text keeps
+    // the literals plain strings, so no new enum value is resolved at DDL time.
     check(
       'consent_liability_booking_chk',
-      sql`(${t.consentType} = 'RENTER_LIABILITY') = (${t.bookingId} IS NOT NULL)`,
+      sql`(${t.consentType}::text IN ('RENTER_LIABILITY', 'OPERATOR_RENTAL_TERMS')) = (${t.bookingId} IS NOT NULL)`,
     ),
     check(
       'consent_operator_agreement_chk',
@@ -97,8 +117,11 @@ export const consentAcceptances = pgTable(
     ),
     // Three disjoint idempotency seals (§4.1). documentId pins version+locale, so a new
     // version is a different row (re-consent history, not a dup).
+    // §4.6 — generalized for Slice B to (bookingId, consentType): liability AND operator-terms
+    // are both per-booking, so the seal is now "one row per (booking, type)" (was "one row per
+    // booking"), still blocking a duplicate acceptance of the same type on the same booking.
     uniqueIndex('consent_unique_booking_liability')
-      .on(t.bookingId)
+      .on(t.bookingId, t.consentType)
       .where(sql`${t.bookingId} IS NOT NULL`),
     uniqueIndex('consent_unique_user_document')
       .on(t.userId, t.documentId)

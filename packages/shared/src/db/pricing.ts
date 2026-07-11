@@ -40,11 +40,11 @@ export const insuranceOptions = pgTable(
       .references(() => operators.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
     description: text('description'),
-    // Catalog i18n (slice 3): the platform template this insurance option
-    // instances — the template supplies the localized name. Nullable through PR1
-    // (the backfill sets every active row); NOT NULL in PR2 (slice 5). onDelete
-    // 'restrict' matches the operators FK convention — a referenced template
-    // can't vanish. Mirrors add_on_options.templateId exactly.
+    // Dormant template scaffolding (#1319/0097). STAYS NULLABLE: #1437 made
+    // insurance purely self-authored (nameI18n is the identity), so the picker
+    // cutover and its once-planned PR2 NOT-NULL flip were abandoned and the
+    // backfill/audit retired (slice 3c). onDelete 'restrict' matches the operators
+    // FK convention — a referenced template can't vanish. Mirrors add_on_options.templateId.
     templateId: text('templateId').references(() => insuranceTemplates.id, {
       onDelete: 'restrict',
     }),
@@ -52,6 +52,15 @@ export const insuranceOptions = pgTable(
     // NOT LocalizedText — an operator may author one locale only; deferred MT
     // fills the remaining keys in place). Nullable: most rows keep the template's.
     descriptionOverride: jsonb('descriptionOverride').$type<LocalizedTextOverride>(),
+    // SELF-AUTHORED name (#1437 slice 3): the operator's own {en, ja?, zh?} bundle.
+    // Insurance is PURELY self-authored — there is no operator-facing picker — so this
+    // is the primary identity for every new row; the dormant templateId scaffolding
+    // (#1319/0097) is never written by the app. Full LocalizedText (en required) so a
+    // self-authored row always has a floor. Null for legacy rows, which fall back to
+    // the `name` mirror. No not-both-identities CHECK (unlike add_on_options): with no
+    // picker path, a both-set row can't arise from the app, and a stray one is harmless
+    // (there is no template name resolver — the name always resolves from nameI18n/name).
+    nameI18n: jsonb('nameI18n').$type<LocalizedText>(),
     dailyPriceJpy: integer('dailyPriceJpy').notNull(),
     // null = no deductible (full cover).
     deductibleJpy: integer('deductibleJpy'),
@@ -73,13 +82,12 @@ export const insuranceOptions = pgTable(
     // Leading FK-cover index (lint-fk-indexes counts only the LEADING column of an
     // index; PR2's composite would leave templateId trailing and uncounted).
     index('idx_insurance_options_templateId').on(table.templateId),
-    // Catalog i18n (P1-b): an operator can't hold the same template twice while
-    // ACTIVE. The WHERE predicate is the OPERATOR ROW status (insurance_status),
-    // NOT the template status (which gates picker visibility, a separate axis).
-    // Kept ALONGSIDE active_name_unique through PR1 (expand-contract): a partial
-    // unique on templateId does not catch duplicate NULLs, so null-templateId rows
-    // in the migration-before-code window stay guarded by the name index;
-    // active_name_unique drops with the name column in PR2 (slice 5).
+    // Dormant (#1319/0097): would stop an operator holding the same template twice
+    // while ACTIVE (WHERE = the OPERATOR ROW status, not the template status). Inert
+    // under #1437 — self-authored rows carry a null templateId, so this partial unique
+    // matches nothing. Kept inert (not dropped). active_name_unique and the `name`
+    // mirror STAY: the once-planned PR2 name-column drop was abandoned with the
+    // self-authored cutover (#1437).
     uniqueIndex('insurance_options_active_template_unique')
       .on(table.operatorId, table.templateId)
       .where(sql`status = 'ACTIVE'`),
@@ -97,9 +105,9 @@ export const insuranceOptions = pgTable(
 // string. name and description are LocalizedText JSONB {en, ja?, zh?} bundles
 // resolved to the caller locale in the service layer. NO operatorId — the catalog
 // is global, shared across every tenant (a picker, not tenant data). key =
-// slugify(canonical English name); the curated seed and the slice-3 backfill both
-// derive it, so it is the stable join handle between an operator's legacy name and
-// its template. Mirrors add_on_templates exactly, reusing catalogTemplateStatusEnum
+// slugify(canonical English name); the curated seed derives it, its stable unique
+// handle. (Dormant under #1437 — insurance is self-authored and never wires the
+// picker.) Mirrors add_on_templates exactly, reusing catalogTemplateStatusEnum
 // (one CREATE TYPE for both catalog tables).
 export const insuranceTemplates = pgTable(
   'insurance_templates',

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
 import { setupGlobalHandlers } from '../../src/error-handlers'
 import { type UserRole, requireAuth } from '../../src/middleware/auth'
+import { reportStrandedFunds } from '../../src/observability/money-alerts'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { InMemoryPaymentAnomalyRepository } from '../../src/repositories/in-memory/payment-anomaly'
 import { InMemoryPaymentEventRepository } from '../../src/repositories/in-memory/payment-event'
@@ -20,6 +21,11 @@ import {
 import type { Booking } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 import { makeBooking as makeBookingFixture } from '../helpers/booking'
+
+// The route escalates money-stuck webhook outcomes through reportStrandedFunds; mock it to
+// assert the wiring (the shell's own console.error + Sentry behaviour is unit-tested in
+// observability/money-alerts.test.ts).
+vi.mock('../../src/observability/money-alerts', () => ({ reportStrandedFunds: vi.fn() }))
 
 // Bookings carry DB-generated UUIDs; the route now validates `:bookingId` as a
 // uuid at the boundary (#691), so the fixture id must be a real uuid too.
@@ -211,8 +217,8 @@ describe('POST /webhooks/stripe (public)', () => {
     const { app, gateway } = publicApp()
     gateway.event = mismatch()
     gateway.nextRefund = succeededRefund
+    vi.mocked(reportStrandedFunds).mockClear()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await app.request('/webhooks/stripe', {
       method: 'POST',
       headers: { 'stripe-signature': 't=1,v1=good' },
@@ -220,24 +226,23 @@ describe('POST /webhooks/stripe (public)', () => {
     })
     expect(res.status).toBe(200)
     expect(gateway.refundCalls).toHaveLength(1)
-    // A clean auto-refund is NOT an alert.
-    expect(error).not.toHaveBeenCalled()
+    // A clean auto-refund self-healed — a warning-level record, NOT a stranded-funds alert.
+    expect(reportStrandedFunds).not.toHaveBeenCalled()
     expect(warn).toHaveBeenCalledWith(
-      '[payment:webhook] amount mismatch',
-      expect.objectContaining({ refund: 'refunded', stranded: false, bookingId: BOOKING_ID }),
+      '[payment:webhook] amount mismatch auto-refunded',
+      expect.objectContaining({ refund: 'refunded', bookingId: BOOKING_ID }),
     )
     warn.mockRestore()
-    error.mockRestore()
   })
 
-  it('ALERTS via console.error when the mismatch refund is rejected — funds may be stranded (#1378)', async () => {
+  it('ALERTS via reportStrandedFunds when the mismatch refund is rejected — funds may be stranded (#1378)', async () => {
     const { app, gateway } = publicApp()
     gateway.event = mismatch()
     gateway.nextRefund = () => {
       throw new RefundRejectedError('charge already refunded', 'charge_already_refunded')
     }
+    vi.mocked(reportStrandedFunds).mockClear()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await app.request('/webhooks/stripe', {
       method: 'POST',
       headers: { 'stripe-signature': 't=1,v1=good' },
@@ -245,20 +250,19 @@ describe('POST /webhooks/stripe (public)', () => {
     })
     // Still a 200 ack (the anomaly + failed disposition are recorded, not re-driven here).
     expect(res.status).toBe(200)
-    expect(error).toHaveBeenCalledWith(
-      '[payment:webhook] amount mismatch',
-      expect.objectContaining({ refund: 'failed', stranded: true, bookingId: BOOKING_ID }),
+    expect(reportStrandedFunds).toHaveBeenCalledWith(
+      '[payment:webhook] amount-mismatch auto-refund did not complete (failed) — captured funds may be stranded and need manual reconciliation',
+      expect.objectContaining({ context: expect.objectContaining({ bookingId: BOOKING_ID }) }),
     )
-    // A stranded alert must be an ALERT, not a soft warning.
+    // A stranded alert routes through reportStrandedFunds, not the soft warning path.
     expect(warn).not.toHaveBeenCalled()
     warn.mockRestore()
-    error.mockRestore()
   })
 
   it('ALERTS when a mismatch is unrefundable (no PaymentIntent to reverse) (#1378)', async () => {
     const { app, gateway } = publicApp()
     gateway.event = { ...mismatch(), paymentIntentId: null }
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(reportStrandedFunds).mockClear()
     const res = await app.request('/webhooks/stripe', {
       method: 'POST',
       headers: { 'stripe-signature': 't=1,v1=good' },
@@ -267,11 +271,10 @@ describe('POST /webhooks/stripe (public)', () => {
     expect(res.status).toBe(200)
     // No PI → we never call Stripe, but the funds are unaccounted → alert.
     expect(gateway.refundCalls).toEqual([])
-    expect(error).toHaveBeenCalledWith(
-      '[payment:webhook] amount mismatch',
-      expect.objectContaining({ refund: 'unrefundable', stranded: true }),
+    expect(reportStrandedFunds).toHaveBeenCalledWith(
+      '[payment:webhook] amount-mismatch auto-refund did not complete (unrefundable) — captured funds may be stranded and need manual reconciliation',
+      expect.objectContaining({ context: expect.objectContaining({ bookingId: BOOKING_ID }) }),
     )
-    error.mockRestore()
   })
 })
 

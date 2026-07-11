@@ -477,4 +477,43 @@ describe('OperatorBookingsRoute runtime feature-flag overrides (#1322)', () => {
     )
     expect(screen.queryByText(B.legend.title)).not.toBeInTheDocument()
   })
+
+  // #1479: the quick-view flag (booking-click navigation ownership) is now runtime-read
+  // too, so an override wins over the build-time env end-to-end through the route.
+  it('a quick-view override OFF restores booking-click navigation even when the build default is ON', () => {
+    vi.stubEnv('VITE_FEATURE_CALENDAR_QUICKVIEW', 'true')
+    renderRoute(
+      operatorSession,
+      blocksFleet,
+      [],
+      { bookings: [calendarBooking] },
+      { CALENDAR_QUICKVIEW: false },
+    )
+    const booking = (calendarProps.events as { type: string; id: string }[]).find(
+      (e) => e.type === 'booking',
+    )
+    act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(booking))
+    expect(navigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: '/$locale/manage/bookings/$bookingId',
+        params: expect.objectContaining({ bookingId: 'bk-1' }),
+      }),
+    )
+  })
+
+  it('a quick-view override ON suppresses booking-click navigation even when the build default is OFF', () => {
+    vi.stubEnv('VITE_FEATURE_CALENDAR_QUICKVIEW', undefined)
+    renderRoute(
+      operatorSession,
+      blocksFleet,
+      [],
+      { bookings: [calendarBooking] },
+      { CALENDAR_QUICKVIEW: true },
+    )
+    const booking = (calendarProps.events as { type: string; id: string }[]).find(
+      (e) => e.type === 'booking',
+    )
+    act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(booking))
+    expect(navigate).not.toHaveBeenCalled()
+  })
 })

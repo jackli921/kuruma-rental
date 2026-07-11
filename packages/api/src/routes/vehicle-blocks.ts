@@ -1,14 +1,21 @@
 import { createVehicleBlockSchema } from '@kuruma/shared/validators/vehicle-block'
 import { Hono } from 'hono'
 import {
-  FLEET_WRITE_ROLES,
   MANAGEMENT_READ_ROLES,
   requireAuth,
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
 import type { VehicleBlockService } from '../services/vehicle-block'
-import { fail, failResult, ok, parseBody, parseDateRange, parseId } from './helpers'
+import {
+  fail,
+  failResult,
+  ok,
+  parseBody,
+  parseDateRange,
+  parseId,
+  requireFleetWriteRole,
+} from './helpers'
 
 export function createVehicleBlockRoutes(service: VehicleBlockService) {
   const app = new Hono()
@@ -48,7 +55,8 @@ export function createVehicleBlockRoutes(service: VehicleBlockService) {
       const user = requireUser(c)
       // Fleet writes admit STAFF roles AND tenant operators; RENTER / PARTNER are
       // rejected here and defence-in-depth at the vehicle-scoped service.
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const idResult = parseId(c, 'vehicleId')
       if (!idResult.ok) return idResult.response
@@ -70,7 +78,8 @@ export function createVehicleBlockRoutes(service: VehicleBlockService) {
     })
     .delete('/vehicles/:vehicleId/blocks/:blockId', async (c) => {
       const user = requireUser(c)
-      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const denied = requireFleetWriteRole(c, user)
+      if (denied) return denied
 
       const vehicleIdResult = parseId(c, 'vehicleId')
       if (!vehicleIdResult.ok) return vehicleIdResult.response

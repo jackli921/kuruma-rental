@@ -55,7 +55,8 @@ describe('feature flag registry', () => {
     // so a dashboard toggle actually takes effect. Flip this to true in the same
     // slice that migrates the flag (#1322) — the admin page badges the difference.
     const controlled = FEATURE_FLAG_KEYS.filter((k) => FEATURE_FLAGS[k].runtimeControlled)
-    // Every flag is migrated as of #1322 (PR3 finished the batch). A newly added,
+    // Every flag is now migrated: #1322 (PR3) did the batch, #1479 finished the last
+    // two (OPERATOR_TODAY, CALENDAR_QUICKVIEW) for path-to-GA #1476. A newly added,
     // not-yet-migrated flag would be absent here and must be added on migration.
     expect(new Set(controlled)).toEqual(
       new Set([
@@ -69,9 +70,15 @@ describe('feature flag registry', () => {
         'OPERATOR_SETTINGS',
         'RENTER_DOCUMENTS',
         'MESSAGING',
+        // #1479 (Tier 2, path-to-GA #1476): the last two build-time-only flags,
+        // migrated to useFeatureFlag() so the admin switchboard flips them live.
+        'OPERATOR_TODAY',
+        'CALENDAR_QUICKVIEW',
         // Server-only, but the web reads it via useFeatureFlag() to hide the
         // operator picker + admin template library live, so it is runtimeControlled.
         'SHARED_CATALOG',
+        // #operator-usage-consent (Slice A): ships dark (no prod env var set).
+        'OPERATOR_TERMS',
       ]),
     )
   })
@@ -86,5 +93,12 @@ describe('feature flag registry', () => {
     expect(isFeatureFlagKey('MULTI_CURRENCY')).toBe(true)
     expect(isFeatureFlagKey('DEFINITELY_NOT_A_FLAG')).toBe(false)
     expect(isFeatureFlagKey('')).toBe(false)
+  })
+})
+
+describe('OPERATOR_TERMS flag', () => {
+  it('registers OPERATOR_TERMS as a build-time web flag', () => {
+    expect(FEATURE_FLAGS.OPERATOR_TERMS).toMatchObject({ env: 'VITE_FEATURE_OPERATOR_TERMS' })
+    expect(FEATURE_FLAGS.OPERATOR_TERMS.serverOnly).toBeUndefined()
   })
 })

@@ -1,11 +1,17 @@
 import { z } from 'zod'
+import { localizedTextSchema } from '../i18n/localized-text'
 
 // Field schemas WITHOUT defaults, so the update (partial) variant can reuse the
 // same constraints without injecting values on an empty PATCH (mirrors the
 // location validator). dailyPriceJpy is REQUIRED — an option with no price is
 // meaningless (slice-4 plan §12.1). deductibleJpy is nullish: null means full
 // cover (no deductible).
-const nameSchema = z.string().trim().min(1, 'Name is required').max(200)
+//
+// #1437 slice 3: insurance is PURELY self-authored — the operator supplies an
+// {en, ja?, zh?} bundle (en required, so a self-authored row always has a floor),
+// NOT a single-language string. The service mirrors `nameI18n.en` into the `name`
+// column (the ACTIVE-name unique seal + booking-snapshot source). No picker, so no
+// templateId and no exactly-one refine (unlike add-ons).
 const descriptionSchema = z.string().trim().max(2000).nullish()
 const dailyPriceSchema = z
   .number()
@@ -18,7 +24,7 @@ const deductibleSchema = z
   .nullish()
 
 export const createInsuranceOptionSchema = z.object({
-  name: nameSchema,
+  nameI18n: localizedTextSchema,
   description: descriptionSchema,
   dailyPriceJpy: dailyPriceSchema,
   deductibleJpy: deductibleSchema,

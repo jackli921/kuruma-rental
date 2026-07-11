@@ -206,11 +206,16 @@ describe('updateAddOnSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('does not accept a templateId change on update (identity is fixed)', () => {
-    const result = updateAddOnSchema.safeParse({ templateId: TEMPLATE_ID })
+  it('strips templateId on update — the retired picker field can never re-enter (identity is fixed, #1492)', () => {
+    // A picked add-on's template identity is fixed at create; the update path
+    // deliberately dropped templateId (#1437). Parse it ALONGSIDE a legit field so
+    // the assertion proves the strip is surgical (not a blanket empty return): a
+    // future edit that re-admits templateId to updateAddOnSchema fails right here.
+    const result = updateAddOnSchema.safeParse({ priceJpy: 1500, templateId: TEMPLATE_ID })
     expect(result.success).toBe(true)
     if (result.success) {
-      expect((result.data as Record<string, unknown>).templateId).toBeUndefined()
+      expect(result.data).not.toHaveProperty('templateId')
+      expect(result.data.priceJpy).toBe(1500)
     }
   })
 

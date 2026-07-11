@@ -1,4 +1,5 @@
-import type { ConsentType } from '@kuruma/shared/enums'
+import type { RunTx } from '@kuruma/shared/db'
+import type { ConsentDocStatus, ConsentType } from '@kuruma/shared/enums'
 import { consentAcceptances, consentDocuments } from '@kuruma/shared/db/schema'
 import { type SQL, and, desc, eq, gte, inArray, isNull, lte } from 'drizzle-orm'
 import type { ConsentAcceptance, ConsentDocument } from '../../stores'
@@ -7,6 +8,7 @@ import type {
   ConsentAcceptanceQuery,
   ConsentRepository,
   NewConsentAcceptance,
+  NewConsentDocument,
 } from '../types'
 import { CONSENT_ACCEPTANCE_LIST_LIMIT } from '../types-consent'
 import type { Db } from './shared'
@@ -23,6 +25,7 @@ function toDocument(r: DocRow): ConsentDocument {
     type: r.type,
     version: r.version,
     locale: r.locale,
+    operatorId: r.operatorId,
     title: r.title,
     body: r.body,
     acceptanceLabel: r.acceptanceLabel,
@@ -60,7 +63,10 @@ function toAcceptance(r: AcceptanceRow): ConsentAcceptance {
 }
 
 export class DrizzleConsentRepository implements ConsentRepository {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly runTransaction: RunTx,
+  ) {}
 
   async findDocumentById(id: string): Promise<ConsentDocument | undefined> {
     const [row] = await this.db
@@ -143,11 +149,19 @@ export class DrizzleConsentRepository implements ConsentRepository {
     return row ? toAcceptance(row) : undefined
   }
 
-  async findBookingAcceptance(bookingId: string): Promise<ConsentAcceptance | undefined> {
+  async findBookingAcceptance(
+    bookingId: string,
+    consentType: ConsentType,
+  ): Promise<ConsentAcceptance | undefined> {
     const [row] = await this.db
       .select()
       .from(consentAcceptances)
-      .where(eq(consentAcceptances.bookingId, bookingId))
+      .where(
+        and(
+          eq(consentAcceptances.bookingId, bookingId),
+          eq(consentAcceptances.consentType, consentType),
+        ),
+      )
       .limit(1)
     return row ? toAcceptance(row) : undefined
   }
@@ -227,5 +241,115 @@ export class DrizzleConsentRepository implements ConsentRepository {
       .returning()
     if (!row) throw new Error('Failed to insert consent acceptance')
     return toAcceptance(row)
+  }
+
+  async findLatestPublishedVersionForOperator(
+    operatorId: string,
+    type: ConsentType,
+    now: Date,
+  ): Promise<string | undefined> {
+    const rows = await this.db
+      .select({ version: consentDocuments.version, effectiveFrom: consentDocuments.effectiveFrom })
+      .from(consentDocuments)
+      .where(
+        and(
+          eq(consentDocuments.operatorId, operatorId),
+          eq(consentDocuments.type, type),
+          eq(consentDocuments.status, 'PUBLISHED'),
+        ),
+      )
+    return rows
+      .filter((r) => r.effectiveFrom <= now)
+      .map((r) => r.version)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .at(-1)
+  }
+
+  async findPublishedOperatorDocument(
+    operatorId: string,
+    type: ConsentType,
+    version: string,
+    locale: string,
+  ): Promise<ConsentDocument | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(consentDocuments)
+      .where(
+        and(
+          eq(consentDocuments.operatorId, operatorId),
+          eq(consentDocuments.type, type),
+          eq(consentDocuments.version, version),
+          eq(consentDocuments.locale, locale),
+          eq(consentDocuments.status, 'PUBLISHED'),
+        ),
+      )
+      .limit(1)
+    return row ? toDocument(row) : undefined
+  }
+
+  async findOperatorDocuments(
+    operatorId: string,
+    type: ConsentType,
+  ): Promise<ConsentDocument[]> {
+    const rows = await this.db
+      .select()
+      .from(consentDocuments)
+      .where(and(eq(consentDocuments.operatorId, operatorId), eq(consentDocuments.type, type)))
+    return rows.map(toDocument)
+  }
+
+  async replaceOperatorDraftRows(
+    operatorId: string,
+    type: ConsentType,
+    version: string,
+    rows: NewConsentDocument[],
+  ): Promise<ConsentDocument[]> {
+    // Atomic draft rewrite (#1498): delete the prior draft of this version and
+    // insert the new locale rows in ONE tx, so a failure between the two can't
+    // leave the operator with no draft. A concurrent first-save that already
+    // claimed the version trips consent_documents_operator_tvl_unique (23505),
+    // which OperatorTermsService maps to a 409.
+    return this.runTransaction(async (tx) => {
+      await tx.delete(consentDocuments).where(
+        and(
+          eq(consentDocuments.operatorId, operatorId),
+          eq(consentDocuments.type, type),
+          eq(consentDocuments.version, version),
+          eq(consentDocuments.status, 'DRAFT'),
+        ),
+      )
+      if (rows.length === 0) return []
+      const inserted = await tx
+        .insert(consentDocuments)
+        .values(rows.map((r) => ({ ...r, id: crypto.randomUUID() })))
+        .returning()
+      return inserted.map(toDocument)
+    })
+  }
+
+  async setOperatorVersionStatus(p: {
+    operatorId: string
+    type: ConsentType
+    version: string
+    from: ConsentDocStatus
+    to: ConsentDocStatus
+    publishedAt: Date | null
+    now: Date
+  }): Promise<ConsentDocument[]> {
+    const set: Partial<typeof consentDocuments.$inferInsert> = { status: p.to, updatedAt: p.now }
+    if (p.publishedAt !== null) set.publishedAt = p.publishedAt
+    const rows = await this.db
+      .update(consentDocuments)
+      .set(set)
+      .where(
+        and(
+          eq(consentDocuments.operatorId, p.operatorId),
+          eq(consentDocuments.type, p.type),
+          eq(consentDocuments.version, p.version),
+          eq(consentDocuments.status, p.from),
+        ),
+      )
+      .returning()
+    return rows.map(toDocument)
   }
 }

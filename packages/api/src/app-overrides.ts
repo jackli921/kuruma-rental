@@ -109,6 +109,12 @@ export type AppOverrides = {
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
   operatorApplicationLimiter?: RateLimitBinding
+  // Per-user caps on the authenticated messaging surface (messaging GA, #1476):
+  // send throttles POST /threads/:id/messages; translate throttles the external
+  // translation provider on POST /messages/:id/translate. Absent ⇒ the
+  // globalThis-resolved CF binding, or unthrottled local dev.
+  messageSendLimiter?: RateLimitBinding
+  messageTranslateLimiter?: RateLimitBinding
   // Over-limit ⇒ the geocoder skips the lookup (#574). Inject a deny-binding in
   // tests; absent ⇒ the globalThis-resolved GEOCODE_LIMITER (or unthrottled dev).
   geocodeLimiter?: RateLimitBinding

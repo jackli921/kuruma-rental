@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { type AuthUser, toCallerContext } from '../../src/middleware/auth'
+import { type AuthUser, ConflictError, toCallerContext } from '../../src/middleware/auth'
 import {
   InMemoryMessageRepository,
   InMemoryThreadRepository,
@@ -54,6 +54,23 @@ describe('MessageService.createMessage', () => {
     expect(first.status).toBe(201)
     expect(second.status).toBe(200)
     expect(second.message.id).toBe(first.message.id)
+  })
+
+  // Messaging GA hardening (Refs #1476): idempotencyKey is globally unique, but
+  // findByIdempotencyKey is sender-scoped (#328). So a DIFFERENT sender replaying
+  // another sender's key can't resolve it on re-fetch — that used to escape as the
+  // raw UNIQUE_VIOLATION (a 500). Surface it as a ConflictError (-> 409) instead:
+  // a clean "key already claimed" client error, and no cross-sender existence leak.
+  it('throws ConflictError when a different sender replays another sender key', async () => {
+    const ctxU1 = ctxFor(U1, 'RENTER')
+    const thread = await threadRepo.create(ctxU1, null, [U1, U2], null, null)
+    const sharedKey = 'shared-key-collision'
+
+    await service.createMessage(ctxU1, thread.id, 'from u1', sharedKey)
+
+    await expect(
+      service.createMessage(ctxFor(U2, 'RENTER'), thread.id, 'from u2', sharedKey),
+    ).rejects.toBeInstanceOf(ConflictError)
   })
 })
 

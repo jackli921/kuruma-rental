@@ -755,6 +755,7 @@ export type {
   ConsentAcceptanceQuery,
   ConsentRepository,
   NewConsentAcceptance,
+  NewConsentDocument,
 } from './types-consent'
 
 // Reviews bounded-context data access (#1067 slice 1) lives in its own module;
