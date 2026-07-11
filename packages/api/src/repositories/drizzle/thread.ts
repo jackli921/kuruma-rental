@@ -70,7 +70,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
     // Step 4: fetch only the latest message per thread.
     const lastMessageRows = await this.db.execute<RawMessageRow>(sql`
       SELECT DISTINCT ON ("threadId")
-        "id", "threadId", "senderId", "content", "sourceLanguage", "translations", "idempotencyKey", "createdAt"
+        "id", "threadId", "senderId", "content", "sourceLanguage", "translations", "createdAt"
       FROM "messages"
       WHERE "threadId" IN (${sql.join(
         threadIds.map((id) => sql`${id}`),

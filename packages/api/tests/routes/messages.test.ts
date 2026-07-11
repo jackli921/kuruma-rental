@@ -267,7 +267,8 @@ describe('Message Routes', () => {
         const secondBody = await second.json()
 
         expect(secondBody.data.id).toBe(firstBody.data.id)
-        expect(secondBody.data.idempotencyKey).toBe(MSG_KEY_A)
+        // idempotencyKey is a write-only concern and never echoed on the read model.
+        expect(secondBody.data).not.toHaveProperty('idempotencyKey')
       })
 
       it('creates distinct messages when different keys are sent', async () => {
@@ -302,7 +303,7 @@ describe('Message Routes', () => {
         })
         expect(res.status).toBe(201)
         const body = await res.json()
-        expect(body.data.idempotencyKey).toBeNull()
+        expect(body.data).not.toHaveProperty('idempotencyKey')
       })
 
       it('concurrent duplicate requests yield exactly one 201 and one 200', async () => {
@@ -413,6 +414,28 @@ describe('Message Routes', () => {
       expect(body.data.messages[0].senderId).toBe(U1)
       expect(body.data.messages[1].content).toBe('Hi there!')
       expect(body.data.messages[1].senderId).toBe(U2)
+    })
+
+    // idempotencyKey is a write-side dedup concern; it must never be echoed on the
+    // read model (it was leaked to every thread participant on GET, and gave a
+    // 500-vs-201 existence oracle for another sender's key). See messaging GA review.
+    it('does not expose idempotencyKey on returned messages', async () => {
+      const threadId = await seedThread([U1, U2])
+      await appAs(U1).request(`/threads/${threadId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: 'Hi',
+          idempotencyKey: '00000000-0000-4000-8000-cccc00000001',
+        }),
+      })
+
+      const res = await app.request(`/threads/${threadId}`)
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.data.messages).toHaveLength(1)
+      expect(body.data.messages[0]).not.toHaveProperty('idempotencyKey')
     })
 
     it('returns 404 for a valid-but-nonexistent thread id', async () => {
