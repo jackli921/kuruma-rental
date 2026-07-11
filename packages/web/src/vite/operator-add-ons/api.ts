@@ -95,20 +95,26 @@ async function writeJson(
   return unwrap(res, addOnSchema)
 }
 
+// #1456 (operatorId) + #1318 (locale): compose the write query. `?operatorId=` binds
+// a picker admin's PATCH/DELETE; `?locale=` tells the server the Model-B source locale
+// (and resolves the write response to the operator's UI locale).
+function writeQuery(pickedOperatorId?: string, locale?: Locale): string {
+  const params = new URLSearchParams()
+  if (pickedOperatorId) params.set('operatorId', pickedOperatorId)
+  if (locale) params.set('locale', locale)
+  const qs = params.toString()
+  return qs ? `?${qs}` : ''
+}
+
 // A platform admin operating as a picked tenant must name the target operator in
 // the body (platformAdminCreateAddOnSchema requires it); an operator session omits
 // it and is auto-scoped server-side.
 export async function createAddOn(
   input: WithOperatorId<CreateAddOnInput>,
   csrfToken: string,
+  locale?: Locale,
 ): Promise<OperatorAddOnData> {
-  return writeJson('/add-ons', 'POST', input, csrfToken)
-}
-
-// #1456: PATCH/DELETE bind to the picked operator via `?operatorId=` (the API 422s a
-// bypass admin who names none, 404s a mismatch). An operator session omits it.
-function operatorQuery(pickedOperatorId?: string): string {
-  return pickedOperatorId ? `?operatorId=${encodeURIComponent(pickedOperatorId)}` : ''
+  return writeJson(`/add-ons${writeQuery(undefined, locale)}`, 'POST', input, csrfToken)
 }
 
 export async function updateAddOn(
@@ -116,19 +122,21 @@ export async function updateAddOn(
   input: UpdateAddOnInput,
   csrfToken: string,
   pickedOperatorId?: string,
+  locale?: Locale,
 ): Promise<OperatorAddOnData> {
-  const path = `/add-ons/${encodeURIComponent(id)}${operatorQuery(pickedOperatorId)}`
+  const path = `/add-ons/${encodeURIComponent(id)}${writeQuery(pickedOperatorId, locale)}`
   return writeJson(path, 'PATCH', input, csrfToken)
 }
 
 // Soft-archive (DELETE flips status to ARCHIVED). No body — the CSRF header still
 // rides along because a cookie-authed DELETE is a mutation the guard protects.
+// Archive doesn't touch descriptions so no locale param needed.
 export async function archiveAddOn(
   id: string,
   csrfToken: string,
   pickedOperatorId?: string,
 ): Promise<OperatorAddOnData> {
-  const path = `/add-ons/${encodeURIComponent(id)}${operatorQuery(pickedOperatorId)}`
+  const path = `/add-ons/${encodeURIComponent(id)}${writeQuery(pickedOperatorId)}`
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method: 'DELETE',
     credentials: 'include',
