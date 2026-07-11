@@ -757,6 +757,13 @@
       "when": 1783780779564,
       "tag": "0107_operator_terms_booking_consent_seal",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1783788907878,
+      "tag": "0108_booking_location_composite_fk",
+      "breakpoints": true
     }
   ]
 }
