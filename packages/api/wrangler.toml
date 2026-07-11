@@ -144,3 +144,137 @@ SENTRY_ENVIRONMENT = "beta"
 
 [version_metadata]
 binding = "CF_VERSION_METADATA"
+
+# ---------------------------------------------------------------------------
+# [env.production] — the real go-live API Worker (#1476 path-to-GA).
+#
+# Everything ABOVE this line is the default env = the `beta` deploy
+# (`kuruma-api.kanata-studio.workers.dev`, Neon `beta` branch). This section
+# defines a SECOND, isolated Worker for real customers, pointed at the clean
+# `production-live` Neon branch (br-steep-rice-anpni2dm).
+#
+# Deploy with:  bun run --filter @kuruma/api deploy:production
+#   ( = wrangler deploy --env production ... — see packages/api/package.json )
+# It is INERT until someone runs that command with the prod secrets + CF
+# resources in place. Nothing in CI targets it yet (deploy.yml is beta-only) —
+# a guarded-but-dead prod job beside the live one is the exact "two truths in
+# CI" footgun we removed in the #378 Pages cutover, so the prod deploy stays a
+# deliberate manual command until the owner's CF resources (#1009) exist.
+#
+# NOTE: now that a named env exists, the beta deploy (`bun run deploy`, no
+# `--env`) logs a harmless "Multiple environments are defined ... no target
+# environment was specified" warning. Expected — a bare deploy targets this
+# top-level config (= beta) exactly as before; the warning is informational.
+#
+# WRANGLER ENV INHERITANCE (why some keys are duplicated and some are not):
+#   - INHERITABLE (taken from the top-level automatically, NOT repeated here):
+#     main, compatibility_date, compatibility_flags, upload_source_maps.
+#   - NON-INHERITABLE (MUST be re-declared per-env or they silently vanish):
+#     vars, r2_buckets, ratelimits, version_metadata, kv_namespaces.
+#   A dropped non-inheritable binding = a Worker that boots then 500s at
+#   runtime (e.g. missing RATE_LIMITER), so every binding is re-declared below.
+#   `triggers` is inheritable, but re-declared anyway so a prod deploy can't
+#   silently skip the daily refund-reconciler / compliance-digest backstops.
+#
+# ISOLATION FROM BETA (owner decision 2026-07-11 — "fully isolated"):
+#   - Separate R2 buckets (`*-production`) so real renter ID documents never
+#     share storage with the beta test env.
+#   - Distinct rate-limiter namespace ids (2001-2006 vs beta's 1001-1006) so
+#     prod and beta don't share rate-limit counters.
+# See docs/plans/2026-07-11-go-live-checklist.md for the owner steps that make
+# this section deployable (create buckets, set secrets, prod Pages project).
+# ---------------------------------------------------------------------------
+[env.production]
+name = "kuruma-api-production"
+
+# Same daily 23:00 UTC (08:00 JST) cron as beta. Re-declared (not inherited)
+# so prod is guaranteed to run worker.ts `scheduled`: the #916 fleet-compliance
+# digest + the #851 refund-on-cancellation reconciler backstop.
+[env.production.triggers]
+crons = ["0 23 * * *"]
+
+# Rate limiters — same limits/periods as beta, DISTINCT namespace ids (2001-2006)
+# so prod counters are isolated from beta. See the beta blocks above for the
+# rationale behind each limit; only the namespace_id changes here.
+[[env.production.ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "2001"
+simple.limit = 100
+simple.period = 60
+
+[[env.production.ratelimits]]
+name = "PHOTO_UPLOAD_LIMITER"
+namespace_id = "2002"
+simple.limit = 10
+simple.period = 60
+
+[[env.production.ratelimits]]
+name = "PHOTO_UPLOAD_USER_LIMITER"
+namespace_id = "2003"
+simple.limit = 50
+simple.period = 60
+
+[[env.production.ratelimits]]
+name = "PUBLIC_CATALOG_LIMITER"
+namespace_id = "2004"
+simple.limit = 30
+simple.period = 60
+
+[[env.production.ratelimits]]
+name = "GEOCODE_LIMITER"
+namespace_id = "2005"
+simple.limit = 1
+simple.period = 10
+
+[[env.production.ratelimits]]
+name = "OPERATOR_APPLICATION_LIMITER"
+namespace_id = "2006"
+simple.limit = 5
+simple.period = 60
+
+# R2 buckets — SEPARATE prod buckets. Owner must create both once (folds into
+# #1009 CF provisioning):
+#   npx wrangler r2 bucket create kuruma-vehicle-photos-production
+#   npx wrangler r2 bucket create kuruma-renter-documents-production
+# then enable r2.dev public access on the vehicle-photos one and paste its
+# public URL into VEHICLE_PHOTOS_PUBLIC_URL below.
+[[env.production.r2_buckets]]
+binding = "VEHICLE_PHOTOS"
+bucket_name = "kuruma-vehicle-photos-production"
+
+[[env.production.r2_buckets]]
+binding = "RENTER_DOCUMENTS"
+bucket_name = "kuruma-renter-documents-production"
+
+# Geocode cache KV — same as beta, still blocked on KV provisioning (#601/#304).
+# Falls back to the in-process InMemoryGeocodeCache until provisioned. To
+# activate: create a SEPARATE prod namespace and uncomment:
+#   npx wrangler kv namespace create GEOCODE_CACHE --env production
+# [[env.production.kv_namespaces]]
+# binding = "GEOCODE_CACHE"
+# id = "<run: npx wrangler kv namespace create GEOCODE_CACHE --env production>"
+
+[env.production.vars]
+# The live web origin for prod. Feeds CORS + post-login redirect + Stripe
+# return base + provider-invite links (resolveGoogleOAuthConfig / webBaseUrl).
+# Placeholder = the planned prod Pages project's default domain. TODO(go-live):
+# replace with the real custom domain once procured, then redeploy.
+WEB_ORIGIN = "https://kuruma-web-production.pages.dev"
+
+# Same Resend-verified sending domain as beta (not a secret). RESEND_API_KEY is
+# a Worker secret rotated via rotate-secrets.yml.
+EMAIL_FROM = "noreply@mail.jack-li.dev"
+
+# Public base URL for the PROD vehicle-photos bucket's r2.dev access. Left EMPTY
+# on purpose = fail-closed: photo upload falls back to DisabledPhotoStorage
+# (repositories.ts, r2-photo-storage.ts) until the owner creates the prod bucket,
+# enables r2.dev public access, and pastes its URL here. Deploying with this
+# empty simply disables uploads rather than writing photos to a dead URL.
+VEHICLE_PHOTOS_PUBLIC_URL = ""
+
+# Sentry environment tag for prod (beta uses "beta"). Groups prod errors
+# separately. SENTRY_DSN itself is a secret (rotate-secrets.yml).
+SENTRY_ENVIRONMENT = "production"
+
+[env.production.version_metadata]
+binding = "CF_VERSION_METADATA"
