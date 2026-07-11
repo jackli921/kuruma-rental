@@ -251,6 +251,23 @@ namespace_id = "2006"
 simple.limit = 5
 simple.period = 60
 
+# Messaging GA limiters (#1476) — mirror beta's MESSAGE_TRANSLATE_LIMITER (1007)
+# and MESSAGE_SEND_LIMITER (1008), added to the top-level after this env block
+# was first written (#1522). Without them, prod messaging translate/send run
+# UNTHROTTLED (the binding-absent path no-ops the limiter, index.ts:214-221) —
+# an abuse/cost gap once messaging is enabled. Prod namespaces 2007/2008.
+[[env.production.ratelimits]]
+name = "MESSAGE_TRANSLATE_LIMITER"
+namespace_id = "2007"
+simple.limit = 20
+simple.period = 60
+
+[[env.production.ratelimits]]
+name = "MESSAGE_SEND_LIMITER"
+namespace_id = "2008"
+simple.limit = 30
+simple.period = 60
+
 # R2 buckets — SEPARATE prod buckets. Owner must create both once (folds into
 # #1009 CF provisioning):
 #   npx wrangler r2 bucket create kuruma-vehicle-photos-production
