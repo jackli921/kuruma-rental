@@ -1,3 +1,4 @@
+import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { setupGlobalHandlers } from '../../src/error-handlers'
@@ -18,14 +19,36 @@ type TestRole = 'RENTER' | 'PLATFORM_ADMIN' | 'OPERATOR_OWNER' | 'OPERATOR_STAFF
 let threadRepo: InMemoryThreadRepository
 let messageRepo: InMemoryMessageRepository
 
+/** In-process stand-in for the CF native rate-limit binding: counts per key and
+ *  denies past `limit`, mirroring the vehicle-photo rate-limit test double. */
+function createFakeLimiter(limit: number): RateLimitBinding {
+  const counts = new Map<string, number>()
+  return {
+    async limit({ key }) {
+      const next = (counts.get(key) ?? 0) + 1
+      counts.set(key, next)
+      return { success: next <= limit }
+    },
+  }
+}
+
 /** Create a Hono app authenticated as the given user. Pass `operatorId` to
- *  simulate a tenant-scoped OPERATOR_* caller. */
-function appAs(userId: string, role: TestRole = 'RENTER', operatorId?: string): Hono {
+ *  simulate a tenant-scoped OPERATOR_* caller, and `limiter` to exercise the
+ *  per-user send rate limit. */
+function appAs(
+  userId: string,
+  role: TestRole = 'RENTER',
+  operatorId?: string,
+  limiter?: RateLimitBinding,
+): Hono {
   const a = new Hono()
   a.use('*', testAuthMiddleware(userId, role, operatorId))
   // The operator new-message alert (#1205) is exercised in message.test.ts; the
   // route tests only assert HTTP behavior, so a no-op alert port keeps them focused.
-  a.route('/', createMessageRoutes(new MessageService(threadRepo, messageRepo, async () => {})))
+  a.route(
+    '/',
+    createMessageRoutes(new MessageService(threadRepo, messageRepo, async () => {}), limiter),
+  )
   // Wire the production error handler so domain errors map to their real status
   // (e.g. ConflictError -> 409) instead of a bare-Hono 500. Mirrors createApp.
   setupGlobalHandlers(a)
@@ -385,6 +408,40 @@ describe('Message Routes', () => {
         })
         expect(replay.status).toBe(200)
         expect((await replay.json()).data.id).toBe(firstId)
+      })
+    })
+
+    // Messaging GA hardening (Refs #1476): cap thread-message sends per user so a
+    // single account can't flood a thread. Per-user (authed endpoint) beats the
+    // global per-IP limiter behind NAT; absent binding = unthrottled local dev.
+    describe('per-user send rate limit', () => {
+      it('returns 429 once the per-user send limit is exceeded', async () => {
+        const limitedApp = appAs(U1, 'RENTER', undefined, createFakeLimiter(1))
+        const threadId = await seedThread([U1, U2])
+        const send = () =>
+          limitedApp.request(`/threads/${threadId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: 'flood' }),
+          })
+
+        const first = await send()
+        const second = await send()
+
+        expect(first.status).toBe(201)
+        expect(second.status).toBe(429)
+      })
+
+      it('does not rate-limit when no binding is injected (local dev)', async () => {
+        const threadId = await seedThread([U1, U2])
+        for (let i = 0; i < 3; i++) {
+          const res = await app.request(`/threads/${threadId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: `msg-${i}` }),
+          })
+          expect(res.status).toBe(201)
+        }
       })
     })
   })

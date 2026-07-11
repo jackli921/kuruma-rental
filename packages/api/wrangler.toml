@@ -88,6 +88,25 @@ namespace_id = "1006"
 simple.limit = 5
 simple.period = 60
 
+# Per-user cap on message translation (messaging GA, #1476). Each uncached
+# (message, language) hits an EXTERNAL translation provider, so key per authed
+# user (not per IP) to give NAT'd callers independent budgets. 20/60s comfortably
+# covers reading a thread in another language while blocking provider-cost abuse.
+[[ratelimits]]
+name = "MESSAGE_TRANSLATE_LIMITER"
+namespace_id = "1007"
+simple.limit = 20
+simple.period = 60
+
+# Per-user cap on thread message sends (messaging GA, #1476). Stops a single
+# account flooding a thread. 30/60s is generous for real back-and-forth chat and
+# still bounds abuse; the global RATE_LIMITER covers the per-IP dimension.
+[[ratelimits]]
+name = "MESSAGE_SEND_LIMITER"
+namespace_id = "1008"
+simple.limit = 30
+simple.period = 60
+
 # R2 buckets — R2 enabled on the account + buckets created 2026-06-14.
 # VEHICLE_PHOTOS: public car photos, served via VEHICLE_PHOTOS_PUBLIC_URL (below).
 # The composition root uses R2PhotoStorage only when BOTH the binding and that var
