@@ -121,6 +121,12 @@ beforeAll(async () => {
   await seedDocument('RENTER_TOS')
   await seedDocument('RENTER_LIABILITY')
   await seedDocument('OPERATOR_AGREEMENT')
+  // Slice B (#877): a bare OPERATOR_RENTAL_TERMS document to serve as the composite-FK
+  // target for the acceptance-row constraint tests below. Kept operatorId NULL on purpose:
+  // this file exercises the ACCEPTANCE row shape (whose operatorId is always NULL, §3), and
+  // consent-operator-repo.test.ts owns every operator-scoped doc for BEST_CAR_RENTAL and runs
+  // in parallel against this DB — seeding one here under that operator would pollute it.
+  await seedDocument('OPERATOR_RENTAL_TERMS')
 
   const seeded = await createSeededBooking({ prefix: 'consent-1049', renterId: renterUserId })
   bookingId = seeded.booking.id
@@ -277,6 +283,88 @@ describe('consent_acceptances DB constraints (#1049, real pg)', () => {
       PG_ERROR.UNIQUE_VIOLATION,
       'consent_unique_booking_liability',
     )
+  })
+
+  // --- Slice B (#877): OPERATOR_RENTAL_TERMS is the second per-booking (PER_EVENT) consent. ---
+
+  it('accepts an OPERATOR_RENTAL_TERMS row bound to a booking (widened liability CHECK)', async () => {
+    // Before Slice B this row was rejected by consent_liability_booking_chk (only
+    // RENTER_LIABILITY could carry a bookingId). operatorId stays NULL (§3).
+    const row = acceptance({
+      consentType: 'OPERATOR_RENTAL_TERMS',
+      documentId: docIds.OPERATOR_RENTAL_TERMS!,
+      bookingId,
+    })
+    const err = await insertAcceptance(row)
+    expect(err, 'an operator-terms acceptance with a bookingId must now insert').toBeNull()
+
+    const [persisted] = await db
+      .select({
+        consentType: consentAcceptances.consentType,
+        bookingId: consentAcceptances.bookingId,
+        operatorId: consentAcceptances.operatorId,
+      })
+      .from(consentAcceptances)
+      .where(eq(consentAcceptances.id, row.id))
+    expect(persisted).toEqual({
+      consentType: 'OPERATOR_RENTAL_TERMS',
+      bookingId,
+      operatorId: null,
+    })
+  })
+
+  it('rejects OPERATOR_RENTAL_TERMS with a NULL bookingId (widened liability CHECK)', async () => {
+    // The widened CHECK is bidirectional: operator-terms still REQUIRES a booking.
+    await expectViolation(
+      acceptance({
+        consentType: 'OPERATOR_RENTAL_TERMS',
+        documentId: docIds.OPERATOR_RENTAL_TERMS!,
+        bookingId: null,
+      }),
+      PG_ERROR.CHECK_VIOLATION,
+      'consent_liability_booking_chk',
+    )
+  })
+
+  it('lets liability AND operator-terms coexist on one booking, but blocks a duplicate of either type (generalized (booking, type) seal)', async () => {
+    // A fresh booking so this test owns both per-booking types on it outright.
+    const seeded = await createSeededBooking({ prefix: 'consent-sliceb', renterId: renterUserId })
+    const bId = seeded.booking.id
+
+    const liability = acceptance({
+      consentType: 'RENTER_LIABILITY',
+      documentId: docIds.RENTER_LIABILITY!,
+      bookingId: bId,
+    })
+    const terms = acceptance({
+      consentType: 'OPERATOR_RENTAL_TERMS',
+      documentId: docIds.OPERATOR_RENTAL_TERMS!,
+      bookingId: bId,
+    })
+    expect(
+      await insertAcceptance(liability),
+      'liability on the fresh booking must insert',
+    ).toBeNull()
+    expect(
+      await insertAcceptance(terms),
+      'operator-terms on the SAME booking must coexist with liability',
+    ).toBeNull()
+
+    // The seal is now (bookingId, consentType): a duplicate of the SAME type still collides.
+    await expectViolation(
+      acceptance({
+        consentType: 'OPERATOR_RENTAL_TERMS',
+        documentId: docIds.OPERATOR_RENTAL_TERMS!,
+        bookingId: bId,
+      }),
+      PG_ERROR.UNIQUE_VIOLATION,
+      'consent_unique_booking_liability',
+    )
+
+    // Teardown: acceptances are dropped in afterAll (their ids are tracked); drop this
+    // test's extra booking here (afterAll only knows the beforeAll booking).
+    await db.delete(consentAcceptances).where(eq(consentAcceptances.bookingId, bId))
+    await seeded.cleanup()
   })
 
   it('rejects a second acceptance of the same (user, document) (user-document unique)', async () => {

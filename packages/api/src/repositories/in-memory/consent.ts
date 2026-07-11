@@ -75,8 +75,11 @@ export class InMemoryConsentRepository implements ConsentRepository {
     )
   }
 
-  async findBookingAcceptance(bookingId: string): Promise<ConsentAcceptance | undefined> {
-    return this.acceptances.find((a) => a.bookingId === bookingId)
+  async findBookingAcceptance(
+    bookingId: string,
+    consentType: ConsentType,
+  ): Promise<ConsentAcceptance | undefined> {
+    return this.acceptances.find((a) => a.bookingId === bookingId && a.consentType === consentType)
   }
 
   async findOperatorDocumentAcceptance(
@@ -260,13 +263,18 @@ export class InMemoryConsentRepository implements ConsentRepository {
 
   // Priority early-returns are correct ONLY because the DB CHECK constraints
   // consent_liability_booking_chk and consent_operator_agreement_chk make the three
-  // partial-unique predicates mutually disjoint: bookingId≠null implies RENTER_LIABILITY,
-  // operatorId≠null implies OPERATOR_AGREEMENT, and the two are mutually exclusive.
-  // This in-memory double does NOT re-enforce those CHECKs — it assumes callers construct
-  // shape-valid rows. The Task 9 ConsentService subject-shape pre-check is the enforcing guard.
+  // partial-unique predicates mutually disjoint: bookingId≠null implies a per-booking type
+  // (RENTER_LIABILITY or OPERATOR_RENTAL_TERMS), operatorId≠null implies OPERATOR_AGREEMENT,
+  // and the two are mutually exclusive. This in-memory double does NOT re-enforce those CHECKs —
+  // it assumes callers construct shape-valid rows. The ConsentService subject-shape pre-check is
+  // the enforcing guard.
   private assertUnique(d: NewConsentAcceptance): void {
     if (d.bookingId !== null) {
-      if (this.acceptances.some((a) => a.bookingId === d.bookingId))
+      // §4.6: the seal is (bookingId, consentType) — liability and operator-terms coexist on
+      // one booking, but a duplicate of the SAME type on the same booking collides.
+      if (
+        this.acceptances.some((a) => a.bookingId === d.bookingId && a.consentType === d.consentType)
+      )
         throw uniqueViolation('consent_unique_booking_liability')
       return
     }

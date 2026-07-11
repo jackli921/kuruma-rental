@@ -147,7 +147,41 @@ describe('InMemoryConsentRepository', () => {
       code: '23505',
       constraint_name: 'consent_unique_booking_liability',
     })
-    expect((await repo.findBookingAcceptance('booking_abc'))?.id).toBe(created.id)
+    expect((await repo.findBookingAcceptance('booking_abc', 'RENTER_LIABILITY'))?.id).toBe(
+      created.id,
+    )
+  })
+
+  it('lets liability and operator-terms coexist on one booking but seals each type (§4.6)', async () => {
+    // Both are per-booking (PER_EVENT); the (bookingId, consentType) seal admits both while
+    // still rejecting a duplicate of the SAME type on the SAME booking.
+    const liability = await repo.createAcceptance({
+      ...baseAcceptance,
+      consentType: 'RENTER_LIABILITY' as const,
+      bookingId: 'booking_shared',
+    })
+    const terms = await repo.createAcceptance({
+      ...baseAcceptance,
+      documentId: 'doc_terms',
+      consentType: 'OPERATOR_RENTAL_TERMS' as const,
+      bookingId: 'booking_shared',
+    })
+    // findBookingAcceptance is type-scoped: it disambiguates the two per-booking rows.
+    expect((await repo.findBookingAcceptance('booking_shared', 'RENTER_LIABILITY'))?.id).toBe(
+      liability.id,
+    )
+    expect((await repo.findBookingAcceptance('booking_shared', 'OPERATOR_RENTAL_TERMS'))?.id).toBe(
+      terms.id,
+    )
+    // A duplicate operator-terms on the same booking still collides.
+    await expect(
+      repo.createAcceptance({
+        ...baseAcceptance,
+        documentId: 'doc_terms',
+        consentType: 'OPERATOR_RENTAL_TERMS' as const,
+        bookingId: 'booking_shared',
+      }),
+    ).rejects.toMatchObject({ code: '23505', constraint_name: 'consent_unique_booking_liability' })
   })
 
   it('seals operator-document idempotency with constraint_name consent_unique_operator_document', async () => {

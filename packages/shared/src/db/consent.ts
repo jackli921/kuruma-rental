@@ -94,9 +94,18 @@ export const consentAcceptances = pgTable(
       name: 'consent_acceptances_document_type_fk',
     }).onDelete('restrict'),
     // Row-shape invariants (DB-enforced, not service-promised).
+    // §4.4 — widened for Slice B: operator-terms is the second per-booking (PER_EVENT)
+    // consent, so a bookingId is now valid for RENTER_LIABILITY OR OPERATOR_RENTAL_TERMS,
+    // and still required for both / forbidden for every other type.
+    // The `::text` cast is load-bearing, not cosmetic: OPERATOR_RENTAL_TERMS is added to the
+    // consent_type enum in migration 0104, and drizzle's migrator applies a fresh history in ONE
+    // transaction. Referencing the value as an enum literal here would trip Postgres' "unsafe use
+    // of new enum value" (a value added by ALTER TYPE ADD VALUE cannot be used in the same tx that
+    // added it), failing `db:migrate`/CI/deploy on any fresh DB. Comparing the column as text keeps
+    // the literals plain strings, so no new enum value is resolved at DDL time.
     check(
       'consent_liability_booking_chk',
-      sql`(${t.consentType} = 'RENTER_LIABILITY') = (${t.bookingId} IS NOT NULL)`,
+      sql`(${t.consentType}::text IN ('RENTER_LIABILITY', 'OPERATOR_RENTAL_TERMS')) = (${t.bookingId} IS NOT NULL)`,
     ),
     check(
       'consent_operator_agreement_chk',
@@ -108,8 +117,11 @@ export const consentAcceptances = pgTable(
     ),
     // Three disjoint idempotency seals (§4.1). documentId pins version+locale, so a new
     // version is a different row (re-consent history, not a dup).
+    // §4.6 — generalized for Slice B to (bookingId, consentType): liability AND operator-terms
+    // are both per-booking, so the seal is now "one row per (booking, type)" (was "one row per
+    // booking"), still blocking a duplicate acceptance of the same type on the same booking.
     uniqueIndex('consent_unique_booking_liability')
-      .on(t.bookingId)
+      .on(t.bookingId, t.consentType)
       .where(sql`${t.bookingId} IS NOT NULL`),
     uniqueIndex('consent_unique_user_document')
       .on(t.userId, t.documentId)
