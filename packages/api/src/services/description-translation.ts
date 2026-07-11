@@ -29,19 +29,27 @@ export class MachineDescriptionTranslator implements DescriptionTranslator {
     for (const [index, result] of settled.entries()) {
       const target = targets[index]
       if (!target) continue
-      if (result.status === 'fulfilled') {
-        bag[target] = result.value.translatedText
-      } else {
-        // MEDIUM-4: never a fully-silent drop. Request obs only reports 5xx/slow,
-        // so a GOOGLE_TRANSLATE_API_KEY drift would degrade every save with no
-        // signal. Parity with message-translation.ts, plus Sentry.
-        console.error('Add-on description translation failed', {
-          sourceLocale,
-          target,
-          err: result.reason instanceof Error ? result.reason.message : String(result.reason),
-        })
-        Sentry.captureException(result.reason)
+
+      const translated = result.status === 'fulfilled' ? result.value.translatedText.trim() : ''
+      if (translated) {
+        bag[target] = translated
+        continue
       }
+
+      // Drop a rejected leg OR an empty/whitespace machine result so the reader
+      // falls through to the source: resolveOwnDescription treats an ABSENT locale
+      // (not '') as the fallback trigger, so persisting '' would render blank for
+      // that reader — puncturing the same non-empty guarantee the inbound Zod
+      // `.min(1)` enforces. MEDIUM-4: never a fully-silent drop — a key/API drift
+      // would otherwise degrade every save with no signal.
+      const reason =
+        result.status === 'rejected' ? result.reason : new Error(`empty translation (${target})`)
+      console.error('Add-on description translation failed', {
+        sourceLocale,
+        target,
+        err: reason instanceof Error ? reason.message : String(reason),
+      })
+      Sentry.captureException(reason)
     }
     return bag
   }

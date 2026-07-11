@@ -44,4 +44,21 @@ describe('MachineDescriptionTranslator.fill', () => {
     expect(errSpy).toHaveBeenCalledOnce()
     expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error))
   })
+
+  it('drops an empty/whitespace machine result so the reader falls through, not blank', async () => {
+    // A '' or whitespace slot is NOT nullish, so resolveOwnDescription would render
+    // it blank instead of falling through — treat it exactly like a failed leg.
+    const blankZh: TranslationProvider = {
+      translate: async (text, source, target) => ({
+        translatedText: target === 'zh' ? '   ' : `${target}<-${text}`,
+        detectedLanguage: source ?? target,
+      }),
+    }
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const translator = new MachineDescriptionTranslator(blankZh)
+    const bag = await translator.fill('ja', 'X')
+    expect(bag).toEqual({ ja: 'X', en: 'en<-X' })
+    expect(errSpy).toHaveBeenCalledOnce()
+    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error))
+  })
 })
