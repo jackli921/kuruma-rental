@@ -45,7 +45,7 @@ export function AddAddOnDialog({ open, onOpenChange, pickedOperatorId }: AddAddO
   })
 
   const { mutateAsync, isPending, error, reset } = useMutation({
-    mutationFn: (data: WithOperatorId<CreateAddOnInput>) => createAddOn(data, csrfToken),
+    mutationFn: (data: WithOperatorId<CreateAddOnInput>) => createAddOn(data, csrfToken, locale),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADDON_QUERY_KEY })
       onOpenChange(false)

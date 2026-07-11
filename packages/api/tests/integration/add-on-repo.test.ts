@@ -9,6 +9,7 @@ import {
 } from '../../src/repositories/drizzle'
 import { AddOnService } from '../../src/services/add-on'
 import type { AddOn } from '../../src/stores'
+import { fakeDescriptionTranslator } from '../helpers/fake-translator'
 import { db } from './setup'
 
 // Catalog i18n (slice 2) against real Postgres. Proves what the in-memory double
@@ -141,7 +142,11 @@ describe('add-on template FK + active-template uniqueness (Drizzle)', () => {
 })
 
 describe('add-on self-authored path (#1437, Drizzle)', () => {
-  const service = new AddOnService(repo, new DrizzleAddOnTemplateRepository(db))
+  const service = new AddOnService(
+    repo,
+    new DrizzleAddOnTemplateRepository(db),
+    fakeDescriptionTranslator(),
+  )
 
   it('round-trips a self-authored nameI18n bundle through jsonb (no template)', async () => {
     const bundle = { en: 'GPS unit', ja: 'GPS ユニット', zh: 'GPS 装置' }
@@ -191,7 +196,11 @@ describe('add-on self-authored path (#1437, Drizzle)', () => {
 })
 
 describe('add-on ?locale= resolution through the service (Drizzle)', () => {
-  const service = new AddOnService(repo, new DrizzleAddOnTemplateRepository(db))
+  const service = new AddOnService(
+    repo,
+    new DrizzleAddOnTemplateRepository(db),
+    fakeDescriptionTranslator(),
+  )
 
   it('resolves the template name to the requested locale on create', async () => {
     const res = await service.create(

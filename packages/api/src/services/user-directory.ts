@@ -38,9 +38,10 @@ export class UserDirectoryService {
     if (PRIVILEGED_ROLES.has(ctx.role)) return 'all'
     // #396: OPERATOR_* are self-only here. The thread lookup below uses a
     // synthetic RENTER context to resolve a caller's co-participants for renter
-    // messaging; operators have no messaging surface yet (slice 7) and must not
-    // resolve another tenant's users via a shared thread. Fail closed until
-    // operator messaging is deliberately modeled.
+    // messaging. Operator messaging ships now (#1205), but operators read their
+    // inbox by tenant scope (threads.operatorId), not by participation — so they
+    // must never resolve another tenant's users via a shared thread. The directory
+    // stays self-only and fail-closed for them by design.
     if (isOperatorRole(ctx.role)) return new Set<string>([ctx.userId])
     const threads = await this.threadRepo.findAll({ userId: ctx.userId, role: 'RENTER' })
     const allowed = new Set<string>([ctx.userId])

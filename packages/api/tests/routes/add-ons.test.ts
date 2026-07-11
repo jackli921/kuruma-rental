@@ -10,6 +10,7 @@ import {
 import { createAddOnRoutes } from '../../src/routes/add-ons'
 import { AddOnService } from '../../src/services/add-on'
 import { testAuthMiddleware } from '../helpers/auth'
+import { fakeDescriptionTranslator } from '../helpers/fake-translator'
 import { testResolveWriteOperatorId } from '../helpers/operator'
 
 const OP_A = 'operator-aaaaaaaa'
@@ -26,7 +27,7 @@ function mountFor(repo: InMemoryAddOnRepository, role: UserRole, operatorId?: st
   app.route(
     '/',
     createAddOnRoutes(
-      new AddOnService(repo, new InMemoryAddOnTemplateRepository()),
+      new AddOnService(repo, new InMemoryAddOnTemplateRepository(), fakeDescriptionTranslator()),
       testResolveWriteOperatorId(),
     ),
   )
@@ -59,7 +60,11 @@ describe('Add-on routes — auth', () => {
     app.route(
       '/',
       createAddOnRoutes(
-        new AddOnService(new InMemoryAddOnRepository(), new InMemoryAddOnTemplateRepository()),
+        new AddOnService(
+          new InMemoryAddOnRepository(),
+          new InMemoryAddOnTemplateRepository(),
+          fakeDescriptionTranslator(),
+        ),
         testResolveWriteOperatorId(),
       ),
     )

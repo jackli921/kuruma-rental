@@ -93,6 +93,7 @@ import { ConsentGateService } from './services/consent-gate'
 import { ConsentGovernanceService } from './services/consent-governance'
 import { resolveSigningKey } from './services/consent-signing'
 import { CustomerService } from './services/customer'
+import { MachineDescriptionTranslator } from './services/description-translation'
 import { documentVerificationGate } from './services/document-verification-gate'
 import type { EmailSender } from './services/email/email-sender'
 import { makeEnsureThread } from './services/ensure-thread'
@@ -208,6 +209,14 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const operatorApplicationLimiter =
     overrides?.operatorApplicationLimiter ??
     ((globalThis as Record<string, unknown>).OPERATOR_APPLICATION_LIMITER as
+      | RateLimitBinding
+      | undefined)
+  const messageSendLimiter =
+    overrides?.messageSendLimiter ??
+    ((globalThis as Record<string, unknown>).MESSAGE_SEND_LIMITER as RateLimitBinding | undefined)
+  const messageTranslateLimiter =
+    overrides?.messageTranslateLimiter ??
+    ((globalThis as Record<string, unknown>).MESSAGE_TRANSLATE_LIMITER as
       | RateLimitBinding
       | undefined)
 
@@ -495,7 +504,12 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // off) and the add-on create path (reject a templateId when off) gate on ONE narrow
   // thunk (ISP) rather than the whole FeatureFlagsService.
   const isSharedCatalogEnabled = () => featureFlagsService.isEnabled('SHARED_CATALOG')
-  const addOnService = new AddOnService(addOnRepo, addOnTemplateRepo, isSharedCatalogEnabled)
+  const addOnService = new AddOnService(
+    addOnRepo,
+    addOnTemplateRepo,
+    new MachineDescriptionTranslator(translationProvider),
+    isSharedCatalogEnabled,
+  )
   const addOnTemplateService = new AddOnTemplateService(
     addOnTemplateRepo,
     addOnRepo,
@@ -605,12 +619,15 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createFeatureFlagsRoutes(featureFlagsService))
     .route('/', createAdminOverviewRoutes(adminOverviewService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
-    .route('/', createMessageRoutes(messageService))
+    .route('/', createMessageRoutes(messageService, messageSendLimiter))
     .route('/', createConsentRoutes(consentService))
     .route('/', createAdminConsentRoutes(consentGovernanceService))
     .route(
       '/',
-      createTranslateRoutes(new MessageTranslationService(messageRepo, translationProvider)),
+      createTranslateRoutes(
+        new MessageTranslationService(messageRepo, translationProvider),
+        messageTranslateLimiter,
+      ),
     )
     .route('/', createCustomerRoutes(customerService))
     .route('/', createUserRoutes(userDirectoryService))

@@ -1,6 +1,6 @@
 {
-  "id": "4b4f96eb-c59f-4a8a-be56-3026eef4bd5a",
-  "prevId": "a28cc812-018c-48bf-90e9-676b15b95197",
+  "id": "bd29700e-ce25-4031-bd8d-2eff23969aa9",
+  "prevId": "0adcbad4-8fed-4408-91ff-6de971dd1eb2",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2923,6 +2923,32 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "bookings_pickupLocationId_locations_id_fk": {
+          "name": "bookings_pickupLocationId_locations_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "pickupLocationId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bookings_dropoffLocationId_locations_id_fk": {
+          "name": "bookings_dropoffLocationId_locations_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "dropoffLocationId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "bookings_operator_class_fk": {
           "name": "bookings_operator_class_fk",
           "tableFrom": "bookings",
@@ -2975,36 +3001,6 @@
           "columnsFrom": [
             "operatorId",
             "insuranceOptionId"
-          ],
-          "columnsTo": [
-            "operatorId",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bookings_operator_pickup_location_fk": {
-          "name": "bookings_operator_pickup_location_fk",
-          "tableFrom": "bookings",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "operatorId",
-            "pickupLocationId"
-          ],
-          "columnsTo": [
-            "operatorId",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bookings_operator_dropoff_location_fk": {
-          "name": "bookings_operator_dropoff_location_fk",
-          "tableFrom": "bookings",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "operatorId",
-            "dropoffLocationId"
           ],
           "columnsTo": [
             "operatorId",
@@ -5077,6 +5073,12 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "consentType",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
           "isUnique": true,
@@ -5256,7 +5258,7 @@
       "checkConstraints": {
         "consent_liability_booking_chk": {
           "name": "consent_liability_booking_chk",
-          "value": "(\"consent_acceptances\".\"consentType\" = 'RENTER_LIABILITY') = (\"consent_acceptances\".\"bookingId\" IS NOT NULL)"
+          "value": "(\"consent_acceptances\".\"consentType\"::text IN ('RENTER_LIABILITY', 'OPERATOR_RENTAL_TERMS')) = (\"consent_acceptances\".\"bookingId\" IS NOT NULL)"
         },
         "consent_operator_agreement_chk": {
           "name": "consent_operator_agreement_chk",

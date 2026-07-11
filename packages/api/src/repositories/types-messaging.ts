@@ -9,6 +9,19 @@ export interface ThreadRepository {
   findAll(
     ctx: CallerContext,
   ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>>
+  /**
+   * Paginated read of the caller's in-scope threads (#1476). Pushes limit/offset
+   * and the total count into the query so a `GET /threads` never materialises
+   * every in-scope thread (a PLATFORM_ADMIN `all` scope spans the platform).
+   * Ordered newest createdAt first, id as the tiebreaker, for a stable boundary.
+   */
+  findPage(
+    ctx: CallerContext,
+    opts: { limit: number; offset: number },
+  ): Promise<{
+    threads: Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>
+    total: number
+  }>
   findById(
     ctx: CallerContext,
     id: string,

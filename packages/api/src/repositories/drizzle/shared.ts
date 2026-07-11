@@ -325,7 +325,6 @@ export const messageColumns = {
   content: messages.content,
   sourceLanguage: messages.sourceLanguage,
   translations: messages.translations,
-  idempotencyKey: messages.idempotencyKey,
   createdAt: messages.createdAt,
 }
 
@@ -800,7 +799,6 @@ export type RawMessageRow = {
   content: string
   sourceLanguage: string | null
   translations: Record<string, string>
-  idempotencyKey: string | null
   createdAt: Date
 }
 
@@ -814,7 +812,6 @@ export function normaliseMessage(row: RawMessageRow): Message {
     content: row.content,
     sourceLanguage: row.sourceLanguage,
     translations: row.translations,
-    idempotencyKey: row.idempotencyKey ?? null,
     createdAt: row.createdAt,
   }
 }

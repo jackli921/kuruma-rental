@@ -1,4 +1,4 @@
-import type { CallerContext } from '../middleware/auth'
+import { type CallerContext, ConflictError } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type {
   MessageCreateResult,
@@ -46,8 +46,9 @@ export class MessageService {
     limit: number,
     offset: number,
   ): Promise<{ threads: ThreadListItem[]; total: number }> {
-    const all = await this.threadRepo.findAll(ctx)
-    return { threads: all.slice(offset, offset + limit), total: all.length }
+    // #1476: limit/offset + the total count are pushed into the repository query
+    // instead of loading every in-scope thread and slicing here.
+    return this.threadRepo.findPage(ctx, { limit, offset })
   }
 
   async getThread(ctx: CallerContext, id: string): Promise<ThreadDetail | undefined> {
@@ -132,6 +133,13 @@ async function idempotentCreate<T>(
     if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION && key) {
       const existing = await find(key)
       if (existing) return { record: existing, status: 200 }
+      // The key is globally unique but the scoped re-fetch found nothing: a
+      // DIFFERENT sender already claimed it (find is sender-scoped, #328). Surface
+      // a clean 409 rather than letting the raw UNIQUE_VIOLATION escape as a 500.
+      // The 409 still signals "some sender claimed this key", but the key is no
+      // longer readable off the read model (idempotencyKey drop) and is a UUID, so
+      // there's nothing to probe with. Messaging GA (Refs #1476).
+      throw new ConflictError('idempotency key already used')
     }
     throw err
   }
