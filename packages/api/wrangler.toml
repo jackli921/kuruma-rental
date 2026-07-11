@@ -236,11 +236,23 @@ simple.period = 60
 # #1009 CF provisioning):
 #   npx wrangler r2 bucket create kuruma-vehicle-photos-production
 #   npx wrangler r2 bucket create kuruma-renter-documents-production
-# then enable r2.dev public access on the vehicle-photos one and paste its
-# public URL into VEHICLE_PHOTOS_PUBLIC_URL below.
-[[env.production.r2_buckets]]
-binding = "VEHICLE_PHOTOS"
-bucket_name = "kuruma-vehicle-photos-production"
+#
+# VEHICLE_PHOTOS is DELIBERATELY COMMENTED OUT (like the KV block below), NOT
+# just left with an empty URL. A DECLARED VEHICLE_PHOTOS binding + empty
+# VEHICLE_PHOTOS_PUBLIC_URL does NOT gracefully disable uploads — it THROWS at
+# the composition root and 500s the entire API (assertPhotosBaseConfigured in
+# composition/repositories.ts refuses to boot in that state, because an empty
+# base also disables the #967 cross-tenant photo-spoof guard). With the binding
+# absent, the composition root falls back to DisabledPhotoStorage: uploads are
+# off, every other route works. To turn photos ON at go-live: create + enable
+# r2.dev public access on the bucket, then UNCOMMENT this binding AND set
+# VEHICLE_PHOTOS_PUBLIC_URL below IN THE SAME DEPLOY (both together, or it 500s).
+# While commented, `wrangler deploy --env production` prints a harmless "binding
+# VEHICLE_PHOTOS at top level but not on env.production" info note — that
+# asymmetry is intentional; do NOT "fix" it by re-adding the binding alone.
+# [[env.production.r2_buckets]]
+# binding = "VEHICLE_PHOTOS"
+# bucket_name = "kuruma-vehicle-photos-production"
 
 [[env.production.r2_buckets]]
 binding = "RENTER_DOCUMENTS"
@@ -265,11 +277,11 @@ WEB_ORIGIN = "https://kuruma-web-production.pages.dev"
 # a Worker secret rotated via rotate-secrets.yml.
 EMAIL_FROM = "noreply@mail.jack-li.dev"
 
-# Public base URL for the PROD vehicle-photos bucket's r2.dev access. Left EMPTY
-# on purpose = fail-closed: photo upload falls back to DisabledPhotoStorage
-# (repositories.ts, r2-photo-storage.ts) until the owner creates the prod bucket,
-# enables r2.dev public access, and pastes its URL here. Deploying with this
-# empty simply disables uploads rather than writing photos to a dead URL.
+# Public base URL for the PROD vehicle-photos bucket's r2.dev access. Kept
+# PRESENT but EMPTY (not deleted) so it mirrors the top-level var and stays
+# harmless while the VEHICLE_PHOTOS binding above is commented out (empty URL is
+# only dangerous WITH a live binding — see that block). At go-live, uncomment
+# that binding and set this to the prod bucket's real r2.dev URL in one deploy.
 VEHICLE_PHOTOS_PUBLIC_URL = ""
 
 # Sentry environment tag for prod (beta uses "beta"). Groups prod errors
