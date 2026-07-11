@@ -76,7 +76,6 @@ export class InMemoryMessageRepository implements MessageRepository {
       content,
       sourceLanguage: null,
       translations: {},
-      idempotencyKey: idempotencyKey ?? null,
       createdAt: new Date(),
     }
     // A renter send (participant scope) bumps the operator's tenant-level unread;
