@@ -79,7 +79,16 @@ describe('bookings pickup/dropoff location composite FK (real pg)', () => {
 
   it('accepts pickup + dropoff owned by the booking’s own operator', async () => {
     const row = bookingRow(locationAId, locationAId)
-    await db.insert(bookings).values(row)
+    const [inserted] = await db.insert(bookings).values(row).returning({
+      id: bookings.id,
+      pickupLocationId: bookings.pickupLocationId,
+      dropoffLocationId: bookings.dropoffLocationId,
+    })
+    expect(inserted).toEqual({
+      id: row.id,
+      pickupLocationId: locationAId,
+      dropoffLocationId: locationAId,
+    })
     await db.delete(bookings).where(inArray(bookings.id, [row.id]))
   })
 })
