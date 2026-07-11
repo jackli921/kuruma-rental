@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { setupGlobalHandlers } from '../../src/error-handlers'
 import {
   InMemoryMessageRepository,
   InMemoryThreadRepository,
@@ -25,6 +26,9 @@ function appAs(userId: string, role: TestRole = 'RENTER', operatorId?: string): 
   // The operator new-message alert (#1205) is exercised in message.test.ts; the
   // route tests only assert HTTP behavior, so a no-op alert port keeps them focused.
   a.route('/', createMessageRoutes(new MessageService(threadRepo, messageRepo, async () => {})))
+  // Wire the production error handler so domain errors map to their real status
+  // (e.g. ConflictError -> 409) instead of a bare-Hono 500. Mirrors createApp.
+  setupGlobalHandlers(a)
   return a
 }
 
@@ -331,10 +335,12 @@ describe('Message Routes', () => {
         expect(b1.data.id).toBe(b2.data.id)
       })
 
-      // Issue #328: findByIdempotencyKey must scope to sender. Two
-      // participants in the same thread replaying the same key must
-      // not see each other's messages.
-      it('cross-tenant: U2 replaying U1 message key does not leak U1 message', async () => {
+      // Issue #328: findByIdempotencyKey must scope to sender. Two participants in
+      // the same thread replaying the same key must not see each other's messages.
+      // The key is globally unique (messages_idempotency_key), so U2's replay of
+      // U1's key can't resolve on the sender-scoped re-fetch — messaging GA (#1476)
+      // surfaces that as a clean 409, never U1's message and never a raw 500.
+      it('cross-sender: U2 replaying U1 message key gets 409, never U1 message', async () => {
         // U1's thread with U2.
         const threadId = await seedThread([U1, U2])
 
@@ -347,18 +353,17 @@ describe('Message Routes', () => {
         expect(u1Msg.status).toBe(201)
         const u1MsgId = (await u1Msg.json()).data.id
 
-        // U2 sends in the same thread with the same key. U2 must NOT get U1's message back.
+        // U2 sends in the same thread with the same key. U2 must NOT get U1's message.
         const u2Msg = await appAs(U2).request(`/threads/${threadId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: 'From U2', idempotencyKey: sharedKey }),
         })
-        if (u2Msg.status === 200 || u2Msg.status === 201) {
-          const body = await u2Msg.json()
-          expect(body.data.id).not.toBe(u1MsgId)
-          expect(body.data.senderId).toBe(U2)
-        }
-        expect([200, 201, 500]).toContain(u2Msg.status)
+        expect(u2Msg.status).toBe(409)
+        const body = await u2Msg.json()
+        expect(body.success).toBe(false)
+        expect(body).not.toHaveProperty('data')
+        expect(JSON.stringify(body)).not.toContain(u1MsgId)
       })
 
       it('same sender replaying own key returns their existing message', async () => {

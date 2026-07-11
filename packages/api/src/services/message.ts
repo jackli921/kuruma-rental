@@ -1,4 +1,4 @@
-import type { CallerContext } from '../middleware/auth'
+import { type CallerContext, ConflictError } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type {
   MessageCreateResult,
@@ -132,6 +132,11 @@ async function idempotentCreate<T>(
     if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION && key) {
       const existing = await find(key)
       if (existing) return { record: existing, status: 200 }
+      // The key is globally unique but the scoped re-fetch found nothing: a
+      // DIFFERENT sender already claimed it (find is sender-scoped, #328). Surface
+      // a clean 409 rather than letting the raw UNIQUE_VIOLATION escape as a 500 —
+      // and without a cross-sender existence oracle. Messaging GA (Refs #1476).
+      throw new ConflictError('idempotency key already used')
     }
     throw err
   }
