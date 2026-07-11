@@ -16,6 +16,7 @@ import type {
   VehicleClassRepository,
   VehicleRepository,
 } from './types'
+import type { ConsentRepository } from './types-consent'
 import type { ClassRatePlanRepository } from './types-pricing'
 
 // Transaction-runner ports (#392 booking bundle + #521 operator-grant bundle)
@@ -52,6 +53,18 @@ export interface TransactionRepos {
   // NEW bookings — every create path loads the vehicle's/location's operator in-tx
   // and rejects when it's gone or deactivated. Read-only (findById) here.
   operatorRepo: Pick<OperatorRepository, 'findById'>
+  // #877 Slice B: the renter's operator-terms acceptance is written INSIDE the
+  // booking tx (one ledger row, atomic with the booking insert that yields the
+  // bookingId the signature binds). Narrowed to the reads the resolve+pin needs
+  // plus the write; none of these four call runTransaction, so the tx-bound
+  // instance's sentinel runTx is never reached (M4 — Pick narrowing, not a throw).
+  consentRepo: Pick<
+    ConsentRepository,
+    | 'findBookingAcceptance'
+    | 'createAcceptance'
+    | 'findLatestPublishedVersionForOperator'
+    | 'findPublishedOperatorDocument'
+  >
 }
 
 export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>
