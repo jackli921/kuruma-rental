@@ -67,6 +67,13 @@ export const ERROR_CODES = [
   'INVALID_STATUS',
   'VEHICLE_UNAVAILABLE',
   'USE_ASSIGN_FOR_COMBO',
+  // #877 Slice B: renter must accept the operator's published rental terms at
+  // booking-create. REQUIRED — a published doc exists but the accept flag is
+  // missing/false; CHANGED — the client-pinned version != latest at submit (the
+  // operator republished mid-checkout). Laundered onto the booking-create
+  // envelope via CreateBookingResult.code.
+  'OPERATOR_TERMS_REQUIRED',
+  'OPERATOR_TERMS_CHANGED',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]
