@@ -64,8 +64,10 @@ export class DrizzleThreadRepository implements ThreadRepository {
   // #1476: page the caller's in-scope threads with limit/offset + the total count
   // pushed into SQL, so the service never materialises every in-scope thread (a
   // PLATFORM_ADMIN `all` scope would otherwise scan platform-wide per GET /threads).
-  // Ordered newest createdAt first with id as the tiebreaker for a stable page
-  // boundary; the in-memory repo mirrors the same order.
+  // Ordered newest createdAt first with id as the tiebreaker (id order follows the
+  // DB text collation) for a stable page boundary within this repo — the in-memory
+  // repo uses the same ordering key. A single repo drives every page in production,
+  // so the offset sweep never gaps or overlaps.
   async findPage(
     ctx: CallerContext,
     { limit, offset }: { limit: number; offset: number },

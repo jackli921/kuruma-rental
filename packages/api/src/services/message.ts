@@ -135,8 +135,10 @@ async function idempotentCreate<T>(
       if (existing) return { record: existing, status: 200 }
       // The key is globally unique but the scoped re-fetch found nothing: a
       // DIFFERENT sender already claimed it (find is sender-scoped, #328). Surface
-      // a clean 409 rather than letting the raw UNIQUE_VIOLATION escape as a 500 —
-      // and without a cross-sender existence oracle. Messaging GA (Refs #1476).
+      // a clean 409 rather than letting the raw UNIQUE_VIOLATION escape as a 500.
+      // The 409 still signals "some sender claimed this key", but the key is no
+      // longer readable off the read model (idempotencyKey drop) and is a UUID, so
+      // there's nothing to probe with. Messaging GA (Refs #1476).
       throw new ConflictError('idempotency key already used')
     }
     throw err

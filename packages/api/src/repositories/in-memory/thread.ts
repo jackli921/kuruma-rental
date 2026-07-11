@@ -16,9 +16,12 @@ export class InMemoryThreadRepository implements ThreadRepository {
   }
 
   // #1476: page limit/offset over the in-scope set instead of the service loading
-  // everything and slicing. Mirrors the Drizzle SQL LIMIT/OFFSET + COUNT — same
-  // deterministic order (newest createdAt first, id as the tiebreaker) so a
-  // stable page boundary can't split a createdAt tie differently across repos.
+  // everything and slicing. Mirrors the Drizzle SQL LIMIT/OFFSET + COUNT and the
+  // same ordering key (newest createdAt first, id as the tiebreaker) so each repo
+  // paginates stably. The tiebreaker only decides exact createdAt ties; it uses a
+  // code-unit id comparison (not locale-aware localeCompare) so the boundary is
+  // collation-independent within this repo. Cross-repo byte-identical order isn't
+  // relied on: production runs one repo, and the parity tests seed distinct times.
   async findPage(
     ctx: CallerContext,
     { limit, offset }: { limit: number; offset: number },
@@ -28,7 +31,8 @@ export class InMemoryThreadRepository implements ThreadRepository {
   }> {
     const scoped = this.scopedThreads(ctx)
     const ordered = [...scoped].sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id),
+      (a, b) =>
+        b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
     )
     const page = ordered.slice(offset, offset + limit).map((thread) => this.hydrate(thread))
     return { threads: page, total: scoped.length }
