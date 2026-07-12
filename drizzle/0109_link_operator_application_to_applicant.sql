@@ -1,0 +1,3 @@
+ALTER TABLE "operator_applications" ADD COLUMN "applicantUserId" text;--> statement-breakpoint
+ALTER TABLE "operator_applications" ADD CONSTRAINT "operator_applications_applicantUserId_users_id_fk" FOREIGN KEY ("applicantUserId") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "idx_operator_applications_applicantUserId" ON "operator_applications" USING btree ("applicantUserId");

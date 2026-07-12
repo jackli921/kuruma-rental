@@ -764,6 +764,13 @@
       "when": 1783788907878,
       "tag": "0108_booking_location_composite_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1783883734925,
+      "tag": "0109_link_operator_application_to_applicant",
+      "breakpoints": true
     }
   ]
 }

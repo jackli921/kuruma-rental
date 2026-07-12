@@ -49,6 +49,12 @@ export const operatorApplications = pgTable(
     // silently orphaned by an operator delete (matches memberships/invites).
     operatorId: text('operatorId').references(() => operators.id, { onDelete: 'restrict' }),
     reviewedByUserId: text('reviewedByUserId').references(() => users.id),
+    // Sign-in-first onboarding (§8): the authenticated applicant this application
+    // belongs to. Approval promotes THIS user id directly to OPERATOR_OWNER. text
+    // (not uuid) to FK users.id (text PK, crypto.randomUUID default). onDelete:
+    // 'restrict' mirrors operatorId — a live application must not be orphaned by a
+    // user delete, and the promotion targets exactly this id.
+    applicantUserId: text('applicantUserId').references(() => users.id, { onDelete: 'restrict' }),
     reviewedAt: timestamp('reviewedAt', { withTimezone: true }),
     reviewerNotes: text('reviewerNotes'),
     rejectionReason: text('rejectionReason'),
@@ -62,6 +68,7 @@ export const operatorApplications = pgTable(
     index('idx_operator_applications_operatorId').on(t.operatorId),
     // Covers the reviewedByUserId FK (lint:fk-indexes) + "applications I reviewed" lookups.
     index('idx_operator_applications_reviewedByUserId').on(t.reviewedByUserId),
+    index('idx_operator_applications_applicantUserId').on(t.applicantUserId),
     // THE dedup invariant: at most one live application per email, covering BOTH
     // PENDING and APPROVED so there is no gap during the PENDING->APPROVED flip.
     // REJECTED rows leave the set, so a rejected applicant may re-apply. Emails
