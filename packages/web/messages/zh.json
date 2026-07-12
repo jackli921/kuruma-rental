@@ -1979,6 +1979,19 @@
       "title": "您的申请正在审核中",
       "body": "我们已收到您的运营商申请，团队正在审核中。审核完成后，您将收到电子邮件通知。",
       "hint": "已获批准？请刷新页面重试。"
+    },
+    "applicationStatus": {
+      "title": "申请状态",
+      "noApplication": "您尚未提交运营商申请。",
+      "applyNow": "立即申请",
+      "pendingTitle": "您的申请正在审核中",
+      "pendingBody": "我们已收到您的申请，团队正在审核中。审核完成后，您将收到电子邮件通知。",
+      "approvedTitle": "申请已批准",
+      "approvedBody": "恭喜您，您的运营商账户已准备就绪。",
+      "goToPortal": "前往运营商门户",
+      "rejectedTitle": "申请未获批准",
+      "rejectedBody": "很遗憾，您的申请未获批准。",
+      "rejectionReason": "原因：{reason}"
     }
   }
 }

@@ -1,6 +1,7 @@
 import { ApiError, unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import type { OperatorApplicationInput } from '@kuruma/shared/validators/operator-application'
+import { queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
 
 // Public operator-registration endpoint (#1277). The result schema anchors to
@@ -25,4 +26,29 @@ export async function submitOperatorApplication(
   })
   return unwrap(res, resultSchema)
 }
+// Applicant's own application status (#1549). Returns the public-facing row
+// (id, status, businessName, operatorId, rejectionReason) or null when the
+// caller has no application (404). The schema is non-strict: the wire may carry
+// server-only fields that are stripped by zod so they never reach the client.
+const myApplicationSchema = z.object({
+  id: z.string(),
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED']),
+  businessName: z.string(),
+  operatorId: z.string().nullable(),
+  rejectionReason: z.string().nullable(),
+})
+export type MyApplication = z.infer<typeof myApplicationSchema>
+
+export async function getMyApplication(): Promise<MyApplication | null> {
+  const res = await fetch(`${getApiBaseUrl()}/operator-applications/me`, {
+    credentials: 'include',
+  })
+  if (res.status === 404) return null
+  return unwrap(res, myApplicationSchema)
+}
+
+export function myApplicationQueryOptions() {
+  return queryOptions({ queryKey: ['operator-applications', 'me'], queryFn: getMyApplication })
+}
+
 export { ApiError }
