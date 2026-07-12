@@ -27,10 +27,10 @@ export interface LocationComboboxProps {
   /** The pinned default option label, e.g. "Anywhere" / "All cities". */
   placeholder: string
   /** Input id so a sibling <Label htmlFor> associates with the control. */
-  id?: string
-  disabled?: boolean
-  'aria-invalid'?: boolean
-  'aria-describedby'?: string
+  id?: string | undefined
+  disabled?: boolean | undefined
+  'aria-invalid'?: boolean | undefined
+  'aria-describedby'?: string | undefined
 }
 
 export function LocationCombobox({
