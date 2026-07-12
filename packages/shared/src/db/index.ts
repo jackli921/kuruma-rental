@@ -22,9 +22,16 @@ let cachedUrl: string | undefined
 // Uses the neon-http (stateless fetch) driver: one HTTP round-trip per query,
 // safe to reuse across CF Workers requests. It does NOT support interactive
 // transactions (`db.transaction(cb)` throws at runtime) — use `runTx` for those.
+// The application runtime connects as the reduced-privilege `kuruma_runtime` role
+// (#1553): INSERT/SELECT on the consent ledger, never UPDATE/DELETE. Prefer
+// DATABASE_URL_RUNTIME when set; fall back to DATABASE_URL for local/CI/tests and for
+// owner-only tools (migrations, seed, break-glass) that read DATABASE_URL directly.
+function appDatabaseUrl(): string | undefined {
+  return process.env.DATABASE_URL_RUNTIME ?? process.env.DATABASE_URL
+}
+
 export function getDb(url?: string): NeonHttpDb {
-  const connectionUrl =
-    url ?? process.env.DATABASE_URL ?? 'postgresql://placeholder:5432/placeholder'
+  const connectionUrl = url ?? appDatabaseUrl() ?? 'postgresql://placeholder:5432/placeholder'
 
   // Reuse singleton if URL hasn't changed
   if (db && cachedUrl === connectionUrl) return db
@@ -43,16 +50,16 @@ export function getDb(url?: string): NeonHttpDb {
 // ("Cannot perform I/O on behalf of a different request"). Reads and non-
 // transactional writes stay on the neon-http singleton (#493).
 //
-// Resolves the URL from process.env.DATABASE_URL — the same source the
-// composition root passes getDb() with (no-arg) — so the read handle and this
-// helper can never resolve different databases. On CF Workers the global
-// WebSocket is used; under Node the test setup sets neonConfig.webSocketConstructor.
+// Resolves the URL the same way getDb() does (DATABASE_URL_RUNTIME, then
+// DATABASE_URL), so the read handle and this helper can never resolve different
+// databases. On CF Workers the global WebSocket is used; under Node the test setup
+// sets neonConfig.webSocketConstructor.
 //
 // DATABASE_URL MUST be the Neon POOLED endpoint (host contains `-pooler`):
 // runTx opens a fresh connection per interactive transaction, so a direct
 // (unpooled) endpoint would exhaust Postgres backends under load (#493 review).
 export async function runTx<T>(fn: (tx: TxHandle) => Promise<T>): Promise<T> {
-  const connectionUrl = process.env.DATABASE_URL
+  const connectionUrl = appDatabaseUrl()
   if (!connectionUrl) {
     throw new Error('runTx requires DATABASE_URL — interactive transactions need a real database')
   }
