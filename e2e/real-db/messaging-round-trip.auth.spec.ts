@@ -106,7 +106,10 @@ test.describe('messaging round-trip - renter <-> operator (real DB)', () => {
     })
 
     const operatorRow = () => page.locator(`a[href$="/manage/messages/${threadId}"]`)
-    const renterRow = () => renter.locator(`a[href$="/messages/${threadId}"]`)
+    // Anchor the renter row to the locale prefix so it can never match an operator
+    // row (whose href also ends with `/messages/<id>`); they never co-render, but
+    // this keeps the selector airtight regardless.
+    const renterRow = () => renter.locator(`a[href$="/en/messages/${threadId}"]`)
 
     await test.step('1. renter opens the booking thread from the inbox and sends', async () => {
       // Entry point: the renter inbox lists the booking's thread (a no-message thread
@@ -202,10 +205,10 @@ test.describe('messaging round-trip - renter <-> operator (real DB)', () => {
 
 /**
  * The auto-created thread's id for a booking (ensureThread, on the booking's
- * post-commit seam). Polls like marketplace-happy-path's notification poll: the
- * post-commit effects (thread + notifications) are eventually-consistent from the
- * client's view, so read until the thread lands rather than assuming it is there
- * the instant the confirmation page paints.
+ * post-commit seam). ensureThread is awaited before the booking response returns,
+ * so the thread is normally readable the instant the confirmation paints; the poll
+ * is defensive belt-and-braces against any lag between the response and a fresh read
+ * connection, mirroring marketplace-happy-path's post-commit notification poll.
  */
 async function threadIdForBooking(bookingId: string): Promise<string> {
   const sql = testSql()
@@ -232,9 +235,8 @@ async function cleanup(): Promise<void> {
     const ids = createdBookingIds
     await sql`DELETE FROM notification_log WHERE "bookingId" IN ${sql(ids)}`
     await sql`DELETE FROM booking_events WHERE "bookingId" IN ${sql(ids)}`
-    // payment_events has no ON DELETE CASCADE — the confirmation step writes one per
-    // booking, so clear it before the booking or the delete below 23503s.
-    await sql`DELETE FROM payment_events WHERE "bookingId" IN ${sql(ids)}`
+    // No payment_events delete: instant-book (Path A) writes none — that table is
+    // populated only by the Stripe webhook path (services/payment/payment.ts).
     await sql`DELETE FROM threads WHERE "bookingId" IN ${sql(ids)}` // cascades messages + participants
     await sql`DELETE FROM bookings WHERE id IN ${sql(ids)}`
   } finally {
