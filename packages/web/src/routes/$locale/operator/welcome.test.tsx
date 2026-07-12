@@ -16,13 +16,17 @@ interface StubSession {
   user: { operatorSlug?: string }
 }
 
-function runGuard(
-  freshSession: StubSession | null,
-): Promise<{ invalidateQueriesSpy: ReturnType<typeof vi.fn>; result: unknown }> {
+function runGuard(freshSession: StubSession | null): Promise<{
+  invalidateQueriesSpy: ReturnType<typeof vi.fn>
+  ensureQueryDataSpy: ReturnType<typeof vi.fn>
+  result: unknown
+}> {
   const invalidateQueriesSpy = vi.fn().mockResolvedValue(undefined)
-  const ensureQueryData = vi.fn().mockResolvedValue(freshSession)
+  const ensureQueryDataSpy = vi.fn().mockResolvedValue(freshSession)
 
-  const context = { queryClient: { invalidateQueries: invalidateQueriesSpy, ensureQueryData } }
+  const context = {
+    queryClient: { invalidateQueries: invalidateQueriesSpy, ensureQueryData: ensureQueryDataSpy },
+  }
 
   let resultPromise: Promise<unknown>
   try {
@@ -34,15 +38,22 @@ function runGuard(
     resultPromise = Promise.resolve(err)
   }
 
-  return resultPromise.then((result) => ({ invalidateQueriesSpy, result }))
+  return resultPromise.then((result) => ({ invalidateQueriesSpy, ensureQueryDataSpy, result }))
 }
 
 describe('operator/welcome beforeLoad guard (session-invalidation)', () => {
   it('redirects to /$locale/dashboard when the fresh session has operatorSlug (approved)', async () => {
-    const { invalidateQueriesSpy, result } = await runGuard({ user: { operatorSlug: 'acme' } })
+    const { invalidateQueriesSpy, ensureQueryDataSpy, result } = await runGuard({
+      user: { operatorSlug: 'acme' },
+    })
 
-    // Stale-cache trap is closed: invalidate was called with the session key
+    // Stale-cache trap is closed: invalidate was called with the session key...
     expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['session'] })
+    // ...and it ran BEFORE the re-read — reading first would return the stale RENTER
+    // session and never redirect. This ordering is the whole point of the route.
+    expect(invalidateQueriesSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      ensureQueryDataSpy.mock.invocationCallOrder[0] as number,
+    )
 
     // Approved session → redirect into operator portal
     expect(isRedirect(result)).toBe(true)
