@@ -34,6 +34,7 @@ const cspLines = headers
   .filter((l) => /^\s+Content-Security-Policy(-Report-Only)?:/.test(l))
 const scriptSrcs = cspLines.map((l) => l.match(/script-src ([^;]*)/)?.[1]?.trim() ?? '')
 const imgSrcs = cspLines.map((l) => l.match(/img-src ([^;]*)/)?.[1]?.trim() ?? '')
+const formActions = cspLines.map((l) => l.match(/form-action ([^;]*)/)?.[1]?.trim() ?? '')
 
 // Every non-'self' image host the app can render — an enforcing CSP silently
 // blocks any it omits, so pin the FULL set: a drift guard that covered only some
@@ -89,5 +90,18 @@ describe('CSP script-src hash (#500)', () => {
     expect(imgSrcs.length).toBeGreaterThan(0)
     for (const imgSrc of imgSrcs)
       for (const host of REQUIRED_IMG_HOSTS) expect(imgSrc).toContain(host)
+  })
+
+  // form-action governs the redirect TARGET of a form submission, not just the
+  // literal action URL. The Google button POSTs to same-origin /auth/google/start
+  // (allowed by 'self'), but the API answers with a 302 to accounts.google.com —
+  // and Chrome enforces form-action against that redirect, so an omitted host
+  // silently kills sign-in with no JS error (the login-does-nothing regression).
+  test('EVERY CSP header allows the Google OAuth redirect target in form-action', () => {
+    expect(formActions.length).toBeGreaterThan(0)
+    for (const formAction of formActions) {
+      expect(formAction).toContain("'self'") // same-origin /auth/google/start POST + all app form posts
+      expect(formAction).toContain('https://accounts.google.com') // the /start → Google 302 target
+    }
   })
 })
