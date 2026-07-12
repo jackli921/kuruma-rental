@@ -84,15 +84,15 @@ export interface OperatorGrantRepos {
 export type RunOperatorGrant = <T>(fn: (repos: OperatorGrantRepos) => Promise<T>) => Promise<T>
 
 // #1277: atomic operator-approval tx. C1 read guard (email -> membership/invite) +
-// operator INSERT + invite INSERT + application claim+link, all-or-nothing. Also
-// backs the invite-remint tx (#1370): membership guard + revoke the stale PENDING
-// invite + INSERT a fresh one, hence `invites.revoke` in the Pick below.
+// operator INSERT + direct promotion (membership + users projection) + application
+// claim+link, all-or-nothing (§6.2 sign-in-first: the applicant's own account is
+// promoted, no invite is minted).
 export interface OperatorApprovalRepos {
   users: Pick<UserRepository, 'findByEmail' | 'setOperatorAccess'>
   memberships: Pick<OperatorMembershipRepository, 'findActiveByUserId' | 'create'>
-  // invites.create + invites.revoke kept until Task 6/8 delete the invite-minting
-  // path; findPendingByEmail is used by assertEmailUnclaimed's cross-aggregate guard.
-  invites: Pick<ProviderInviteRepository, 'create' | 'findPendingByEmail' | 'revoke'>
+  // Read-only here: assertEmailUnclaimed's cross-aggregate guard rejects approval when
+  // a live invite (e.g. a manually-minted OWNER invite for the same email) exists.
+  invites: Pick<ProviderInviteRepository, 'findPendingByEmail'>
   operators: Pick<OperatorRepository, 'create' | 'existsBySlug'>
   applications: Pick<OperatorApplicationRepository, 'markApprovedIfPending'>
 }

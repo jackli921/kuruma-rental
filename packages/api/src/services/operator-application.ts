@@ -4,7 +4,6 @@ import {
   OPERATORS_SLUG_CONSTRAINT,
   OPERATOR_APPLICATION_EMAIL_CONSTRAINT,
   PG_ERROR,
-  PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT,
   pgConstraintName,
   pgErrorCode,
 } from '../pg-errors'
@@ -15,9 +14,6 @@ import type {
   RunOperatorApproval,
 } from '../repositories/types'
 import type { OperatorApplication } from '../stores'
-import { mintInvite } from './invite-mint'
-import type { ProviderInviteAuditEvent } from './provider-invite'
-import { buildProviderInviteRecord } from './provider-invite-record'
 import { resolveUniqueSlug, slugify } from './slug'
 
 // A concurrent slug race (two similarly-named businesses approved at once) is
@@ -42,23 +38,21 @@ export interface OperatorApplicationRejectedAuditEvent {
   readonly applicationId: string
 }
 
-// Widened to include ProviderInviteAuditEvent because remintInvite() still mints an
-// OPERATOR_OWNER invite and emits PROVIDER_INVITE_CREATED through the same sink.
-// (approve() now promotes the applicant account directly and emits no invite event.)
+// Sign-in-first (§6.2): approval promotes the applicant account directly and emits
+// no invite event, so the union carries only this service's two review events.
 export type OperatorApplicationAuditEvent =
   | OperatorApplicationApprovedAuditEvent
   | OperatorApplicationRejectedAuditEvent
-  | ProviderInviteAuditEvent
 
 // Narrow per-service audit port (mirrors RecordOperatorProfileAudit in operator.ts):
 // the injected sink accepts only THIS service's events, so the compiler rejects an
 // accidental emit of a foreign kind. The composition root's wider RecordAuditEvent
-// sink stays assignable to it (parameter contravariance). Also accepts
-// PROVIDER_INVITE_CREATED because remintInvite() emits it when re-minting the OWNER invite.
+// sink stays assignable to it (parameter contravariance).
 export type RecordOperatorApplicationAudit = (event: OperatorApplicationAuditEvent) => void
 
 export interface OperatorApplicationServiceConfig {
-  /** Public web origin; the minted OWNER invite link is `${webBaseUrl}/provider/invite/<token>`. */
+  /** Public web origin; used to build the applicant-facing welcome/status URL in the
+   *  approved/rejected emails (Task 12). Kept even while momentarily unreferenced. */
   readonly webBaseUrl: string
 }
 
@@ -219,69 +213,6 @@ export class OperatorApplicationService {
           applicationId: id,
         },
       ],
-    }
-  }
-
-  /** Re-mint the OWNER invite for an already-APPROVED application (#1370): the
-   *  original link expired or was lost before the owner accepted. Revokes any live
-   *  PENDING invite for the email and issues a fresh one, atomically. Refuses if
-   *  the application is not APPROVED (404/409) or the owner already onboarded (409)
-   *  — a re-invite must never open a second OWNER path onto a live operator. */
-  async remintInvite(
-    id: string,
-    reviewerUserId: string,
-  ): Promise<{ inviteUrl: string; expiresAt: Date }> {
-    const application = await this.repo.findById(id)
-    if (!application) throw new NotFoundError('no application with that id')
-    if (application.status !== 'APPROVED' || !application.operatorId) {
-      throw new ConflictError('only an approved application can be re-invited')
-    }
-    const operatorId = application.operatorId
-    const email = application.contactEmail
-    const minted = mintInvite({ webBaseUrl: this.config.webBaseUrl })
-
-    try {
-      const event = await this.runApproval(async (repos) => {
-        // An already-onboarded owner (active membership) must not be re-invited: a
-        // fresh OWNER link accepted by someone else would grant a second owner.
-        const existingUser = await repos.users.findByEmail(email)
-        if (existingUser && (await repos.memberships.findActiveByUserId(existingUser.id))) {
-          throw new ConflictError('this email already has an operator')
-        }
-        // Revoke the stale PENDING invite so the partial-unique (operatorId,email)
-        // index admits the replacement; then mint the new one. findPendingByEmail is
-        // cross-operator (the C1 guard), but revoke is operator-scoped — so a pending
-        // invite owned by ANOTHER operator must block here (mirroring approve()'s C1),
-        // not silently no-op the revoke and leave two live invites for the email (#1277).
-        const pending = await repos.invites.findPendingByEmail(email)
-        if (pending) {
-          if (pending.operatorId !== operatorId) {
-            throw new ConflictError('this email is already invited to an operator')
-          }
-          await repos.invites.revoke(pending.id, operatorId)
-        }
-        const invite = buildProviderInviteRecord(minted, {
-          email,
-          operatorId,
-          role: 'OPERATOR_OWNER',
-          invitedByUserId: reviewerUserId,
-        })
-        await repos.invites.create(invite.row)
-        return invite.event
-      })
-      this.recordAudit(event)
-      return { inviteUrl: minted.inviteUrl, expiresAt: minted.expiresAt }
-    } catch (err) {
-      // A concurrent remint won the (operatorId,email) pending slot between our
-      // revoke and insert — the whole tx rolled back. Report a retryable 409, not
-      // a 500, mirroring submit()/provisionApproval()'s constraint handling.
-      if (
-        pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION &&
-        pgConstraintName(err) === PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT
-      ) {
-        throw new ConflictError('a re-invite is already in progress, please retry')
-      }
-      throw err
     }
   }
 

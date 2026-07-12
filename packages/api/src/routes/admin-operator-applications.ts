@@ -25,9 +25,10 @@ function isOperatorApplicationStatus(value: string): value is OperatorApplicatio
  * emits an audit event; the service throws NotFoundError for a missing or
  * non-PENDING id which the global onError maps to 404.
  *
- * Approval provisions the operator + OPERATOR_OWNER invite and returns the one-time
- * invite link for the admin to forward to the applicant. Returns 404 for an unknown
- * id and 409 when the application is already reviewed or the contact email is in use.
+ * Approval provisions the operator and promotes the applicant's own account to
+ * OPERATOR_OWNER directly (§6.2 sign-in-first), returning `{ operatorId, operatorSlug }`.
+ * Returns 404 for an unknown id and 409 when the application is already reviewed or
+ * the contact email is in use.
  */
 export function createAdminOperatorApplicationRoutes(service: OperatorApplicationService) {
   const app = new Hono()
@@ -87,17 +88,5 @@ export function createAdminOperatorApplicationRoutes(service: OperatorApplicatio
       // the applicant's own account directly — no invite link to hand back.
       const result = await service.approve(idr.id, user.id)
       return ok(c, { operatorId: result.operatorId, operatorSlug: result.operatorSlug })
-    })
-    .post('/admin/operator-applications/:id/remint-invite', async (c) => {
-      const user = requireUser(c)
-      requirePlatformAdmin(toCallerContext(user))
-
-      const idr = parseId(c)
-      if (!idr.ok) return idr.response
-      // Re-issue the OWNER invite for an already-approved application (#1370).
-      // NotFoundError (unknown id) → 404. ConflictError (not approved / owner
-      // already onboarded) → 409. No body: the applicant/operator are immutable.
-      const result = await service.remintInvite(idr.id, user.id)
-      return ok(c, { inviteUrl: result.inviteUrl, expiresAt: result.expiresAt })
     })
 }

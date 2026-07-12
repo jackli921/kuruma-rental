@@ -453,37 +453,3 @@ describe('POST /admin/operator-applications/:id/approve', () => {
     expect(res.status).toBe(409)
   })
 })
-
-describe('POST /admin/operator-applications/:id/remint-invite', () => {
-  test('re-minting an unapproved (PENDING) application → 409', async () => {
-    const harness = makeApp()
-    const { id } = await seedApplication(harness.app)
-
-    const res = await harness.app.request(`/admin/operator-applications/${id}/remint-invite`, {
-      method: 'POST',
-      headers: await bearer(ADMIN),
-    })
-    expect(res.status).toBe(409)
-  })
-
-  test('unknown application id → 404', async () => {
-    const harness = makeApp()
-    const randomId = '00000000-0000-0000-0000-000000000000'
-    const res = await harness.app.request(
-      `/admin/operator-applications/${randomId}/remint-invite`,
-      { method: 'POST', headers: await bearer(ADMIN) },
-    )
-    expect(res.status).toBe(404)
-  })
-
-  test('non-admin (RENTER) cannot re-mint (403)', async () => {
-    const harness = makeApp()
-    const { id } = await seedApplication(harness.app)
-
-    const res = await harness.app.request(`/admin/operator-applications/${id}/remint-invite`, {
-      method: 'POST',
-      headers: await bearer({ sub: 'u1', role: 'RENTER' }),
-    })
-    expect(res.status).toBe(403)
-  })
-})
