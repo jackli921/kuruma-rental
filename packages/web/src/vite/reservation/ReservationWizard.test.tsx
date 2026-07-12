@@ -102,6 +102,7 @@ function renderWizard(subject: ReservationSubject, reviewsEnabled: boolean) {
             locale="en"
             subject={subject}
             locationId="loc1"
+            operatorId="op1"
             addOns={[]}
             insuranceOptions={[]}
             from={new Date('2026-08-01T10:00:00+09:00')}

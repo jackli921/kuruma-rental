@@ -114,6 +114,14 @@ interface CreateBookingCommon {
    *  Supplied at the payment step; the server rejects a RENTER booking without it
    *  (400 CONSENT_REQUIRED). Replaces the dropped online document upload. */
   disclaimerAccepted: boolean
+  /** #877 Slice B: the renter accepted the operator's published rental terms at
+   *  checkout, PINNING the exact version + displayed locale they rendered. Absent
+   *  when the operator has no published terms (or the OPERATOR_TERMS flag is off),
+   *  so the server require-branch skips. A stale pin → 422 OPERATOR_TERMS_CHANGED. */
+  operatorRentalTermsAccepted?: boolean
+  operatorRentalTermsAcceptedVersion?: string
+  /** The renter's displayed locale, so the server seals the exact text they saw. */
+  locale?: string
 }
 
 // What the renter selected in the wizard, keyed on `fulfillmentMode` so the wire
@@ -161,6 +169,13 @@ export async function createBooking(
       addOnIds: input.addOnIds,
       idempotencyKey: input.idempotencyKey,
       disclaimerAccepted: input.disclaimerAccepted,
+      ...(input.operatorRentalTermsAccepted !== undefined
+        ? { operatorRentalTermsAccepted: input.operatorRentalTermsAccepted }
+        : {}),
+      ...(input.operatorRentalTermsAcceptedVersion
+        ? { operatorRentalTermsAcceptedVersion: input.operatorRentalTermsAcceptedVersion }
+        : {}),
+      ...(input.locale ? { locale: input.locale } : {}),
     }),
   })
   return unwrap(res, bookingDtoSchema)

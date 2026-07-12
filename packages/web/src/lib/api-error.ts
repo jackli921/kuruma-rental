@@ -119,6 +119,13 @@ export async function unwrapPage<T>(res: Response, schema: z.ZodType<T>): Promis
 
 export const OPERATOR_REQUIRED: ErrorCode = 'OPERATOR_REQUIRED'
 
+/** #877 Slice B: the booking-create 422 envelope codes when the operator has
+ *  published rental terms. REQUIRED — the renter sent no acceptance; CHANGED —
+ *  the pinned version is stale (the operator republished mid-checkout). PaymentStep
+ *  keys the terms-modal re-present on these codes, not the bare 422 status. */
+export const OPERATOR_TERMS_REQUIRED: ErrorCode = 'OPERATOR_TERMS_REQUIRED'
+export const OPERATOR_TERMS_CHANGED: ErrorCode = 'OPERATOR_TERMS_CHANGED'
+
 /** Envelope `code` the booking API returns when the #459 document-verification
  *  gate blocks a booking. Matches `documentVerificationGate` on the API side. */
 export const DOCUMENT_VERIFICATION_REQUIRED: ErrorCode = 'DOCUMENT_VERIFICATION_REQUIRED'

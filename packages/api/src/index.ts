@@ -646,7 +646,14 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createLocationRoutes(locationService, resolveWriteOperatorId))
     .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))
     .route('/', createAddOnRoutes(addOnService, resolveWriteOperatorId))
-    .route('/', createOperatorTermsRoutes(operatorTermsService, resolveWriteOperatorId))
+    .route(
+      '/',
+      createOperatorTermsRoutes(operatorTermsService, resolveWriteOperatorId, () =>
+        // #877 Slice B: same server flag that gates the booking write path — the
+        // renter read endpoint 404s until the OPERATOR_TERMS override flips at GA.
+        featureFlagsService.isEnabled('OPERATOR_TERMS'),
+      ),
+    )
     .route('/', createAddOnTemplateRoutes(addOnTemplateService))
     .route('/', createAdminTemplateRoutes(templateLibraryService))
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))

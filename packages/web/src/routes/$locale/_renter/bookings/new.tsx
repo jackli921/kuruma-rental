@@ -106,6 +106,9 @@ export const Route = createFileRoute('/$locale/_renter/bookings/new')({
     return {
       subject,
       locationId: deps.locationId,
+      // #877: the storefront's operator, threaded to the payment step so it can
+      // fetch that operator's published rental terms for the clickwrap gate.
+      operatorId: detail.storefront.operatorId,
       addOns,
       insuranceOptions,
       from: range.from,
@@ -123,6 +126,7 @@ function NewBookingRoute() {
   const {
     subject,
     locationId,
+    operatorId,
     addOns,
     insuranceOptions,
     from,
@@ -138,6 +142,7 @@ function NewBookingRoute() {
         locale={locale}
         subject={subject}
         locationId={locationId}
+        operatorId={operatorId}
         addOns={addOns}
         insuranceOptions={insuranceOptions}
         from={from}
