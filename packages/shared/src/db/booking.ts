@@ -76,12 +76,11 @@ export const bookings = pgTable(
     // #464: nullable — an unassigned CLASS_COMBO float has no car yet; the
     // operator assigns one on/before pickup (the exclusion constraint skips NULLs).
     assignedVehicleId: text('assignedVehicleId'),
-    pickupLocationId: text('pickupLocationId')
-      .notNull()
-      .references(() => locations.id),
-    dropoffLocationId: text('dropoffLocationId')
-      .notNull()
-      .references(() => locations.id),
+    // The single-column FK is replaced by the composite (operatorId, x) seal in
+    // the table extras below, matching class/vehicle/insurance — so a booking can
+    // only point at a location in its OWN tenant, not just any operator's.
+    pickupLocationId: text('pickupLocationId').notNull(),
+    dropoffLocationId: text('dropoffLocationId').notNull(),
     startAt: timestamp('startAt', { withTimezone: true, mode: 'date' }).notNull(),
     endAt: timestamp('endAt', { withTimezone: true, mode: 'date' }).notNull(),
     effectiveEndAt: timestamp('effectiveEndAt', { withTimezone: true, mode: 'date' }).notNull(),
@@ -181,6 +180,22 @@ export const bookings = pgTable(
       columns: [table.operatorId, table.insuranceOptionId],
       foreignColumns: [insuranceOptions.operatorId, insuranceOptions.id],
       name: 'bookings_operator_insurance_fk',
+    }),
+    // Pickup + dropoff locations must belong to the booking's operator. The
+    // service validates this on submit (booking-creation.ts), but a direct
+    // repo/SQL write could otherwise pair operatorId with another operator's
+    // location; these composite seals make it a DB invariant. Both columns are
+    // NOT NULL so no MATCH SIMPLE nuance. Target: locations_operatorId_id_unique
+    // (mirrors vehicles_operatorId_pickupLocationId_fk, #412 part 3).
+    foreignKey({
+      columns: [table.operatorId, table.pickupLocationId],
+      foreignColumns: [locations.operatorId, locations.id],
+      name: 'bookings_operator_pickup_location_fk',
+    }),
+    foreignKey({
+      columns: [table.operatorId, table.dropoffLocationId],
+      foreignColumns: [locations.operatorId, locations.id],
+      name: 'bookings_operator_dropoff_location_fk',
     }),
     // #463/#464: a SPECIFIC booking MUST name both the vehicle it requested and the
     // one it fulfills. Now that #464 makes both columns nullable for CLASS_COMBO

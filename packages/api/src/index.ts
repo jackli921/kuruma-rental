@@ -211,6 +211,14 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     ((globalThis as Record<string, unknown>).OPERATOR_APPLICATION_LIMITER as
       | RateLimitBinding
       | undefined)
+  const messageSendLimiter =
+    overrides?.messageSendLimiter ??
+    ((globalThis as Record<string, unknown>).MESSAGE_SEND_LIMITER as RateLimitBinding | undefined)
+  const messageTranslateLimiter =
+    overrides?.messageTranslateLimiter ??
+    ((globalThis as Record<string, unknown>).MESSAGE_TRANSLATE_LIMITER as
+      | RateLimitBinding
+      | undefined)
 
   const translationProvider = createTranslationProvider()
 
@@ -622,12 +630,15 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createFeatureFlagsRoutes(featureFlagsService))
     .route('/', createAdminOverviewRoutes(adminOverviewService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
-    .route('/', createMessageRoutes(messageService))
+    .route('/', createMessageRoutes(messageService, messageSendLimiter))
     .route('/', createConsentRoutes(consentService))
     .route('/', createAdminConsentRoutes(consentGovernanceService))
     .route(
       '/',
-      createTranslateRoutes(new MessageTranslationService(messageRepo, translationProvider)),
+      createTranslateRoutes(
+        new MessageTranslationService(messageRepo, translationProvider),
+        messageTranslateLimiter,
+      ),
     )
     .route('/', createCustomerRoutes(customerService))
     .route('/', createUserRoutes(userDirectoryService))

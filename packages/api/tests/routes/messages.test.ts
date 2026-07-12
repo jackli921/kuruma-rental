@@ -1,5 +1,7 @@
+import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { setupGlobalHandlers } from '../../src/error-handlers'
 import {
   InMemoryMessageRepository,
   InMemoryThreadRepository,
@@ -17,14 +19,39 @@ type TestRole = 'RENTER' | 'PLATFORM_ADMIN' | 'OPERATOR_OWNER' | 'OPERATOR_STAFF
 let threadRepo: InMemoryThreadRepository
 let messageRepo: InMemoryMessageRepository
 
+/** In-process stand-in for the CF native rate-limit binding: counts per key and
+ *  denies past `limit`, mirroring the vehicle-photo rate-limit test double. */
+function createFakeLimiter(limit: number): RateLimitBinding {
+  const counts = new Map<string, number>()
+  return {
+    async limit({ key }) {
+      const next = (counts.get(key) ?? 0) + 1
+      counts.set(key, next)
+      return { success: next <= limit }
+    },
+  }
+}
+
 /** Create a Hono app authenticated as the given user. Pass `operatorId` to
- *  simulate a tenant-scoped OPERATOR_* caller. */
-function appAs(userId: string, role: TestRole = 'RENTER', operatorId?: string): Hono {
+ *  simulate a tenant-scoped OPERATOR_* caller, and `limiter` to exercise the
+ *  per-user send rate limit. */
+function appAs(
+  userId: string,
+  role: TestRole = 'RENTER',
+  operatorId?: string,
+  limiter?: RateLimitBinding,
+): Hono {
   const a = new Hono()
   a.use('*', testAuthMiddleware(userId, role, operatorId))
   // The operator new-message alert (#1205) is exercised in message.test.ts; the
   // route tests only assert HTTP behavior, so a no-op alert port keeps them focused.
-  a.route('/', createMessageRoutes(new MessageService(threadRepo, messageRepo, async () => {})))
+  a.route(
+    '/',
+    createMessageRoutes(new MessageService(threadRepo, messageRepo, async () => {}), limiter),
+  )
+  // Wire the production error handler so domain errors map to their real status
+  // (e.g. ConflictError -> 409) instead of a bare-Hono 500. Mirrors createApp.
+  setupGlobalHandlers(a)
   return a
 }
 
@@ -267,7 +294,8 @@ describe('Message Routes', () => {
         const secondBody = await second.json()
 
         expect(secondBody.data.id).toBe(firstBody.data.id)
-        expect(secondBody.data.idempotencyKey).toBe(MSG_KEY_A)
+        // idempotencyKey is a write-only concern and never echoed on the read model.
+        expect(secondBody.data).not.toHaveProperty('idempotencyKey')
       })
 
       it('creates distinct messages when different keys are sent', async () => {
@@ -302,7 +330,7 @@ describe('Message Routes', () => {
         })
         expect(res.status).toBe(201)
         const body = await res.json()
-        expect(body.data.idempotencyKey).toBeNull()
+        expect(body.data).not.toHaveProperty('idempotencyKey')
       })
 
       it('concurrent duplicate requests yield exactly one 201 and one 200', async () => {
@@ -330,10 +358,12 @@ describe('Message Routes', () => {
         expect(b1.data.id).toBe(b2.data.id)
       })
 
-      // Issue #328: findByIdempotencyKey must scope to sender. Two
-      // participants in the same thread replaying the same key must
-      // not see each other's messages.
-      it('cross-tenant: U2 replaying U1 message key does not leak U1 message', async () => {
+      // Issue #328: findByIdempotencyKey must scope to sender. Two participants in
+      // the same thread replaying the same key must not see each other's messages.
+      // The key is globally unique (messages_idempotency_key), so U2's replay of
+      // U1's key can't resolve on the sender-scoped re-fetch — messaging GA (#1476)
+      // surfaces that as a clean 409, never U1's message and never a raw 500.
+      it('cross-sender: U2 replaying U1 message key gets 409, never U1 message', async () => {
         // U1's thread with U2.
         const threadId = await seedThread([U1, U2])
 
@@ -346,18 +376,17 @@ describe('Message Routes', () => {
         expect(u1Msg.status).toBe(201)
         const u1MsgId = (await u1Msg.json()).data.id
 
-        // U2 sends in the same thread with the same key. U2 must NOT get U1's message back.
+        // U2 sends in the same thread with the same key. U2 must NOT get U1's message.
         const u2Msg = await appAs(U2).request(`/threads/${threadId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: 'From U2', idempotencyKey: sharedKey }),
         })
-        if (u2Msg.status === 200 || u2Msg.status === 201) {
-          const body = await u2Msg.json()
-          expect(body.data.id).not.toBe(u1MsgId)
-          expect(body.data.senderId).toBe(U2)
-        }
-        expect([200, 201, 500]).toContain(u2Msg.status)
+        expect(u2Msg.status).toBe(409)
+        const body = await u2Msg.json()
+        expect(body.success).toBe(false)
+        expect(body).not.toHaveProperty('data')
+        expect(JSON.stringify(body)).not.toContain(u1MsgId)
       })
 
       it('same sender replaying own key returns their existing message', async () => {
@@ -379,6 +408,40 @@ describe('Message Routes', () => {
         })
         expect(replay.status).toBe(200)
         expect((await replay.json()).data.id).toBe(firstId)
+      })
+    })
+
+    // Messaging GA hardening (Refs #1476): cap thread-message sends per user so a
+    // single account can't flood a thread. Per-user (authed endpoint) beats the
+    // global per-IP limiter behind NAT; absent binding = unthrottled local dev.
+    describe('per-user send rate limit', () => {
+      it('returns 429 once the per-user send limit is exceeded', async () => {
+        const limitedApp = appAs(U1, 'RENTER', undefined, createFakeLimiter(1))
+        const threadId = await seedThread([U1, U2])
+        const send = () =>
+          limitedApp.request(`/threads/${threadId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: 'flood' }),
+          })
+
+        const first = await send()
+        const second = await send()
+
+        expect(first.status).toBe(201)
+        expect(second.status).toBe(429)
+      })
+
+      it('does not rate-limit when no binding is injected (local dev)', async () => {
+        const threadId = await seedThread([U1, U2])
+        for (let i = 0; i < 3; i++) {
+          const res = await app.request(`/threads/${threadId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: `msg-${i}` }),
+          })
+          expect(res.status).toBe(201)
+        }
       })
     })
   })
@@ -413,6 +476,28 @@ describe('Message Routes', () => {
       expect(body.data.messages[0].senderId).toBe(U1)
       expect(body.data.messages[1].content).toBe('Hi there!')
       expect(body.data.messages[1].senderId).toBe(U2)
+    })
+
+    // idempotencyKey is a write-side dedup concern; it must never be echoed on the
+    // read model (it was leaked to every thread participant on GET, and gave a
+    // 500-vs-201 existence oracle for another sender's key). See messaging GA review.
+    it('does not expose idempotencyKey on returned messages', async () => {
+      const threadId = await seedThread([U1, U2])
+      await appAs(U1).request(`/threads/${threadId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: 'Hi',
+          idempotencyKey: '00000000-0000-4000-8000-cccc00000001',
+        }),
+      })
+
+      const res = await app.request(`/threads/${threadId}`)
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.data.messages).toHaveLength(1)
+      expect(body.data.messages[0]).not.toHaveProperty('idempotencyKey')
     })
 
     it('returns 404 for a valid-but-nonexistent thread id', async () => {

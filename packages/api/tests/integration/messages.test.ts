@@ -131,6 +131,66 @@ describe('DrizzleThreadRepository', () => {
     })
   })
 
+  // #1476: limit/offset + the total count are pushed into SQL so GET /threads
+  // never materialises every in-scope thread. Same contract the in-memory repo
+  // mirrors (src/repositories/in-memory/thread.test.ts).
+  describe('findPage', () => {
+    it('applies limit/offset in the query and returns the in-scope total, newest first', async () => {
+      const [alice, bob] = await createTestUsers(2)
+      createdUserIds.push(alice!, bob!)
+
+      const ids: string[] = []
+      for (let i = 0; i < 5; i++) {
+        const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+        ids.push(thread.id)
+        await new Promise((r) => setTimeout(r, 5)) // distinct createdAt for stable order
+      }
+
+      const page = await threadRepo.findPage(ctx(alice!), { limit: 2, offset: 1 })
+      expect(page.total).toBe(5)
+      expect(page.threads).toHaveLength(2)
+
+      // A full sweep is the reverse of insertion order (newest createdAt first)
+      // with no gaps or duplicates across page boundaries.
+      const p1 = await threadRepo.findPage(ctx(alice!), { limit: 2, offset: 0 })
+      const p2 = await threadRepo.findPage(ctx(alice!), { limit: 2, offset: 2 })
+      const p3 = await threadRepo.findPage(ctx(alice!), { limit: 2, offset: 4 })
+      const swept = [...p1.threads, ...p2.threads, ...p3.threads].map((t) => t.id)
+      expect(swept).toEqual([...ids].reverse())
+      expect(p3.threads).toHaveLength(1)
+    })
+
+    it('scopes total and page to the caller (no cross-participant leak)', async () => {
+      const [alice, bob, carol] = await createTestUsers(3)
+      createdUserIds.push(alice!, bob!, carol!)
+
+      const aliceThread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+      // A thread alice is NOT part of must not count toward her total or page.
+      await threadRepo.create(ctx(bob!), null, [bob!, carol!])
+
+      const page = await threadRepo.findPage(ctx(alice!), { limit: 10, offset: 0 })
+      expect(page.total).toBe(1)
+      expect(page.threads.map((t) => t.id)).toEqual([aliceThread.id])
+    })
+
+    it('hydrates participants and the most recent message per page row', async () => {
+      const [alice, bob] = await createTestUsers(2)
+      createdUserIds.push(alice!, bob!)
+
+      const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+      await messageRepo.create(ctx(alice!), thread.id, 'first')
+      await new Promise((r) => setTimeout(r, 5))
+      await messageRepo.create(ctx(bob!), thread.id, 'second')
+
+      const page = await threadRepo.findPage(ctx(alice!), { limit: 10, offset: 0 })
+      expect(page.threads).toHaveLength(1)
+      const t = page.threads[0]!
+      expect(t.participants).toHaveLength(2)
+      expect(t.lastMessage).not.toBeNull()
+      expect(t.lastMessage!.content).toBe('second')
+    })
+  })
+
   describe('findById', () => {
     it('returns thread with participants and ordered messages', async () => {
       const [alice, bob] = await createTestUsers(2)
