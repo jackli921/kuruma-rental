@@ -5,11 +5,12 @@ import { Route } from './register'
 // Sign-in-first gate (#877): the register route is authed now. beforeLoad reads the
 // session via ensureQueryData and:
 //   - signed out  → redirect to /$locale/login carrying returnTo (so OAuth lands back here)
-//   - operator     → redirect to /$locale/dashboard (already an operator; the API also 409s)
+//   - operator     → redirect to /$locale/dashboard (OWNER via operatorSlug OR STAFF via
+//                    operatorId; already an operator, the API also 409s)
 //   - signed-in renter → fall through (renders the form)
 // The stub returns the given session for the ['session'] query key.
 interface StubSession {
-  user: { operatorSlug?: string; email?: string }
+  user: { operatorId?: string; operatorSlug?: string; email?: string }
   csrfToken?: string
 }
 
@@ -45,6 +46,16 @@ describe('business/register beforeLoad guard (sign-in-first)', () => {
       expect(isRedirect(error)).toBe(true)
       const options = (error as { options?: { to?: string } }).options
       expect(options?.to).toBe('/$locale/dashboard')
+    }
+  })
+
+  it('redirects a STAFF member (operatorId, no slug) to the dashboard', async () => {
+    try {
+      await runGuard({ user: { operatorId: 'op_1', email: 'staff@acme.co' } })
+      expect.unreachable('guard should have redirected an operator-affiliated STAFF user')
+    } catch (error) {
+      expect(isRedirect(error)).toBe(true)
+      expect((error as { options?: { to?: string } }).options?.to).toBe('/$locale/dashboard')
     }
   })
 

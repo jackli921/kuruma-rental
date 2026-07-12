@@ -142,12 +142,14 @@ export function OperatorRegistrationForm({
           payload — the server derives it authoritatively from the session. */}
       <div>
         <Label htmlFor="reg-accountEmail">{t('accountEmail')}</Label>
+        {/* readOnly (not disabled): the field is never RHF-registered, so it stays
+            out of the payload regardless, and readOnly keeps it in the a11y tree so
+            the label + hint are announced (a disabled input is skipped by most SRs). */}
         <Input
           id="reg-accountEmail"
           type="email"
           value={accountEmail}
           readOnly
-          disabled
           aria-describedby="reg-accountEmail-hint"
         />
         <p id="reg-accountEmail-hint" className="text-sm text-muted-foreground mt-1">

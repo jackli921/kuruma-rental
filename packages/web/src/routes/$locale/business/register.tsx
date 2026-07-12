@@ -10,9 +10,9 @@ import { useTranslations } from 'use-intl'
 // endpoint is authed — it derives the applicant email + id from the session — so
 // this route requires a session. The `business` segment is a plain path segment,
 // not the guarded `_business` pathless layout, so it carries its own beforeLoad:
-//   - signed out       → login (carrying returnTo so OAuth lands back here)
-//   - already operator → dashboard (the API also 409s)
-//   - signed-in renter → render the form
+//   - signed out               → login (carrying returnTo so OAuth lands back here)
+//   - already an operator       → dashboard (OWNER or STAFF; the API also 409s)
+//   - other signed-in (renter)  → render the form
 export const Route = createFileRoute('/$locale/business/register')({
   beforeLoad: async ({ context, params, location }) => {
     const session = await context.queryClient.ensureQueryData(sessionQueryOptions())
@@ -23,10 +23,13 @@ export const Route = createFileRoute('/$locale/business/register')({
         search: { returnTo: location.pathname },
       })
     }
-    if (session.user.operatorSlug) {
+    // operatorId marks an operator session (OWNER or STAFF); operatorSlug is set only
+    // for OWNER — check both so a STAFF member lands on their portal, not the form.
+    if (session.user.operatorId || session.user.operatorSlug) {
       throw redirect({ to: '/$locale/dashboard', params: { locale: params.locale } })
     }
-    // Signed-in renter — fall through to the form.
+    // Signed-in non-operator (renter) — fall through. The API stays the final
+    // authority (server-derived email + already-operator 409).
   },
   component: OperatorRegisterPage,
 })
