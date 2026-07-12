@@ -88,8 +88,10 @@ export type RunOperatorGrant = <T>(fn: (repos: OperatorGrantRepos) => Promise<T>
 // backs the invite-remint tx (#1370): membership guard + revoke the stale PENDING
 // invite + INSERT a fresh one, hence `invites.revoke` in the Pick below.
 export interface OperatorApprovalRepos {
-  users: Pick<UserRepository, 'findByEmail'>
-  memberships: Pick<OperatorMembershipRepository, 'findActiveByUserId'>
+  users: Pick<UserRepository, 'findByEmail' | 'setOperatorAccess'>
+  memberships: Pick<OperatorMembershipRepository, 'findActiveByUserId' | 'create'>
+  // invites.create + invites.revoke kept until Task 6/8 delete the invite-minting
+  // path; findPendingByEmail is used by assertEmailUnclaimed's cross-aggregate guard.
   invites: Pick<ProviderInviteRepository, 'create' | 'findPendingByEmail' | 'revoke'>
   operators: Pick<OperatorRepository, 'create' | 'existsBySlug'>
   applications: Pick<OperatorApplicationRepository, 'markApprovedIfPending'>
