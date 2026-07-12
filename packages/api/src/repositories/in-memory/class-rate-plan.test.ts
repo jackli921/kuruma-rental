@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'vitest'
+import type { CallerContext } from '../../middleware/auth'
+import { PG_ERROR } from '../../pg-errors'
 import { InMemoryClassRatePlanRepository } from './class-rate-plan'
 
 // A CLASS_COMBO is priced off its class rate plan, keyed per
@@ -54,6 +56,68 @@ describe('InMemoryClassRatePlanRepository', () => {
     await repo.create(baseRate)
 
     expect(await repo.findActiveRate('op-1', 'cls-suv', 'loc-namba')).toBeUndefined()
+  })
+
+  // Operator CRUD — slice 6 (#464)
+  const OP = 'op-1'
+  const CLS = 'cls-1'
+  const LOC = 'loc-1'
+  const ctx: CallerContext = { userId: 'u-1', role: 'OPERATOR_OWNER', operatorId: OP }
+
+  test('findByScope returns the singleton regardless of isActive', async () => {
+    const repo = new InMemoryClassRatePlanRepository()
+    const created = await repo.create({
+      operatorId: OP,
+      classId: CLS,
+      pickupLocationId: LOC,
+      dayRateJpy: 8000,
+      isActive: false,
+      label: null,
+    })
+    const found = await repo.findByScope(OP, CLS, LOC)
+    expect(found?.id).toBe(created.id)
+  })
+
+  test('create twice on the same scope throws a 23505', async () => {
+    const repo = new InMemoryClassRatePlanRepository()
+    const base = {
+      operatorId: OP,
+      classId: CLS,
+      pickupLocationId: LOC,
+      dayRateJpy: 8000,
+      isActive: true,
+      label: null,
+    }
+    await repo.create(base)
+    await expect(repo.create(base)).rejects.toMatchObject({ code: PG_ERROR.UNIQUE_VIOLATION })
+  })
+
+  test('update patches dayRateJpy in place', async () => {
+    const repo = new InMemoryClassRatePlanRepository()
+    const c = await repo.create({
+      operatorId: OP,
+      classId: CLS,
+      pickupLocationId: LOC,
+      dayRateJpy: 8000,
+      isActive: true,
+      label: null,
+    })
+    const u = await repo.update(ctx, c.id, { dayRateJpy: 9500 })
+    expect(u?.dayRateJpy).toBe(9500)
+  })
+
+  test('remove deletes the row (findById -> undefined after)', async () => {
+    const repo = new InMemoryClassRatePlanRepository()
+    const c = await repo.create({
+      operatorId: OP,
+      classId: CLS,
+      pickupLocationId: LOC,
+      dayRateJpy: 8000,
+      isActive: true,
+      label: null,
+    })
+    await repo.remove(ctx, c.id)
+    expect(await repo.findById(ctx, c.id)).toBeUndefined()
   })
 
   // findActiveRatePlans enumerates the combo deals a renter search should surface
