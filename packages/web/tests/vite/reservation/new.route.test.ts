@@ -12,7 +12,11 @@ vi.mock('@/vite/reservation/api', () => ({
   fetchInsuranceOptions: vi.fn(async () => []),
 }))
 vi.mock('@/vite/storefronts/api', () => ({
-  fetchStorefrontDetail: vi.fn(async () => ({ vehicles: [{ id: 'veh-1' }] })),
+  // #877: the loader now threads detail.storefront.operatorId into the wizard.
+  fetchStorefrontDetail: vi.fn(async () => ({
+    vehicles: [{ id: 'veh-1' }],
+    storefront: { operatorId: 'op-1' },
+  })),
 }))
 vi.mock('@/vite/storefronts/params', () => ({
   parseSearchRange: () => ({
