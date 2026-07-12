@@ -78,6 +78,9 @@
     }
   },
   "nav": {
+    "groupOperations": "運営",
+    "groupCatalog": "カタログ",
+    "groupSetup": "セットアップ",
     "home": "ホーム",
     "vehicles": "車両",
     "bookings": "予約",
