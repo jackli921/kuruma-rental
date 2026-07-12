@@ -962,7 +962,8 @@
       "form": {
         "businessName": "企业名称",
         "contactName": "联系人姓名",
-        "contactEmail": "电子邮箱",
+        "accountEmail": "账户邮箱",
+        "accountEmailHint": "我们将使用您已登录账户的邮箱。",
         "contactPhone": "联系电话",
         "serviceArea": "服务区域（城市/都道府县）",
         "fleetSize": "预估车队规模",
@@ -980,7 +981,6 @@
         "errors": {
           "businessName": "请输入企业名称。",
           "contactName": "请输入联系人姓名。",
-          "contactEmail": "请输入有效的电子邮箱地址。",
           "contactPhone": "请输入有效的电话号码。",
           "serviceArea": "请输入服务区域。",
           "estimatedFleetSize": "请选择车队规模。",

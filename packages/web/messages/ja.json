@@ -962,7 +962,8 @@
       "form": {
         "businessName": "事業者名",
         "contactName": "担当者名",
-        "contactEmail": "メールアドレス",
+        "accountEmail": "アカウントのメールアドレス",
+        "accountEmailHint": "ログイン中のアカウントのメールアドレスを使用します。",
         "contactPhone": "電話番号",
         "serviceArea": "サービスエリア（市区町村・都道府県）",
         "fleetSize": "保有台数（概算）",
@@ -980,7 +981,6 @@
         "errors": {
           "businessName": "事業者名を入力してください。",
           "contactName": "担当者名を入力してください。",
-          "contactEmail": "有効なメールアドレスを入力してください。",
           "contactPhone": "有効な電話番号を入力してください。",
           "serviceArea": "対応エリアを入力してください。",
           "estimatedFleetSize": "台数を選択してください。",

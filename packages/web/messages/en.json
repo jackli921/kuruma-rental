@@ -962,7 +962,8 @@
       "form": {
         "businessName": "Business name",
         "contactName": "Contact name",
-        "contactEmail": "Email",
+        "accountEmail": "Account email",
+        "accountEmailHint": "We'll use your signed-in account's email.",
         "contactPhone": "Phone",
         "serviceArea": "Service area (city/prefecture)",
         "fleetSize": "Estimated fleet size",
@@ -980,7 +981,6 @@
         "errors": {
           "businessName": "Please enter your business name.",
           "contactName": "Please enter a contact name.",
-          "contactEmail": "Please enter a valid email address.",
           "contactPhone": "Please enter a valid phone number.",
           "serviceArea": "Please enter your service area.",
           "estimatedFleetSize": "Please select a fleet size.",
