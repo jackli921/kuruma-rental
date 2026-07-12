@@ -154,6 +154,14 @@ describe('ClassRatePlanService.create', () => {
     expect(result.code).toBe('INVALID_LOCATION')
   })
 
+  it('rejects a cross-operator CLASS with 400 INVALID_VEHICLE_CLASS', async () => {
+    const { service } = setup(makeClass({ operatorId: OTHER_OPERATOR_ID }), makeLocation())
+
+    const result = await service.create(operatorCtx, makePlanData())
+
+    expect(result).toMatchObject({ ok: false, status: 400, code: 'INVALID_VEHICLE_CLASS' })
+  })
+
   it('rejects an INACTIVE deal against an archived class with 400 INVALID_VEHICLE_CLASS', async () => {
     const svc = new ClassRatePlanService(
       new InMemoryClassRatePlanRepository(),
@@ -173,6 +181,25 @@ describe('ClassRatePlanService.create', () => {
 // ---- update ----------------------------------------------------------------
 
 describe('ClassRatePlanService.update', () => {
+  it('returns 404 for an unknown id', async () => {
+    const { service } = setup()
+
+    const result = await service.update(operatorCtx, 'does-not-exist', { dayRateJpy: 1 })
+
+    expect(result).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('denies a fleet-write outside the acting operator (tenancy denial)', async () => {
+    const adminCtx: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+    const { service, repo } = setup()
+    const plan = await repo.create(makePlanData())
+
+    // Admin names a DIFFERENT operator — not-in-scope -> 404
+    const result = await service.update(adminCtx, plan.id, { dayRateJpy: 1 }, OTHER_OPERATOR_ID)
+
+    expect(result).toMatchObject({ ok: false, status: 404 })
+  })
+
   it('rejects an activation update against an archived class with 400', async () => {
     // Create with active class, then update the repo stub to archived
     const repo = new InMemoryClassRatePlanRepository()
@@ -309,5 +336,24 @@ describe('ClassRatePlanService.remove', () => {
     // Verify it's gone
     const found = await repo.findById(operatorCtx, planId)
     expect(found).toBeUndefined()
+  })
+
+  it('returns 404 for an unknown id', async () => {
+    const { service } = setup()
+
+    const result = await service.remove(operatorCtx, 'does-not-exist')
+
+    expect(result).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('denies a fleet-write outside the acting operator (tenancy denial)', async () => {
+    const adminCtx: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+    const { service, repo } = setup()
+    const plan = await repo.create(makePlanData())
+
+    // Admin names a DIFFERENT operator — not-in-scope -> 404
+    const result = await service.remove(adminCtx, plan.id, OTHER_OPERATOR_ID)
+
+    expect(result).toMatchObject({ ok: false, status: 404 })
   })
 })
