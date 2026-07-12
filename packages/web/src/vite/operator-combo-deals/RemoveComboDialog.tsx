@@ -33,13 +33,20 @@ export function RemoveComboDialog({
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
 
-  const { mutate, isPending, error } = useMutation({
+  const { mutate, isPending, error, reset } = useMutation({
     mutationFn: (id: string) => removeComboDeal(id, csrfToken, pickedOperatorId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: COMBO_QUERY_KEY })
       onOpenChange(false)
     },
   })
+
+  // A hard delete failing leaves a "it failed" banner; clear it on close so
+  // reopening the dialog for a different deal never shows the stale error.
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) reset()
+    onOpenChange(nextOpen)
+  }
 
   // Synchronous in-flight guard: isPending updates between renders, so two clicks
   // in the same frame both see false and fire delete twice. A ref flips
@@ -52,7 +59,7 @@ export function RemoveComboDialog({
   const name = deal?.label ?? ''
 
   return (
-    <Dialog open={deal !== null} onOpenChange={onOpenChange}>
+    <Dialog open={deal !== null} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('removeTitle', { name })}</DialogTitle>
@@ -66,7 +73,7 @@ export function RemoveComboDialog({
         )}
 
         <div className="flex justify-end gap-2 pt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             {t('form.cancel')}
           </Button>
           <Button

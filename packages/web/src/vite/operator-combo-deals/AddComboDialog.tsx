@@ -5,7 +5,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ApiError } from '@/lib/api-error'
 import {
   type ComboClassOption,
   ComboForm,
@@ -16,6 +15,7 @@ import {
   type CreateClassRatePlanInput,
   createComboDeal,
 } from '@/vite/operator-combo-deals/api'
+import { comboErrorMessage } from '@/vite/operator-combo-deals/combo-errors'
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
@@ -78,18 +78,4 @@ export function AddComboDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-// Maps the API failure to operator-legible copy by its envelope `code`/`status`
-// rather than regexing the message (#934). A duplicate (operator, class, location)
-// scope 409s; an archived/cross-operator class or location 400s with a specific
-// code so the operator knows which field to fix.
-export function comboErrorMessage(error: unknown, t: (key: string) => string): string {
-  if (error instanceof ApiError) {
-    if (error.code === 'INVALID_VEHICLE_CLASS') return t('error.invalidClass')
-    if (error.code === 'INVALID_LOCATION') return t('error.invalidLocation')
-    if (error.status === 409) return t('error.duplicate')
-    return error.message
-  }
-  return error instanceof Error ? error.message : String(error)
 }

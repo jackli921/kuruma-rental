@@ -5,7 +5,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { comboErrorMessage } from '@/vite/operator-combo-deals/AddComboDialog'
 import {
   type ComboClassOption,
   ComboForm,
@@ -17,6 +16,7 @@ import {
   type CreateClassRatePlanInput,
   updateComboDeal,
 } from '@/vite/operator-combo-deals/api'
+import { comboErrorMessage } from '@/vite/operator-combo-deals/combo-errors'
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
@@ -42,7 +42,7 @@ export function EditComboDialog({
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
 
-  const { mutateAsync, isPending, error } = useMutation({
+  const { mutateAsync, isPending, error, reset } = useMutation({
     mutationFn: (data: CreateClassRatePlanInput) =>
       updateComboDeal(deal?.id ?? '', data, csrfToken, pickedOperatorId),
     onSuccess: () => {
@@ -51,8 +51,15 @@ export function EditComboDialog({
     },
   })
 
+  // Clear a prior failure on close so reopening the dialog (for this or another
+  // deal) never flashes a stale error banner.
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) reset()
+    onOpenChange(nextOpen)
+  }
+
   return (
-    <Dialog open={deal !== null} onOpenChange={onOpenChange}>
+    <Dialog open={deal !== null} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('editDeal')}</DialogTitle>
@@ -67,7 +74,7 @@ export function EditComboDialog({
             onSubmit={async (data) => {
               await mutateAsync(data)
             }}
-            onCancel={() => onOpenChange(false)}
+            onCancel={() => handleOpenChange(false)}
             isSubmitting={isPending}
             defaultValues={{
               classId: deal.classId,

@@ -1,6 +1,7 @@
 import { ApiError } from '@/lib/api-error'
-import { AddComboDialog, comboErrorMessage } from '@/vite/operator-combo-deals/AddComboDialog'
+import { AddComboDialog } from '@/vite/operator-combo-deals/AddComboDialog'
 import { COMBO_QUERY_KEY, createComboDeal } from '@/vite/operator-combo-deals/api'
+import { comboErrorMessage } from '@/vite/operator-combo-deals/combo-errors'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'

@@ -9,6 +9,7 @@ import {
   type ClassRatePlanData,
   updateComboDeal,
 } from '@/vite/operator-combo-deals/api'
+import { comboErrorMessage } from '@/vite/operator-combo-deals/combo-errors'
 import type { OperatorScope } from '@/vite/operator-context'
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -44,7 +45,10 @@ export function OperatorCombosView({ deals, classes, locations, scope }: Operato
   const [editing, setEditing] = useState<ClassRatePlanData | null>(null)
   const [removing, setRemoving] = useState<ClassRatePlanData | null>(null)
 
-  const { mutate: toggle } = useMutation({
+  // The activate direction can 400 (Q-B publishability: the class/location was
+  // archived after the deal was created). react-query clears `toggleError` on the
+  // next mutate/success, so the banner is self-healing without a manual reset.
+  const { mutate: toggle, error: toggleError } = useMutation({
     mutationFn: (deal: ClassRatePlanData) =>
       updateComboDeal(deal.id, { isActive: !deal.isActive }, csrfToken, pickedOperatorId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: COMBO_QUERY_KEY }),
@@ -76,6 +80,12 @@ export function OperatorCombosView({ deals, classes, locations, scope }: Operato
             {t('addDeal')}
           </Button>
         </div>
+      )}
+
+      {toggleError && (
+        <p role="alert" className="text-sm text-destructive px-1">
+          {comboErrorMessage(toggleError, t)}
+        </p>
       )}
 
       {sorted.length === 0 ? (
