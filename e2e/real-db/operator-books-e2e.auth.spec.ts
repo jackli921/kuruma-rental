@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { RENTER_STORAGE_STATE } from './constants'
 import { testSql } from './pg'
+import { pickRegionCascade } from './region-cascade'
 
 // #1257 — operator-authored bookable inventory, end to end on the REAL Vite web ->
 // Hono API -> seeded Postgres stack, across TWO authenticated actors:
@@ -64,9 +65,11 @@ test.describe('operator-authored inventory — operator lists a car, renter book
       await dialog.locator('#location-name').fill(LOCATION_NAME)
       await dialog.locator('#location-address').fill(LOCATION_ADDRESS)
       // Only the leaf (area) selection yields a regionId; prefecture + city narrow it.
-      await dialog.locator('#region-prefecture').selectOption({ label: 'Osaka' })
-      await dialog.locator('#region-city').selectOption({ label: 'Osaka City' })
-      await dialog.locator('#region-area').selectOption({ label: 'Namba' })
+      await pickRegionCascade(page, dialog, {
+        prefecture: 'Osaka',
+        city: 'Osaka City',
+        area: 'Namba',
+      })
       await dialog.getByRole('button', { name: 'Save location' }).click()
       await expect(page.getByRole('heading', { name: LOCATION_NAME, exact: true })).toBeVisible()
     })
