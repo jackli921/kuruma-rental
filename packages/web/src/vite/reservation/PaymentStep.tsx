@@ -1,14 +1,25 @@
 import { Button } from '@/components/ui/button'
-import { ApiError, DOCUMENT_VERIFICATION_REQUIRED } from '@/lib/api-error'
+import {
+  ApiError,
+  DOCUMENT_VERIFICATION_REQUIRED,
+  OPERATOR_TERMS_CHANGED,
+  OPERATOR_TERMS_REQUIRED,
+} from '@/lib/api-error'
 import { type CreateBookingDraft, createBooking } from '@/vite/bookings/api'
+import { useFeatureFlag } from '@/vite/config'
+import { publishedOperatorTermsQueryOptions } from '@/vite/operator-terms'
 import { useSession } from '@/vite/session'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
+import { OperatorTermsModal } from './OperatorTermsModal'
 
 interface PaymentStepProps {
   readonly locale: string
+  /** The storefront's operator (#877) — used to fetch that operator's published
+   *  rental terms for the clickwrap gate. From `detail.storefront.operatorId`. */
+  readonly operatorId: string
   /** Consent is supplied here, not by the wizard — see `disclaimerAccepted` below.
    *  `CreateBookingDraft` distributes the Omit across the fulfillment-mode union so
    *  both arms keep their discriminant + id field (#464). */
@@ -25,11 +36,22 @@ interface PaymentStepProps {
  * DOCUMENT_VERIFICATION_REQUIRED code* (the #459 gate, defensive: OFF by default),
  * else generic.
  */
-export function PaymentStep({ locale, bookingInput, onBack }: PaymentStepProps) {
+export function PaymentStep({ locale, operatorId, bookingInput, onBack }: PaymentStepProps) {
   const t = useTranslations('reservation')
   const navigate = useNavigate()
   const session = useSession()
+  const queryClient = useQueryClient()
   const csrfToken = session.data?.csrfToken
+  // #877 Slice B: gate Reserve on the operator's published rental terms, but only
+  // when the OPERATOR_TERMS flag is on (dark otherwise). The query stays disabled
+  // when the flag is off, so no request fires and `terms` is undefined.
+  const operatorTermsEnabled = useFeatureFlag('OPERATOR_TERMS')
+  const { data: terms } = useQuery({
+    ...publishedOperatorTermsQueryOptions(operatorId, locale),
+    enabled: operatorTermsEnabled,
+  })
+  const requiresTerms = operatorTermsEnabled && terms != null
+  const [termsOpen, setTermsOpen] = useState(false)
   // Liability-disclaimer consent (#613) replaces the dropped online document upload:
   // the renter acknowledges in-person verification at pickup before instant-booking.
   const [accepted, setAccepted] = useState(false)
@@ -37,7 +59,39 @@ export function PaymentStep({ locale, bookingInput, onBack }: PaymentStepProps) 
   const mutation = useMutation({
     mutationFn: (): Promise<{ id: string }> => {
       if (!csrfToken) throw new ApiError('Not signed in', 401)
-      return createBooking({ ...bookingInput, disclaimerAccepted: accepted }, csrfToken)
+      const base = { ...bookingInput, disclaimerAccepted: accepted }
+      // Pin the exact version + displayed locale the renter agreed to, so the
+      // server seals the same text it enforces (a stale pin → 422 CHANGED). Gated
+      // on the flag too: a disabled query still returns CACHED terms, so binding on
+      // `terms` alone would pin while dark. `operatorTermsEnabled && terms` narrows.
+      const input =
+        operatorTermsEnabled && terms
+          ? {
+              ...base,
+              operatorRentalTermsAccepted: true,
+              operatorRentalTermsAcceptedVersion: terms.version,
+              locale,
+            }
+          : base
+      return createBooking(input, csrfToken)
+    },
+    onError: (error) => {
+      // The operator republished mid-checkout: pull the fresh terms and re-present
+      // them so the renter re-agrees to what will actually be sealed.
+      if (error instanceof ApiError && error.code === OPERATOR_TERMS_CHANGED) {
+        void queryClient.invalidateQueries({
+          queryKey: publishedOperatorTermsQueryOptions(operatorId, locale).queryKey,
+        })
+        setTermsOpen(true)
+        return
+      }
+      // A race the client missed (terms appeared after our fetch): open the modal.
+      if (error instanceof ApiError && error.code === OPERATOR_TERMS_REQUIRED) {
+        setTermsOpen(true)
+        return
+      }
+      // Any other failure surfaces on the step, so close the modal to reveal it.
+      setTermsOpen(false)
     },
     onSuccess: (booking) => {
       // Navigate with only the id — do NOT seed the ['bookings', id] cache with
@@ -60,6 +114,12 @@ export function PaymentStep({ locale, bookingInput, onBack }: PaymentStepProps) 
     // remedy for the renter: go back and pick another car.
     if (error instanceof ApiError && (error.status === 409 || error.status === 400))
       return t('payment.errorConflict')
+    // #877: the operator changed their terms mid-checkout — the modal re-opens with
+    // the fresh version; this banner explains the interruption behind it. A bare
+    // REQUIRED (the modal handles it) shows no banner.
+    if (error instanceof ApiError && error.code === OPERATOR_TERMS_CHANGED)
+      return t('payment.termsChanged')
+    if (error instanceof ApiError && error.code === OPERATOR_TERMS_REQUIRED) return null
     // Only the document-gate 403 (#459) means "upload documents"; key off the
     // machine code, not the bare status, so an unrelated 403 (e.g. an operator
     // booking outside its scope) doesn't dead-end the renter on a docs prompt.
@@ -116,13 +176,26 @@ export function PaymentStep({ locale, bookingInput, onBack }: PaymentStepProps) 
         </Button>
         <Button
           type="button"
-          onClick={() => mutation.mutate()}
+          onClick={() => (requiresTerms ? setTermsOpen(true) : mutation.mutate())}
           disabled={mutation.isPending || !csrfToken || !accepted}
           aria-describedby={accepted ? undefined : 'disclaimer-consent-hint'}
         >
           {mutation.isPending ? t('payment.submitting') : t('payment.submit')}
         </Button>
       </div>
+      {/* #877: rendered only when the flag is on AND the operator has published
+          terms. Agreeing submits with the pinned version; the modal stays up while
+          the mutation runs (pending) so success navigates away and a CHANGED 422
+          re-presents fresh terms. */}
+      {requiresTerms && terms ? (
+        <OperatorTermsModal
+          terms={terms}
+          open={termsOpen}
+          onOpenChange={setTermsOpen}
+          onAgree={() => mutation.mutate()}
+          pending={mutation.isPending}
+        />
+      ) : null}
     </section>
   )
 }
