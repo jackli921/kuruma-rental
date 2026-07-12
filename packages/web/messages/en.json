@@ -93,6 +93,7 @@
     "insurance": "Insurance",
     "terms": "Rental terms",
     "fees": "Fees",
+    "comboDeals": "Combo deals",
     "addOns": "Add-ons",
     "menu": "Menu",
     "language": "Language",
@@ -796,6 +797,51 @@
         "save": "Save draft",
         "saving": "Saving...",
         "cancel": "Cancel"
+      }
+    },
+    "comboDeals": {
+      "title": "Combo deals",
+      "subtitle": "Offer a discounted day rate for a vehicle class at a pickup location.",
+      "addDeal": "Add deal",
+      "addSubtitle": "Create a new combo deal for a class and pickup location.",
+      "editDeal": "Edit deal",
+      "editSubtitle": "Update this combo deal.",
+      "empty": "No combo deals yet. Add a discounted class rate for a pickup location.",
+      "loadError": "Couldn't load combo deals",
+      "retry": "Try again",
+      "perDay": "per day",
+      "unknownClass": "Unknown class",
+      "unknownLocation": "Unknown location",
+      "activateAction": "Activate deal",
+      "deactivateAction": "Deactivate deal",
+      "removeAction": "Delete deal",
+      "removeTitle": "Delete {name}?",
+      "removeDescription": "This permanently deletes the combo deal. This can't be undone.",
+      "removeConfirm": "Delete",
+      "removing": "Deleting...",
+      "status": {
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "form": {
+        "vehicleClass": "Vehicle class",
+        "vehicleClassPlaceholder": "Select a class",
+        "pickupLocation": "Pickup location",
+        "pickupLocationPlaceholder": "Select a location",
+        "dayRate": "Day rate (JPY)",
+        "label": "Label (optional)",
+        "labelPlaceholder": "e.g. Kei Class Deal — Namba",
+        "labelHint": "An internal name for this deal. Never shown to renters.",
+        "active": "Active",
+        "activeHint": "Inactive deals stay in your list but aren't offered to renters.",
+        "save": "Save deal",
+        "saving": "Saving...",
+        "cancel": "Cancel"
+      },
+      "error": {
+        "invalidClass": "That vehicle class isn't valid for this operator. Pick an active class.",
+        "invalidLocation": "That pickup location isn't valid for this operator. Pick an active location.",
+        "duplicate": "A deal already exists for this class and pickup location."
       }
     },
     "addOns": {

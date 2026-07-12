@@ -27,6 +27,7 @@ describe('businessNavItems', () => {
       '/$locale/manage/insurance',
       '/$locale/manage/terms',
       '/$locale/manage/fees',
+      '/$locale/manage/combo-deals',
       '/$locale/manage/add-ons',
       '/$locale/manage/messages',
       '/$locale/manage/team',
@@ -67,9 +68,10 @@ const ALL_OFF: BusinessNavFlags = {
   operatorTerms: false,
 }
 
-// The eight always-on operator items, in render order (dashboard through add-ons).
+// The nine always-on operator items, in render order (dashboard through add-ons).
 // `terms` is flag-gated (OPERATOR_TERMS, dark until Slice B) and sits inline after
 // insurance, so it is absent here and appears mid-list only when its flag is on.
+// combo-deals (#464) is unflagged, so it sits inline after fees here.
 const BASE = [
   '/$locale/dashboard',
   '/$locale/manage/bookings',
@@ -78,6 +80,7 @@ const BASE = [
   '/$locale/manage/locations',
   '/$locale/manage/insurance',
   '/$locale/manage/fees',
+  '/$locale/manage/combo-deals',
   '/$locale/manage/add-ons',
 ]
 
@@ -117,6 +120,7 @@ describe('visibleBusinessNavItems', () => {
       '/$locale/manage/insurance',
       '/$locale/manage/terms',
       '/$locale/manage/fees',
+      '/$locale/manage/combo-deals',
       '/$locale/manage/add-ons',
     ])
   })
@@ -191,7 +195,15 @@ describe('visibleBusinessNavGroups', () => {
     const byGroup = labelsByGroup('PLATFORM_ADMIN', ALL_ON)
     expect(byGroup.groupOperations).toEqual(['dashboard', 'bookings', 'messages'])
     expect(byGroup.groupCatalog).toEqual(['fleet', 'classes', 'locations'])
-    expect(byGroup.groupSetup).toEqual(['insurance', 'terms', 'fees', 'addOns', 'team', 'settings'])
+    expect(byGroup.groupSetup).toEqual([
+      'insurance',
+      'terms',
+      'fees',
+      'comboDeals',
+      'addOns',
+      'team',
+      'settings',
+    ])
   })
 
   it('drops gated items from a section but keeps the section (beta operator)', () => {
@@ -199,7 +211,7 @@ describe('visibleBusinessNavGroups', () => {
     // messaging off -> Messages leaves Operations, which keeps Dashboard + Bookings.
     expect(byGroup.groupOperations).toEqual(['dashboard', 'bookings'])
     // terms/team/settings off -> Setup keeps only its always-on items.
-    expect(byGroup.groupSetup).toEqual(['insurance', 'fees', 'addOns'])
+    expect(byGroup.groupSetup).toEqual(['insurance', 'fees', 'comboDeals', 'addOns'])
   })
 
   it('previews Messages under Operations for the platform admin with messaging off', () => {

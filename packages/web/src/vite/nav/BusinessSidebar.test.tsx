@@ -82,6 +82,7 @@ describe('BusinessSidebar', () => {
       'Locations',
       'Insurance',
       'Fees',
+      'Combo deals',
       'Add-ons',
       'Team',
       'Settings',
