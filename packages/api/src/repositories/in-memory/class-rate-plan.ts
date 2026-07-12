@@ -54,8 +54,13 @@ export class InMemoryClassRatePlanRepository implements ClassRatePlanRepository 
     const scope = operatorReadScope(ctx)
     if (scope.kind === 'none') return []
     return [...this.store.values()].filter((p) => {
-      if (scope.kind === 'operator' && p.operatorId !== scope.operatorId) return false
-      if (filters.operatorId && p.operatorId !== filters.operatorId) return false
+      // Operator scope is absolute; a stray filters.operatorId can never widen
+      // it. The explicit filter only narrows bypass-role ('all') reads.
+      if (scope.kind === 'operator') {
+        if (p.operatorId !== scope.operatorId) return false
+      } else if (filters.operatorId && p.operatorId !== filters.operatorId) {
+        return false
+      }
       if (filters.classId && p.classId !== filters.classId) return false
       if (filters.pickupLocationId && p.pickupLocationId !== filters.pickupLocationId) return false
       if (filters.isActive !== undefined && p.isActive !== filters.isActive) return false

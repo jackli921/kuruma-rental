@@ -1,5 +1,5 @@
 import { classRatePlans } from '@kuruma/shared/db/schema'
-import { type SQL, and, eq, inArray } from 'drizzle-orm'
+import { type SQL, and, eq, inArray, sql } from 'drizzle-orm'
 import { type CallerContext, requireManagementRead } from '../../middleware/auth'
 import type { ClassRatePlan } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
@@ -67,8 +67,13 @@ export class DrizzleClassRatePlanRepository implements ClassRatePlanRepository {
     const scope = operatorReadScope(ctx)
     if (scope.kind === 'none') return []
     const conditions: SQL[] = []
-    if (scope.kind === 'operator') conditions.push(eq(classRatePlans.operatorId, scope.operatorId))
-    if (filters.operatorId) conditions.push(eq(classRatePlans.operatorId, filters.operatorId))
+    // Operator scope is absolute; a stray filters.operatorId can never widen it —
+    // the explicit filter only narrows bypass-role ('all') reads.
+    if (scope.kind === 'operator') {
+      conditions.push(eq(classRatePlans.operatorId, scope.operatorId))
+    } else if (filters.operatorId) {
+      conditions.push(eq(classRatePlans.operatorId, filters.operatorId))
+    }
     if (filters.classId) conditions.push(eq(classRatePlans.classId, filters.classId))
     if (filters.pickupLocationId)
       conditions.push(eq(classRatePlans.pickupLocationId, filters.pickupLocationId))
@@ -127,7 +132,7 @@ export class DrizzleClassRatePlanRepository implements ClassRatePlanRepository {
     if (scope.kind === 'operator') conditions.push(eq(classRatePlans.operatorId, scope.operatorId))
     const [row] = await this.db
       .update(classRatePlans)
-      .set({ ...patch, updatedAt: new Date() })
+      .set({ ...patch, updatedAt: sql`now()` })
       .where(and(...conditions))
       .returning()
     return row ? toClassRatePlan(row) : undefined
