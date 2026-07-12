@@ -1,4 +1,10 @@
-import { classRatePlans, locations, operators, users, vehicleClasses } from '@kuruma/shared/db/schema'
+import {
+  classRatePlans,
+  locations,
+  operators,
+  users,
+  vehicleClasses,
+} from '@kuruma/shared/db/schema'
 import { inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
@@ -79,7 +85,7 @@ describe('class-rate-plan CRUD + guards (HTTP + real Postgres, #464)', () => {
   let archivedLocationId: string
   let crossTenantPlanId: string
 
-  const operatorSlugs: string[] = []
+  const operatorIds: string[] = []
   const classIds: string[] = []
   const locationIds: string[] = []
 
@@ -88,7 +94,7 @@ describe('class-rate-plan CRUD + guards (HTTP + real Postgres, #464)', () => {
 
     opAId = await seedOperator(`crpa-${u}`)
     opBId = await seedOperator(`crpb-${u}`)
-    operatorSlugs.push(opAId, opBId)
+    operatorIds.push(opAId, opBId)
 
     activeClassId = await seedVehicleClass(opAId, `act-${u}`, 'ACTIVE')
     archivedClassId = await seedVehicleClass(opAId, `arc-${u}`, 'ARCHIVED')
@@ -137,11 +143,11 @@ describe('class-rate-plan CRUD + guards (HTTP + real Postgres, #464)', () => {
   })
 
   afterAll(async () => {
-    await db.delete(classRatePlans).where(inArray(classRatePlans.operatorId, operatorSlugs))
+    await db.delete(classRatePlans).where(inArray(classRatePlans.operatorId, operatorIds))
     await db.delete(vehicleClasses).where(inArray(vehicleClasses.id, classIds))
     await db.delete(locations).where(inArray(locations.id, locationIds))
     await db.delete(users).where(inArray(users.id, [staffUserId]))
-    await db.delete(operators).where(inArray(operators.id, operatorSlugs))
+    await db.delete(operators).where(inArray(operators.id, operatorIds))
   })
 
   // -------------------------------------------------------------------------
@@ -177,15 +183,20 @@ describe('class-rate-plan CRUD + guards (HTTP + real Postgres, #464)', () => {
   })
 
   it('GET list returns the created plan (1 result)', async () => {
-    const res = await app.request(
-      `/class-rate-plans?operatorId=${opAId}`,
-      { method: 'GET', headers: staffHeaders },
-    )
+    const res = await app.request(`/class-rate-plans?operatorId=${opAId}`, {
+      method: 'GET',
+      headers: staffHeaders,
+    })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.success).toBe(true)
-    const plans: { id: string }[] = body.data
-    expect(plans.some((p) => p.id === createdPlanId)).toBe(true)
+    const plans: { id: string; dayRateJpy: number; label: string | null; isActive: boolean }[] =
+      body.data
+    const found = plans.find((p) => p.id === createdPlanId)
+    expect(found).toBeDefined()
+    expect(found?.dayRateJpy).toBe(7500)
+    expect(found?.label).toBe('Osaka Deal')
+    expect(found?.isActive).toBe(true)
   })
 
   it('PATCH toggles isActive to false (200)', async () => {
@@ -298,13 +309,13 @@ describe('class-rate-plan CRUD + guards (HTTP + real Postgres, #464)', () => {
   })
 
   // -------------------------------------------------------------------------
-  // Cross-tenant 404: STAFF caller can't see opB's plan via opA's scope
+  // Cross-tenant 404: OPERATOR_OWNER caller can't see opB's plan via opA's JWT scope
   // -------------------------------------------------------------------------
 
   it("GET by id returns 404 for another operator's plan when scoped to opA", async () => {
-    // The STAFF token scoped to opA cannot reach opB's plan.
-    // We scope the read via `?operatorId=opAId` so the repo applies opA's scope
-    // and opB's plan is invisible.
+    // The OPERATOR_OWNER (operator-scoped) token bound to opA cannot reach opB's plan.
+    // JWT scope isolation: the repo applies opA's operatorId scope so opB's plan
+    // is invisible regardless of plan id.
     const opAHeaders = await authHeaders({
       sub: staffUserId,
       role: 'OPERATOR_OWNER',
