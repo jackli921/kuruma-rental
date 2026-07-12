@@ -1,10 +1,20 @@
 import { LocationForm } from '@/vite/operator-locations/LocationForm'
 import type { RegionNode } from '@kuruma/shared/types/region'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+
+// Each cascade level is now a combobox; open it via its scoped trigger, then click an option.
+function openLevel(label: string) {
+  const group = screen.getByLabelText(label).closest('div')
+  if (group === null) throw new Error(`no group for ${label}`)
+  fireEvent.click(within(group).getByRole('button', { name: 'Open options' }))
+}
+function pickOption(name: string) {
+  fireEvent.click(screen.getByRole('option', { name }))
+}
 
 const node = (over: Partial<RegionNode> & Pick<RegionNode, 'id' | 'type'>): RegionNode => ({
   parentId: null,
@@ -49,9 +59,12 @@ describe('LocationForm region cascade (#651 Slice 2b)', () => {
 
     await user.type(screen.getByLabelText('Location name'), 'Namba Branch')
     await user.type(screen.getByLabelText('Address'), '1-2-3 Namba, Chuo-ku')
-    await user.selectOptions(screen.getByLabelText('Prefecture'), 'reg_osaka')
-    await user.selectOptions(screen.getByLabelText('City'), 'reg_osaka_city')
-    await user.selectOptions(screen.getByLabelText('Area'), 'reg_namba')
+    openLevel('Prefecture')
+    pickOption('Osaka')
+    openLevel('City')
+    pickOption('Osaka City')
+    openLevel('Area')
+    pickOption('Namba')
     await user.click(screen.getByRole('button', { name: 'Save location' }))
 
     expect(onSubmit).toHaveBeenCalledTimes(1)
@@ -83,8 +96,8 @@ describe('LocationForm region cascade (#651 Slice 2b)', () => {
       </IntlProvider>,
     )
 
-    expect(screen.getByLabelText('Prefecture')).toHaveValue('reg_osaka')
-    expect(screen.getByLabelText('City')).toHaveValue('reg_osaka_city')
-    expect(screen.getByLabelText('Area')).toHaveValue('reg_namba')
+    expect(screen.getByLabelText('Prefecture')).toHaveValue('Osaka')
+    expect(screen.getByLabelText('City')).toHaveValue('Osaka City')
+    expect(screen.getByLabelText('Area')).toHaveValue('Namba')
   })
 })

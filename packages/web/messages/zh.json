@@ -2027,5 +2027,10 @@
     "approximately": "约",
     "disclaimer": "仅供参考 — 实际以日元（JPY）结算",
     "asOf": "汇率基准日 {date}"
+  },
+  "locationCombobox": {
+    "clear": "清除",
+    "open": "打开选项",
+    "noMatches": "无匹配地区"
   }
 }

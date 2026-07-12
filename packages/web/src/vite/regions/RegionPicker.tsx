@@ -1,9 +1,10 @@
 import { Label } from '@/components/ui/label'
-import { NativeSelect } from '@/components/ui/native-select'
 import { nearestAssignableRegion } from '@kuruma/shared/lib/region-distance'
 import type { RegionNode } from '@kuruma/shared/types/region'
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
+import { LocationCombobox } from './LocationCombobox'
+import { regionName } from './region-locale'
 import { regionChain } from './region-lookup'
 
 // Tourist quick-picks (#651 §6). Slugs are stable contracts; a slug absent from the
@@ -11,19 +12,17 @@ import { regionChain } from './region-lookup'
 // renter may anchor at any level, since the backend filters by region subtree.
 const QUICK_PICK_SLUGS = ['namba', 'umeda', 'kix', 'kyoto'] as const
 
+// Cap the geolocation prompt so a hung permission dialog (some in-app browsers never
+// resolve or reject) can't leave the "Near me" button stuck on "Locating…" forever.
+const GEO_TIMEOUT_MS = 10_000
+const GEO_MAX_AGE_MS = 5 * 60_000
+
 export interface RegionPickerProps {
   regions: readonly RegionNode[]
   /** The selected region as its stable slug (the URL contract — #651 Decision 6), or null. */
   value: string | null
   onChange: (slug: string | null) => void
   disabled?: boolean
-}
-
-// The API is locale-agnostic (trilingual names); the client picks one by route locale.
-function nameOf(region: RegionNode, locale: string): string {
-  if (locale === 'ja') return region.nameJa
-  if (locale === 'zh') return region.nameZh
-  return region.nameEn
 }
 
 /**
@@ -46,13 +45,26 @@ export function RegionPicker({ regions, value, onChange, disabled }: RegionPicke
   const selectedId = value !== null ? (bySlug.get(value)?.id ?? null) : null
   const chain = regionChain(regions, selectedId)
 
-  const prefectures = regions.filter((r) => r.type === 'PREFECTURE' && r.status === 'ACTIVE')
+  // A slug-less node is non-addressable (the picker emits slugs — #651 Decision 6), so
+  // selecting one would map to null = "Anywhere" and silently clear. Exclude it here so
+  // an unaddressable node is never offered as an option (review H2).
+  const prefectures = regions.filter(
+    (r) => r.type === 'PREFECTURE' && r.status === 'ACTIVE' && r.slug !== null,
+  )
   const cities = regions.filter(
-    (r) => r.type === 'CITY' && r.parentId === chain.prefecture?.id && r.status === 'ACTIVE',
+    (r) =>
+      r.type === 'CITY' &&
+      r.parentId === chain.prefecture?.id &&
+      r.status === 'ACTIVE' &&
+      r.slug !== null,
   )
   const areas = regions.filter(
     (r) =>
-      r.type === 'AREA' && r.parentId === chain.city?.id && r.assignable && r.status === 'ACTIVE',
+      r.type === 'AREA' &&
+      r.parentId === chain.city?.id &&
+      r.assignable &&
+      r.status === 'ACTIVE' &&
+      r.slug !== null,
   )
 
   const slugOf = (id: string): string | null => byId.get(id)?.slug ?? null
@@ -70,6 +82,16 @@ export function RegionPicker({ regions, value, onChange, disabled }: RegionPicke
     (r): r is RegionNode => r !== undefined,
   )
 
+  // Dev-only: a renamed/removed quick-pick slug otherwise vanishes as a silent missing
+  // chip. Surface it so it's caught before shipping (review L1).
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const missing = QUICK_PICK_SLUGS.filter((slug) => !bySlug.has(slug))
+    if (missing.length > 0) {
+      console.warn(`RegionPicker: quick-pick slug(s) not in taxonomy: ${missing.join(', ')}`)
+    }
+  }, [bySlug])
+
   const handleNearMe = () => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       onChange(null)
@@ -86,11 +108,12 @@ export function RegionPicker({ regions, value, onChange, disabled }: RegionPicke
         onChange(nearest?.slug ?? null)
       },
       () => {
-        // Denied / unavailable: a stale device point must never override a chosen area —
-        // fall back to the full list (§6).
+        // Denied / unavailable / timed out: a stale device point must never override a
+        // chosen area — fall back to the full list (§6).
         setLocating(false)
         onChange(null)
       },
+      { timeout: GEO_TIMEOUT_MS, maximumAge: GEO_MAX_AGE_MS },
     )
   }
 
@@ -99,51 +122,36 @@ export function RegionPicker({ regions, value, onChange, disabled }: RegionPicke
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <div>
           <Label htmlFor={`${ids}-prefecture`}>{t('prefecture')}</Label>
-          <NativeSelect
+          <LocationCombobox
             id={`${ids}-prefecture`}
+            regions={prefectures}
             value={chain.prefecture?.id ?? ''}
+            placeholder={t('anywhere')}
             disabled={disabled}
-            onChange={(e) => emit(e.target.value, null)}
-          >
-            <option value="">{t('anywhere')}</option>
-            {prefectures.map((r) => (
-              <option key={r.id} value={r.id}>
-                {nameOf(r, locale)}
-              </option>
-            ))}
-          </NativeSelect>
+            onChange={(id) => emit(id, null)}
+          />
         </div>
         <div>
           <Label htmlFor={`${ids}-city`}>{t('city')}</Label>
-          <NativeSelect
+          <LocationCombobox
             id={`${ids}-city`}
+            regions={cities}
             value={chain.city?.id ?? ''}
+            placeholder={t('allCities')}
             disabled={disabled || chain.prefecture === null}
-            onChange={(e) => emit(e.target.value, chain.prefecture)}
-          >
-            <option value="">{t('allCities')}</option>
-            {cities.map((r) => (
-              <option key={r.id} value={r.id}>
-                {nameOf(r, locale)}
-              </option>
-            ))}
-          </NativeSelect>
+            onChange={(id) => emit(id, chain.prefecture)}
+          />
         </div>
         <div>
           <Label htmlFor={`${ids}-area`}>{t('area')}</Label>
-          <NativeSelect
+          <LocationCombobox
             id={`${ids}-area`}
+            regions={areas}
             value={chain.area?.id ?? ''}
+            placeholder={t('allAreas')}
             disabled={disabled || chain.city === null}
-            onChange={(e) => emit(e.target.value, chain.city)}
-          >
-            <option value="">{t('allAreas')}</option>
-            {areas.map((r) => (
-              <option key={r.id} value={r.id}>
-                {nameOf(r, locale)}
-              </option>
-            ))}
-          </NativeSelect>
+            onChange={(id) => emit(id, chain.city)}
+          />
         </div>
       </div>
 
@@ -164,7 +172,7 @@ export function RegionPicker({ regions, value, onChange, disabled }: RegionPicke
                   : 'border-border bg-background text-foreground hover:bg-muted'
               }`}
             >
-              {nameOf(r, locale)}
+              {regionName(r, locale)}
             </button>
           )
         })}

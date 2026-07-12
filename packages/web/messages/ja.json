@@ -2027,5 +2027,10 @@
     "approximately": "約",
     "disclaimer": "目安です — ご請求は日本円（JPY）です",
     "asOf": "レート基準日 {date}"
+  },
+  "locationCombobox": {
+    "clear": "クリア",
+    "open": "選択肢を開く",
+    "noMatches": "該当する地域がありません"
   }
 }

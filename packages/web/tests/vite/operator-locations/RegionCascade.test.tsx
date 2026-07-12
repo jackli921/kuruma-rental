@@ -1,7 +1,6 @@
 import { RegionCascade } from '@/vite/operator-locations/RegionCascade'
 import type { RegionNode } from '@kuruma/shared/types/region'
-import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
@@ -75,6 +74,16 @@ function setup(value: string | null = null) {
   return onChange
 }
 
+// Each level is a combobox; open it via its own scoped trigger, then click an option.
+function open(label: string) {
+  const group = screen.getByLabelText(label).closest('div')
+  if (group === null) throw new Error(`no group for ${label}`)
+  fireEvent.click(within(group).getByRole('button', { name: 'Open options' }))
+}
+function pick(name: string) {
+  fireEvent.click(screen.getByRole('option', { name }))
+}
+
 describe('RegionCascade (#651 Slice 2b, #1276 city-as-terminal)', () => {
   it('shows only prefecture enabled initially; city disabled, area not yet rendered', () => {
     setup()
@@ -83,41 +92,43 @@ describe('RegionCascade (#651 Slice 2b, #1276 city-as-terminal)', () => {
     expect(screen.queryByLabelText('Area')).not.toBeInTheDocument()
   })
 
-  it('emits the city id when an assignable city is selected (city is terminal)', async () => {
-    const user = userEvent.setup()
+  it('emits the city id when an assignable city is selected (city is terminal)', () => {
     const onChange = setup()
-    await user.selectOptions(screen.getByLabelText('Prefecture'), 'reg_osaka')
-    await user.selectOptions(screen.getByLabelText('City'), 'reg_osaka_city')
-
+    open('Prefecture')
+    pick('Osaka')
+    open('City')
+    pick('Osaka City')
     expect(onChange).toHaveBeenLastCalledWith('reg_osaka_city')
   })
 
-  it('renders no area dropdown for an assignable city with no area children', async () => {
-    const user = userEvent.setup()
+  it('renders no area dropdown for an assignable city with no area children', () => {
     const onChange = setup()
-    await user.selectOptions(screen.getByLabelText('Prefecture'), 'reg_kyoto')
-    await user.selectOptions(screen.getByLabelText('City'), 'reg_kyoto_city')
-
+    open('Prefecture')
+    pick('Kyoto')
+    open('City')
+    pick('Kyoto City')
     expect(onChange).toHaveBeenLastCalledWith('reg_kyoto_city')
     expect(screen.queryByLabelText('Area')).not.toBeInTheDocument()
   })
 
-  it('lets an area refine an assignable city, overriding the city as the terminal', async () => {
-    const user = userEvent.setup()
+  it('lets an area refine an assignable city, overriding the city as the terminal', () => {
     const onChange = setup()
-    await user.selectOptions(screen.getByLabelText('Prefecture'), 'reg_osaka')
-    await user.selectOptions(screen.getByLabelText('City'), 'reg_osaka_city')
-    await user.selectOptions(screen.getByLabelText('Area'), 'reg_namba')
-
+    open('Prefecture')
+    pick('Osaka')
+    open('City')
+    pick('Osaka City')
+    open('Area')
+    pick('Namba')
     expect(onChange).toHaveBeenLastCalledWith('reg_namba')
   })
 
-  it('lists only assignable, ACTIVE areas (excludes INACTIVE + navigation-only)', async () => {
-    const user = userEvent.setup()
+  it('lists only assignable, ACTIVE areas (excludes INACTIVE + navigation-only)', () => {
     setup()
-    await user.selectOptions(screen.getByLabelText('Prefecture'), 'reg_osaka')
-    await user.selectOptions(screen.getByLabelText('City'), 'reg_osaka_city')
-
+    open('Prefecture')
+    pick('Osaka')
+    open('City')
+    pick('Osaka City')
+    open('Area')
     expect(screen.getByRole('option', { name: 'Namba' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Umeda' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'Retired' })).not.toBeInTheDocument()
@@ -126,35 +137,39 @@ describe('RegionCascade (#651 Slice 2b, #1276 city-as-terminal)', () => {
 
   it('prefills the prefecture -> city -> area chain from an existing AREA value', () => {
     setup('reg_namba')
-    expect(screen.getByLabelText('Prefecture')).toHaveValue('reg_osaka')
-    expect(screen.getByLabelText('City')).toHaveValue('reg_osaka_city')
-    expect(screen.getByLabelText('Area')).toHaveValue('reg_namba')
+    expect(screen.getByLabelText('Prefecture')).toHaveValue('Osaka')
+    expect(screen.getByLabelText('City')).toHaveValue('Osaka City')
+    expect(screen.getByLabelText('Area')).toHaveValue('Namba')
   })
 
   it('prefills the prefecture -> city chain from an existing CITY value', () => {
     setup('reg_osaka_city')
-    expect(screen.getByLabelText('Prefecture')).toHaveValue('reg_osaka')
-    expect(screen.getByLabelText('City')).toHaveValue('reg_osaka_city')
-    // The city is the terminal, so the (optional) area select stays on its placeholder.
-    expect(screen.getByLabelText('Area')).toHaveValue('')
+    expect(screen.getByLabelText('Prefecture')).toHaveValue('Osaka')
+    expect(screen.getByLabelText('City')).toHaveValue('Osaka City')
+    // The city is the terminal, so the (optional) area level stays on its default option.
+    expect(screen.getByLabelText('Area')).toHaveValue('Select...')
   })
 
-  it('clears the value to null and resets the city when the prefecture changes', async () => {
-    const user = userEvent.setup()
+  it('clears the value to null and resets the city when the prefecture changes', () => {
     const onChange = setup('reg_namba')
-    await user.selectOptions(screen.getByLabelText('Prefecture'), 'reg_kyoto')
+    open('Prefecture')
+    pick('Kyoto')
     expect(onChange).toHaveBeenLastCalledWith(null)
-    expect(screen.getByLabelText('City')).toHaveValue('')
+    expect(screen.getByLabelText('City')).toHaveValue('Select...')
   })
 
   it('keeps a now-unselectable assigned region visible (INACTIVE) instead of blanking', () => {
     setup('reg_retired')
-    expect(screen.getByLabelText('Area')).toHaveValue('reg_retired')
+    expect(screen.getByLabelText('Area')).toHaveValue('Retired')
+    open('Area')
     expect(screen.getByRole('option', { name: 'Retired' })).toBeInTheDocument()
   })
 
-  it('renders without crashing when the assigned region is unknown (since deleted)', () => {
-    setup('reg_gone')
-    expect(screen.getByLabelText('Area')).toHaveValue('reg_gone')
+  it('does not crash or silently blank an unknown (since-deleted) assigned region', () => {
+    const onChange = setup('reg_gone')
+    // No name to show, so the control falls back to its placeholder — but the controlled
+    // value is never emitted away, so a blind re-save keeps the id rather than nulling it.
+    expect(screen.getByLabelText('Area')).toHaveValue('Select...')
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

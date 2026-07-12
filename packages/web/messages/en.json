@@ -2027,5 +2027,10 @@
     "approximately": "approximately",
     "disclaimer": "Indicative only — you're charged in JPY",
     "asOf": "Rates as of {date}"
+  },
+  "locationCombobox": {
+    "clear": "Clear",
+    "open": "Open options",
+    "noMatches": "No matches"
   }
 }
