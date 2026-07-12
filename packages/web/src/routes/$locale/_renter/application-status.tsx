@@ -19,19 +19,29 @@ function ApplicationStatusRoute() {
 // render it directly without a real router.
 export function ApplicationStatusPage({ locale }: { locale: string }) {
   const t = useTranslations('operator.applicationStatus')
-  const { data: application, isPending } = useQuery(myApplicationQueryOptions())
+  const { data: application, isPending, isError } = useQuery(myApplicationQueryOptions())
 
   if (isPending) {
     return (
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10 sm:px-6 lg:px-8">
-        <p className="text-muted-foreground">{t('title')}&hellip;</p>
+        <p className="text-muted-foreground">{t('loading')}</p>
+      </main>
+    )
+  }
+
+  if (isError) {
+    return (
+      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10 sm:px-6 lg:px-8">
+        <ErrorView t={t} />
       </main>
     )
   }
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      {application === null || application === undefined ? (
+      {/* isPending and isError are both handled above, so data is undefined only in
+          the error path (already caught). null is the genuine no-application case. */}
+      {application === null ? (
         <NoApplicationView locale={locale} t={t} />
       ) : application.status === 'PENDING' ? (
         <PendingView t={t} />
@@ -58,6 +68,15 @@ function NoApplicationView({ locale, t }: { locale: string; t: TranslateFn }) {
       >
         {t('applyNow')}
       </Link>
+    </div>
+  )
+}
+
+function ErrorView({ t }: { t: TranslateFn }) {
+  return (
+    <div className="text-center">
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('errorTitle')}</h1>
+      <p className="mt-4 text-muted-foreground">{t('errorBody')}</p>
     </div>
   )
 }

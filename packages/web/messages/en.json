@@ -1991,7 +1991,10 @@
       "goToPortal": "Go to your portal",
       "rejectedTitle": "Application not approved",
       "rejectedBody": "Unfortunately your application was not approved.",
-      "rejectionReason": "Reason: {reason}"
+      "rejectionReason": "Reason: {reason}",
+      "errorTitle": "We couldn't load your application",
+      "errorBody": "Something went wrong loading your application status. Please refresh the page or try again in a moment.",
+      "loading": "Loading your application status…"
     }
   }
 }

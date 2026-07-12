@@ -1991,7 +1991,10 @@
       "goToPortal": "ポータルへ移動",
       "rejectedTitle": "申請が承認されませんでした",
       "rejectedBody": "申し訳ありませんが、申請は承認されませんでした。",
-      "rejectionReason": "理由: {reason}"
+      "rejectionReason": "理由: {reason}",
+      "errorTitle": "申請情報を読み込めませんでした",
+      "errorBody": "申請ステータスの読み込み中にエラーが発生しました。ページを更新するか、しばらくしてから再度お試しください。",
+      "loading": "申請ステータスを読み込んでいます…"
     }
   }
 }

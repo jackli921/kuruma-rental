@@ -1991,7 +1991,10 @@
       "goToPortal": "前往运营商门户",
       "rejectedTitle": "申请未获批准",
       "rejectedBody": "很遗憾，您的申请未获批准。",
-      "rejectionReason": "原因：{reason}"
+      "rejectionReason": "原因：{reason}",
+      "errorTitle": "无法加载您的申请信息",
+      "errorBody": "加载申请状态时出现错误。请刷新页面或稍后再试。",
+      "loading": "正在加载申请状态…"
     }
   }
 }

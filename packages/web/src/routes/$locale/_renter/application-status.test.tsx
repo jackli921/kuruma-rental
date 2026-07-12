@@ -110,4 +110,24 @@ describe('ApplicationStatusPage', () => {
     // "Reason:" prefix should not appear when reason is null
     expect(screen.queryByText(/^Reason:/)).toBeNull()
   })
+
+  it('renders the error view (not the no-application view) when the query fails', async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, retryOnMount: false } },
+    })
+    await qc.prefetchQuery({
+      queryKey: myApplicationQueryOptions().queryKey,
+      queryFn: () => Promise.reject(new Error('boom')),
+    })
+    render(
+      <QueryClientProvider client={qc}>
+        <IntlProvider locale={LOCALE} messages={en}>
+          <ApplicationStatusPage locale={LOCALE} />
+        </IntlProvider>
+      </QueryClientProvider>,
+    )
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(M.errorTitle)
+    // The no-application CTA must NOT appear — this is the key mutation-resistant assertion
+    expect(screen.queryByRole('link', { name: M.applyNow })).toBeNull()
+  })
 })
