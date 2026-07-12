@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { RENTER_STORAGE_STATE } from './constants'
 import { testSql } from './pg'
+import { pickRegionLevel } from './region-cascade'
 
 // #840 / #651 §9 — renter region search on the REAL Vite web -> Hono API ->
 // seeded Postgres stack. Proves the two things the component unit tests (which
@@ -14,8 +15,6 @@ import { testSql } from './pg'
 // each seeded AREA holds exactly one store and the multi-store nodes
 // (city/prefecture) are coordless by design, so the UI can show breadth OR a
 // ranking anchor, never both — there is nothing extra for an e2e to prove there.
-
-const RENTER_EMAIL = 'sarah@example.test'
 
 // Booking-code alphabet (api/lib/booking-code.ts BOOKING_CODE_PATTERN), inlined —
 // @kuruma/api TS can't be required from this CJS-transformed Playwright file.
@@ -35,8 +34,13 @@ const KIX_STORE = 'Kansai Airport (KIX)'
 const NAMBA_STORE = 'Namba' // Osaka City -> a different child city than KIX's Izumisano
 const KYOTO_STORE = 'Kyoto Station' // a different PREFECTURE — must be filtered out
 
+// Booking codes this spec creates via the wizard, so afterAll deletes exactly those and never
+// the date-relative demo bookings that share Sarah's account (#1543): the demo bookings' start
+// dates drift with wall-clock time, so any fixed "future" date window eventually catches them.
+const createdBookingCodes: string[] = []
+
 test.describe('renter region search — subtree filter + nav threading + book (real DB)', () => {
-  test.afterAll(cleanupFutureSarahBookings)
+  test.afterAll(cleanupCreatedBookings)
 
   test('pick an area: filtered + labelled, region survives detail/back, then books', async ({
     browser,
@@ -106,6 +110,7 @@ test.describe('renter region search — subtree filter + nav threading + book (r
       await expect(renter.getByRole('heading', { name: 'Booking confirmed' })).toBeVisible()
       bookingCode = (await renter.locator('span.font-mono').first().innerText()).trim()
       expect(bookingCode).toMatch(BOOKING_CODE_RE)
+      createdBookingCodes.push(bookingCode)
     })
 
     await renterContext.close()
@@ -122,8 +127,9 @@ test.describe('renter region search — subtree filter + nav threading + book (r
 
     await renter.goto(`/en/search?from=${FROM}&to=${TO}`)
     // Anchor at the prefecture level (coordless): a subtree filter only, no ranking.
-    // The cascade emits that node's slug at any level (§6).
-    await renter.getByLabel('Prefecture').selectOption({ label: 'Osaka' })
+    // The cascade emits that node's slug at any level (§6). Prefecture is a base-ui
+    // combobox (#1543), not a native <select>: open it, then click the Osaka option.
+    await pickRegionLevel(renter, 'Prefecture', 'Osaka')
     await renter.getByRole('button', { name: 'Search' }).click()
     await expect(renter).toHaveURL(/[?&]region=osaka\b/)
 
@@ -140,17 +146,19 @@ test.describe('renter region search — subtree filter + nav threading + book (r
   })
 })
 
-/** Delete the future-window Sarah bookings this spec created, children first (FK order). */
-async function cleanupFutureSarahBookings(): Promise<void> {
+/** Delete exactly the bookings this spec created (by their captured codes), children first in
+ * FK order — including payment_events, which the demo/wizard revenue path can attach. Scoping by
+ * code, not by a date window, leaves the shared demo bookings on Sarah's account untouched. */
+async function cleanupCreatedBookings(): Promise<void> {
+  if (createdBookingCodes.length === 0) return
   const sql = testSql()
   try {
-    const ids = await sql<{ id: string }[]>`
-      SELECT b.id FROM bookings b
-      JOIN users u ON u.id = b."renterId"
-      WHERE u.email = ${RENTER_EMAIL} AND b."startAt" >= '2026-07-01'
+    const rows = await sql<{ id: string }[]>`
+      SELECT id FROM bookings WHERE "bookingCode" IN ${sql(createdBookingCodes)}
     `
-    if (ids.length === 0) return
-    const bookingIds = ids.map((r) => r.id)
+    if (rows.length === 0) return
+    const bookingIds = rows.map((r) => r.id)
+    await sql`DELETE FROM payment_events WHERE "bookingId" IN ${sql(bookingIds)}`
     await sql`DELETE FROM notification_log WHERE "bookingId" IN ${sql(bookingIds)}`
     await sql`DELETE FROM booking_events WHERE "bookingId" IN ${sql(bookingIds)}`
     await sql`DELETE FROM threads WHERE "bookingId" IN ${sql(bookingIds)}`
