@@ -260,6 +260,9 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   // #1206: declared ahead of runInTransaction so the bundle closure captures it
   // (the deactivated-operator booking guard reads operatorRepo.findById in-tx).
   const operatorRepo = overrides.operatorRepo ?? new InMemoryOperatorRepository()
+  // #877 Slice B: declared ahead of runInTransaction so the booking tx can write
+  // the renter's operator-terms acceptance in the same tx as the booking insert.
+  const consentRepo = overrides.consentRepo ?? new InMemoryConsentRepository()
   const runInTransaction: RunInTransaction = async (fn) =>
     fn({
       vehicleRepo,
@@ -280,6 +283,8 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
       vehicleBlockRepo,
       // #1206: the deactivated-operator booking guard reads this in-tx.
       operatorRepo,
+      // #877 Slice B: the renter's operator-terms acceptance is written in-tx.
+      consentRepo,
     })
   const fleetOverviewRepo =
     overrides.fleetOverviewRepo ??
@@ -317,7 +322,6 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const operatorMembershipRepo =
     overrides.operatorMembershipRepo ?? new InMemoryOperatorMembershipRepository()
   const auditLogRepo = new InMemoryAuditLogRepository()
-  const consentRepo = overrides.consentRepo ?? new InMemoryConsentRepository()
   const reviewRepo = overrides.reviewRepo ?? new InMemoryReviewRepository()
   const featureFlagRepo = overrides.featureFlagRepo ?? new InMemoryFeatureFlagRepository()
   const operatorApplicationRepo =
@@ -539,6 +543,10 @@ export function buildInMemoryRepos(): Repos {
     operatorRepo,
   )
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
+  // #877 Slice B: one singleton shared into both the tx bundle and the returned
+  // Repos so the booking tx writes operator-terms into the same in-memory ledger
+  // the consent service reads (mirrors the bookingRepo / operatorRepo wiring).
+  const consentRepo = new InMemoryConsentRepository()
   const runInTransaction: RunInTransaction = async (fn) =>
     fn({
       vehicleRepo,
@@ -558,6 +566,8 @@ export function buildInMemoryRepos(): Repos {
       vehicleBlockRepo,
       // #1206: the deactivated-operator booking guard reads this in-tx.
       operatorRepo,
+      // #877 Slice B: the renter's operator-terms acceptance is written in-tx.
+      consentRepo,
     })
   const operatorApplicationRepo = new InMemoryOperatorApplicationRepository()
   const runOperatorGrant: RunOperatorGrant = (fn) =>
@@ -618,7 +628,7 @@ export function buildInMemoryRepos(): Repos {
     operatorMembershipRepo,
     auditLogRepo,
     bookingEventRepo,
-    consentRepo: new InMemoryConsentRepository(),
+    consentRepo,
     reviewRepo: new InMemoryReviewRepository(),
     featureFlagRepo: new InMemoryFeatureFlagRepository(),
     operatorApplicationRepo,

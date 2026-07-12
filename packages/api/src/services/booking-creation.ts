@@ -1,4 +1,3 @@
-import type { AddOnSnapshot, InsuranceSnapshot } from '@kuruma/shared/db/schema'
 import { isRoadLegal, jstDateString } from '@kuruma/shared/lib/compliance'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
@@ -15,13 +14,15 @@ import {
 import { resolveBookingActor } from './booking-actor'
 import { rejectIfOperatorDeactivated } from './booking-creation-operator-guard'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
-import { MS_PER_MINUTE, composeBookingTotal, rentalDays } from './booking-pricing-helpers'
+import { MS_PER_MINUTE, rentalDays } from './booking-pricing-helpers'
+import { type OperatorTermsTxContext, snapshotAndInsert } from './booking-snapshot-insert'
 import type {
   BookingVerificationGate,
   CreateBookingInput,
   CreateBookingRequest,
   CreateBookingResult,
 } from './booking-types'
+import { type SigningKey, resolveSigningKey } from './consent-signing'
 
 // Location-only turnaround fallback when the dropoff location has no value set
 // (§5.3, proposal §9 item 20). The legacy 60-min vehicle buffer is GONE — a
@@ -29,10 +30,6 @@ import type {
 const DEFAULT_TURNAROUND_MINUTES = 2880 // 48h
 // A booking_code collision is ~2^-40 per attempt; a few retries is plenty.
 const MAX_BOOKING_CODE_ATTEMPTS = 3
-// #613: version of the liability-disclaimer (免责声明) wording a renter agreed to,
-// stamped onto the booking. Bump when the localized terms text changes materially
-// (the renter-facing copy lives in web i18n; this is the server-authoritative tag).
-export const DISCLAIMER_TERMS_VERSION = '2026-06-13'
 
 /**
  * Creation side of the booking domain (#713 split of the BookingService
@@ -55,6 +52,12 @@ export class BookingCreationService {
     // #459: optional document-verification gate, wired only when the
     // REQUIRE_DOCUMENT_VERIFICATION flag is on (see index.ts composition root).
     private readonly verificationGate?: BookingVerificationGate,
+    // #877 Slice B: the consent signing key + the OPERATOR_TERMS flag thunk. Both
+    // default to the "off" behavior so the ~30 in-memory test wirings that omit them
+    // (and the flag-off prod default) never touch the consent path: an unresolved
+    // enabled thunk floors active=false, so consentRepo is never reached.
+    private readonly getSigningKey: () => SigningKey | undefined = resolveSigningKey,
+    private readonly isOperatorTermsEnabled: () => Promise<boolean> = async () => false,
   ) {}
 
   async create(
@@ -123,11 +126,24 @@ export class BookingCreationService {
     // snapshot + insert booking + append BOOKING_CREATED, atomically. The
     // booking_code is generated inside the tx, so a UNIQUE clash re-runs the
     // entire atomic insert cleanly (§5.4) — bounded retry around the tx.
+    // #877 Slice B: decide OUTSIDE the tx whether this create must seal an
+    // operator-terms acceptance, and resolve the signing KEY here — never couple
+    // booking availability to the consent secret (H3). A missing key throws in
+    // production (fail-fast at the route 500), not mid-transaction. The doc-resolve
+    // + version-pin check + HMAC sign happen INSIDE submitInTx, after the booking
+    // insert whose id the signature binds. Gate on ctx.role === 'RENTER' (self-serve
+    // only) so operator/manual/walk-in/PARTNER creates skip it entirely.
+    const active = ctx.role === 'RENTER' && (await this.isOperatorTermsEnabled())
+    const operatorTerms: OperatorTermsTxContext = {
+      active,
+      signingKey: active ? this.getSigningKey() : undefined,
+    }
+
     let lastErr: unknown
     for (let attempt = 0; attempt < MAX_BOOKING_CODE_ATTEMPTS; attempt++) {
       try {
         const result = await this.runInTransaction((repos) =>
-          this.submitInTx(ctx, input, renterId, now, repos, actingOperatorId),
+          this.submitInTx(ctx, input, renterId, now, repos, actingOperatorId, operatorTerms),
         )
         if (!result.ok) return result // domain validation failure — never retried
         // Post-commit side effects (#335 thread + #393 notifications) — never in
@@ -246,9 +262,11 @@ export class BookingCreationService {
     // #1260: the operator a bypass admin is acting as; the booking's inventory is
     // bound to it below. Undefined for tenant operators (already tenant-clamped).
     actingOperatorId: string | undefined,
+    // #877 Slice B: whether + how to seal the operator-terms acceptance (see create).
+    operatorTerms: OperatorTermsTxContext,
   ): Promise<CreateBookingResult> {
     if (input.fulfillmentMode === 'CLASS_COMBO') {
-      return this.submitComboInTx(ctx, input, renterId, now, repos, actingOperatorId)
+      return this.submitComboInTx(ctx, input, renterId, now, repos, actingOperatorId, operatorTerms)
     }
     // #1417: read the ANCHOR vehicle with the caller's own ctx, so operatorReadScope clamps
     // a tenant operator to its own fleet — a foreign car returns undefined -> the plain
@@ -350,6 +368,7 @@ export class BookingCreationService {
         classId,
         assignedVehicleId,
         effectiveEndAt,
+        operatorTerms,
       )
     } finally {
       releaseLock()
@@ -367,6 +386,7 @@ export class BookingCreationService {
     classId: string,
     assignedVehicleId: string,
     effectiveEndAt: Date,
+    operatorTerms: OperatorTermsTxContext,
   ): Promise<CreateBookingResult> {
     // #1101: reject a booking that lands on a scheduled block (maintenance /
     // out-of-service / manual hold) on the assigned car. Compared against
@@ -444,7 +464,7 @@ export class BookingCreationService {
     // rest — insurance/fee/add-on snapshot, total composition, renter mint,
     // booking insert, BOOKING_CREATED event — is identical and lives in one
     // seam. The booking.test.ts SPECIFIC vs CLASS_COMBO parity test pins it.
-    return this.snapshotAndInsert(ctx, repos, {
+    return snapshotAndInsert(ctx, repos, {
       input,
       operatorId,
       classId,
@@ -455,6 +475,8 @@ export class BookingCreationService {
       effectiveEndAt,
       renterId,
       now,
+      operatorTerms,
+      generateCode: this.generateCode,
     })
   }
 
@@ -473,6 +495,8 @@ export class BookingCreationService {
     repos: TransactionRepos,
     // #1260: the operator a bypass admin is acting as (bind the combo's inventory).
     actingOperatorId: string | undefined,
+    // #877 Slice B: whether + how to seal the operator-terms acceptance (see create).
+    operatorTerms: OperatorTermsTxContext,
   ): Promise<CreateBookingResult> {
     // The pickup location anchors the booking's operator + the (op, class, loc)
     // triple every other read keys off (a forged classId from another tenant
@@ -547,6 +571,7 @@ export class BookingCreationService {
         operatorId,
         classId,
         effectiveEndAt,
+        operatorTerms,
       )
     } finally {
       releaseLock()
@@ -562,6 +587,7 @@ export class BookingCreationService {
     operatorId: string,
     classId: string,
     effectiveEndAt: Date,
+    operatorTerms: OperatorTermsTxContext,
   ): Promise<CreateBookingResult> {
     // Demand counts BOTH consumers of the class fleet (SPECIFIC bookings on
     // any car in the triple PLUS floating combos) — countClassDemand keys on
@@ -611,7 +637,7 @@ export class BookingCreationService {
     // CLASS_COMBO floats: neither vehicle id is set at book time. The operator
     // stamps assignedVehicleId on/before pickup via the substitute path
     // (#464 slice 3). The rest of the snapshot+insert is shared with SPECIFIC.
-    return this.snapshotAndInsert(ctx, repos, {
+    return snapshotAndInsert(ctx, repos, {
       input,
       operatorId,
       classId,
@@ -622,178 +648,8 @@ export class BookingCreationService {
       effectiveEndAt,
       renterId,
       now,
+      operatorTerms,
+      generateCode: this.generateCode,
     })
-  }
-
-  // #1109 (audit M1): the snapshot+insert tail shared by SPECIFIC and
-  // CLASS_COMBO. Both modes resolve insurance / fees / add-ons against the same
-  // operator-scoped reads, compose the same total, mint the walk-in renter
-  // (#875) past the last validation `return`, then INSERT-then-EVENT-append in
-  // tx order so a constraint failure rolls back atomically (no orphan event).
-  // The mode-specific bits — basePriceJpy and the three discriminator fields
-  // (fulfillmentMode, assignedVehicleId, requestedVehicleId) — are passed in.
-  // Parity is pinned by booking.test.ts (SPECIFIC vs CLASS_COMBO snapshot equality).
-  private async snapshotAndInsert(
-    ctx: CallerContext,
-    repos: TransactionRepos,
-    args: {
-      input: CreateBookingInput
-      operatorId: string
-      classId: string
-      basePriceJpy: number
-      fulfillmentMode: 'SPECIFIC' | 'CLASS_COMBO'
-      assignedVehicleId: string | null
-      requestedVehicleId: string | null
-      effectiveEndAt: Date
-      // Non-walk-in: the existing renter / self resolved in `create`. Walk-in
-      // (#875): null — the fresh renter is minted below, inside this tx, past
-      // every validation `return`.
-      renterId: string | null
-      now: Date
-    },
-  ): Promise<CreateBookingResult> {
-    const {
-      input,
-      operatorId,
-      classId,
-      basePriceJpy,
-      fulfillmentMode,
-      assignedVehicleId,
-      requestedVehicleId,
-      effectiveEndAt,
-      renterId,
-      now,
-    } = args
-
-    // Selected insurance: snapshot the chosen ACTIVE option from THIS operator.
-    let insuranceOptionId: string | null = null
-    let insuranceSnapshot: InsuranceSnapshot | null = null
-    if (input.insuranceOptionId) {
-      const opt = await repos.insuranceOptionRepo.findById(SYSTEM_CONTEXT, input.insuranceOptionId)
-      if (!opt || opt.operatorId !== operatorId || opt.status !== 'ACTIVE') {
-        return { ok: false, status: 400, error: 'Insurance option is not available' }
-      }
-      insuranceOptionId = opt.id
-      insuranceSnapshot = {
-        insuranceOptionId: opt.id,
-        name: opt.name,
-        dailyPriceJpy: opt.dailyPriceJpy,
-        deductibleJpy: opt.deductibleJpy,
-      }
-    }
-
-    // Fee snapshot: this operator's ACTIVE fees that are operator-wide or match
-    // the booking's class. Locks the rate at booking time (§6.2, informational).
-    const fees = await repos.feeScheduleRepo.findAll(SYSTEM_CONTEXT, {
-      operatorId,
-      status: 'ACTIVE',
-    })
-    const feeSnapshot = fees
-      .filter((f) => f.vehicleClassId === null || f.vehicleClassId === classId)
-      .map((f) => ({
-        feeType: f.feeType,
-        unit: f.unit,
-        amountJpy: f.amountJpy,
-        vehicleClassId: f.vehicleClassId,
-      }))
-
-    // Selected paid add-ons (#460): each flat priceJpy is snapshotted here and
-    // folded into the total below via composeBookingTotal. One ACTIVE-only,
-    // this-operator read validates membership + tenant + active in a single
-    // query (a foreign/archived id is simply absent -> 400). De-dup so a
-    // repeated id is charged once (quantity is out of MVP).
-    const addOnSnapshot: AddOnSnapshot[] = []
-    if (input.addOnIds.length > 0) {
-      const available = await repos.addOnRepo.findActiveByOperator(operatorId)
-      const availableById = new Map(available.map((a) => [a.id, a]))
-      for (const addOnId of new Set(input.addOnIds)) {
-        const addOn = availableById.get(addOnId)
-        if (!addOn) return { ok: false, status: 400, error: 'Add-on is not available' }
-        addOnSnapshot.push({ addOnId: addOn.id, name: addOn.name, priceJpy: addOn.priceJpy })
-      }
-    }
-
-    // One composition for create AND substitute() — never hand-summed twice (#862).
-    const totalPrice = composeBookingTotal({
-      baseJpy: basePriceJpy,
-      insurancePerDayJpy: insuranceSnapshot?.dailyPriceJpy ?? 0,
-      days: rentalDays(input.startAt, input.endAt),
-      addOns: addOnSnapshot,
-    })
-
-    const bookingCode = this.generateCode()
-
-    // #875: mint the walk-in renter HERE — past every validation `return` above
-    // (a return COMMITS the tx, so an earlier insert would orphan on a 400),
-    // and right before the booking insert whose 409 / booking_code-collision
-    // THROW rolls this back with it. Atomic: a failed attempt leaves no orphan
-    // customer.
-    const bookingRenterId = input.walkInCustomer
-      ? (await repos.userRepo.createWalkInRenter(input.walkInCustomer)).id
-      : renterId
-    if (bookingRenterId === null) {
-      // Invariant: a non-walk-in booking always resolves renterId in `create`.
-      throw new Error('booking submit: renterId unresolved (non-walk-in)')
-    }
-
-    // Insert FIRST: the exclusion / unique constraints fire here, BEFORE the
-    // event append, so a rolled-back insert leaves no orphan event (atomicity).
-    const booking = await repos.bookingRepo.create(ctx, {
-      operatorId,
-      renterId: bookingRenterId,
-      classId,
-      requestedVehicleId,
-      assignedVehicleId,
-      pickupLocationId: input.pickupLocationId,
-      dropoffLocationId: input.dropoffLocationId,
-      startAt: input.startAt,
-      endAt: input.endAt,
-      effectiveEndAt,
-      status: 'CONFIRMED',
-      source: input.source,
-      // #463: server-derived discriminator (SPECIFIC at MVP, CLASS_COMBO #464).
-      fulfillmentMode,
-      bookingCode,
-      insuranceOptionId,
-      insuranceSnapshot,
-      feeSnapshot,
-      addOnSnapshot,
-      externalId: input.externalId ?? null,
-      notes: input.notes ?? null,
-      totalPrice,
-      cancellationFee: null,
-      cancelledAt: null,
-      idempotencyKey: input.idempotencyKey ?? null,
-      // #613: stamp the liability-disclaimer consent server-side (never trust a
-      // client timestamp). Set only when the renter accepted; null for staff/
-      // manual bookings (the route exempts non-renter callers from the gate).
-      disclaimerAcknowledgedAt: input.disclaimerAccepted ? now : null,
-      disclaimerTermsVersion: input.disclaimerAccepted ? DISCLAIMER_TERMS_VERSION : null,
-    })
-
-    await repos.bookingEventRepo.append(ctx, {
-      bookingId: booking.id,
-      type: 'BOOKING_CREATED',
-      // The actor is who PERFORMED the booking (the authed caller), not the
-      // subject: a staff/manual booking records the staff member, not the
-      // customer. The renter lives in the booking row + payload. Mirrors
-      // VEHICLE_SUBSTITUTED, which also uses ctx.userId.
-      actorId: ctx.userId,
-      payload: {
-        type: 'BOOKING_CREATED',
-        requestedVehicleId,
-        assignedVehicleId,
-        classId,
-        fulfillmentMode, // #463: mirror the booking's discriminator in the audit snapshot
-        startAt: input.startAt.toISOString(),
-        endAt: input.endAt.toISOString(),
-        totalPrice,
-        insuranceSnapshot,
-        feeSnapshot,
-        addOnSnapshot,
-      },
-    })
-
-    return { ok: true, booking }
   }
 }

@@ -222,6 +222,14 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
         notes: parsed.data.notes ?? null,
         idempotencyKey: parsed.data.idempotencyKey ?? null,
         disclaimerAccepted: parsed.data.disclaimerAccepted ?? false,
+        // #877 Slice B: forward the operator-terms pin so submitInTx can resolve +
+        // sign the exact version the renter saw. Omit the two optionals when absent
+        // (exactOptionalPropertyTypes); the accept flag defaults to false.
+        operatorRentalTermsAccepted: parsed.data.operatorRentalTermsAccepted ?? false,
+        ...(parsed.data.operatorRentalTermsAcceptedVersion
+          ? { operatorRentalTermsAcceptedVersion: parsed.data.operatorRentalTermsAcceptedVersion }
+          : {}),
+        ...(parsed.data.locale ? { locale: parsed.data.locale } : {}),
       }
       // #1260: a picker admin (PLATFORM_ADMIN) binds the manual booking to the
       // operator it chose via ?operatorId=; tenant operators ignore it (their read
