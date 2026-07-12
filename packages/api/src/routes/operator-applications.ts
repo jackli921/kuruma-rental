@@ -3,7 +3,7 @@ import { operatorApplicationSchema } from '@kuruma/shared/validators/operator-ap
 import { Hono } from 'hono'
 import { requireAuth, requireUser } from '../middleware/auth'
 import type { OperatorApplicationService } from '../services/operator-application'
-import { ok, parseBody } from './helpers'
+import { fail, ok, parseBody } from './helpers'
 import { rateLimitByIp } from './rate-limit'
 
 export function createOperatorApplicationRoutes(
@@ -11,11 +11,23 @@ export function createOperatorApplicationRoutes(
   limiter?: RateLimitBinding,
 ) {
   const app = new Hono()
-  // Sign-in-first (#877): the applicant must be a signed-in RENTER. Their id
-  // (and, in the service, their account email) is derived from the session —
-  // never trusted from the request body.
+  // Sign-in-first (#877): all routes under this prefix require a session. Using
+  // the wildcard `/*` suffix ensures both POST (submit) and GET /me are gated —
+  // `app.use('/operator-applications', mw)` only matches the exact path, not sub-paths.
+  app.use('/operator-applications/*', requireAuth())
   app.use('/operator-applications', requireAuth())
-  if (limiter) app.use('/operator-applications', rateLimitByIp(limiter))
+  if (limiter) {
+    app.use('/operator-applications/*', rateLimitByIp(limiter))
+    app.use('/operator-applications', rateLimitByIp(limiter))
+  }
+
+  app.get('/operator-applications/me', async (c) => {
+    const user = requireUser(c)
+    const mine = await service.findMine(user.id)
+    if (!mine) return fail(c, 'no application found', 404)
+    return ok(c, mine)
+  })
+
   return app.post('/operator-applications', async (c) => {
     const user = requireUser(c)
     const parsed = await parseBody(c, operatorApplicationSchema)

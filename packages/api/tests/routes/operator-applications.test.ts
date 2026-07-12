@@ -124,3 +124,50 @@ describe('POST /operator-applications', () => {
     expect(await res.json()).toMatchObject({ success: false })
   })
 })
+
+describe('GET /operator-applications/me', () => {
+  let harness: ReturnType<typeof makeApp>
+  beforeEach(() => {
+    harness = makeApp()
+  })
+  const postAuthed = async (body: unknown, sub = RENTER.id) =>
+    harness.app.request('/operator-applications', {
+      method: 'POST',
+      headers: await renterBearer(sub),
+      body: JSON.stringify(body),
+    })
+  const getAuthed = async (sub = RENTER.id) =>
+    harness.app.request('/operator-applications/me', {
+      method: 'GET',
+      headers: await renterBearer(sub),
+    })
+
+  test('200 returns the caller own application', async () => {
+    await postAuthed(valid, RENTER.id)
+    const res = await getAuthed(RENTER.id)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toMatchObject({
+      success: true,
+      data: { status: 'PENDING', applicantUserId: RENTER.id },
+    })
+  })
+
+  test('404 when the caller has no application', async () => {
+    const res = await getAuthed('user_none')
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ success: false })
+  })
+
+  test('another user cannot read someone else application (404, no leak)', async () => {
+    await postAuthed(valid, RENTER.id)
+    const res = await getAuthed('user_other')
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ success: false })
+  })
+
+  test('requires authentication (401 without a session)', async () => {
+    const res = await harness.app.request('/operator-applications/me', { method: 'GET' })
+    expect(res.status).toBe(401)
+  })
+})

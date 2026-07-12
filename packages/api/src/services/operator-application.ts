@@ -104,6 +104,10 @@ export class OperatorApplicationService {
     return this.repo.list(params)
   }
 
+  async findMine(userId: string): Promise<OperatorApplication | undefined> {
+    return this.repo.findByApplicantUserId(userId)
+  }
+
   async reject(
     id: string,
     reviewerUserId: string,

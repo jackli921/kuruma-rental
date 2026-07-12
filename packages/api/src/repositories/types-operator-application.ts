@@ -52,4 +52,7 @@ export interface OperatorApplicationRepository {
     reviewedAt: Date,
     rejectionReason: string,
   ): Promise<OperatorApplication | undefined>
+  /** Renter self-read: the newest application linked to this user id, or undefined
+   *  if none exists. Keyed on applicantUserId — never an id param. */
+  findByApplicantUserId(userId: string): Promise<OperatorApplication | undefined>
 }
