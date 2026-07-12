@@ -18,6 +18,7 @@ import {
 import { setupGlobalHandlers } from './error-handlers'
 import { parseBoolFlag } from './lib/parse-bool-flag'
 import {
+  provideIdentityResolver,
   provideOperatorSessionRevocation,
   requireAuth,
   requirePlatformMember,
@@ -365,6 +366,21 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
         user,
         projection ? { ...projection, operatorDeactivatedAt } : undefined,
       )
+    }),
+  )
+
+  // §5.1 session reconcile: expose the DB-authoritative identity so GET /auth/session
+  // can re-mint a promoted (RENTER->OWNER) token without re-login. Reuses the users
+  // projection (findByIds selects operatorId, drizzle/user.ts) — one indexed read,
+  // and only for non-operator tokens (the handler gates on !isOperatorRole).
+  app.use(
+    '*',
+    provideIdentityResolver(async (user) => {
+      const projection = (await userRepo.findByIds([user.id]))[0]
+      if (!projection) return undefined
+      return projection.operatorId != null
+        ? { role: projection.role, operatorId: projection.operatorId }
+        : { role: projection.role }
     }),
   )
 
