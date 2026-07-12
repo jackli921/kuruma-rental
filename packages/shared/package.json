@@ -82,7 +82,9 @@
     "./validators/document": "./src/validators/document.ts",
     "./validators/provider-invite": "./src/validators/provider-invite.ts",
     "./validators/feature-flags": "./src/validators/feature-flags.ts",
-    "./validators/consent-documents": "./src/validators/consent-documents.ts"
+    "./validators/consent-documents": "./src/validators/consent-documents.ts",
+    "./validators/class-rate-plan": "./src/validators/class-rate-plan.ts",
+    "./types/class-rate-plan": "./src/types/class-rate-plan.ts"
   },
   "scripts": {
     "test": "vitest run",
