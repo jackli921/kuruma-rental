@@ -5,7 +5,7 @@ import {
   updateClassRatePlanSchema,
 } from './class-rate-plan'
 
-const uuid = '11111111-1111-1111-1111-111111111111'
+const uuid = '11111111-1111-4111-8111-111111111111'
 
 describe('createClassRatePlanSchema', () => {
   test('accepts a well-formed deal', () => {

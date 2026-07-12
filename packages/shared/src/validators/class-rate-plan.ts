@@ -3,19 +3,9 @@ import { jpyAmount } from './money'
 
 const dayRateSchema = jpyAmount('Day rate')
 
-// Permissive UUID regex: Zod v4's .uuid() enforces RFC 4122 variant bits which
-// rejects all-zeros and synthetic test UUIDs. Use a format check instead.
-const uuidSchema = (label: string) =>
-  z
-    .string()
-    .regex(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-      `${label} must be a UUID`,
-    )
-
 const classRatePlanObjectSchema = z.object({
-  classId: uuidSchema('classId'),
-  pickupLocationId: uuidSchema('pickupLocationId'),
+  classId: z.string().uuid('classId must be a UUID'),
+  pickupLocationId: z.string().uuid('pickupLocationId must be a UUID'),
   dayRateJpy: dayRateSchema,
   // Operator-only display name. Never surfaced to renters.
   label: z
