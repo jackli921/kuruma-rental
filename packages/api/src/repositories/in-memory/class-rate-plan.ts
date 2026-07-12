@@ -97,6 +97,7 @@ export class InMemoryClassRatePlanRepository implements ClassRatePlanRepository 
   ): Promise<ClassRatePlan | undefined> {
     requireManagementRead(ctx)
     const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     const current = this.store.get(id)
     if (!current) return undefined
     if (scope.kind === 'operator' && current.operatorId !== scope.operatorId) return undefined
@@ -128,6 +129,7 @@ export class InMemoryClassRatePlanRepository implements ClassRatePlanRepository 
   async remove(ctx: CallerContext, id: string): Promise<ClassRatePlan | undefined> {
     requireManagementRead(ctx)
     const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     const current = this.store.get(id)
     if (!current) return undefined
     if (scope.kind === 'operator' && current.operatorId !== scope.operatorId) return undefined
