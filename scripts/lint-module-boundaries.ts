@@ -113,7 +113,11 @@ const DEPRECATED_WEB_TREE_BASELINE = 170
 // 165 (#877 operator terms): routes/$locale/_business/manage/terms.tsx composes the
 // operator-terms feature view + api (two reach-ins) — the same sanctioned
 // routes-compose-a-vite-feature pattern as the siblings above.
-const VITE_CROSS_FEATURE_REACH_IN_BASELINE = 165
+// 166 (#1543 location combobox): operator-locations/RegionCascade composes the shared
+// regions/LocationCombobox — the reusable type-to-search picker the issue mandates for
+// both the public cascade and the operator forms (same shape as the regions-api reach-ins
+// already made by Add/EditLocationDialog).
+const VITE_CROSS_FEATURE_REACH_IN_BASELINE = 166
 
 export type DeprecatedTreeStatus = {
   count: number
