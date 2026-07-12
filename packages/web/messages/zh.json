@@ -78,6 +78,9 @@
     }
   },
   "nav": {
+    "groupOperations": "运营",
+    "groupCatalog": "目录",
+    "groupSetup": "配置",
     "home": "首页",
     "vehicles": "车辆",
     "bookings": "预订",

@@ -1,6 +1,7 @@
 import {
   type BusinessNavFlags,
   businessNavItems,
+  visibleBusinessNavGroups,
   visibleBusinessNavItems,
 } from '@/vite/nav/business-nav-items'
 import type { UserRole } from '@kuruma/shared/auth/roles'
@@ -136,5 +137,80 @@ describe('visibleBusinessNavItems', () => {
         operatorTerms: false,
       }),
     ).toEqual([...BASE, '/$locale/manage/messages'])
+  })
+})
+
+// The sidebar renders the same routes as labelled sections; grouping is derived from
+// the flat list + navGroupOf, so these guard the section taxonomy and that grouping
+// can never drop, duplicate, or empty a section as flags flip.
+const ALL_ON: BusinessNavFlags = {
+  messaging: true,
+  operatorTeam: true,
+  operatorSettings: true,
+  operatorTerms: true,
+}
+
+const labelsByGroup = (
+  role: UserRole | undefined,
+  flags: BusinessNavFlags,
+): Record<string, readonly string[]> =>
+  Object.fromEntries(
+    visibleBusinessNavGroups(role, flags).map((group) => [
+      group.labelKey,
+      group.items.map((item) => item.labelKey),
+    ]),
+  )
+
+describe('visibleBusinessNavGroups', () => {
+  it('sorts every route into operations / catalog / setup, in that section order', () => {
+    const groups = visibleBusinessNavGroups('PLATFORM_ADMIN', ALL_ON)
+    expect(groups.map((group) => group.labelKey)).toEqual([
+      'groupOperations',
+      'groupCatalog',
+      'groupSetup',
+    ])
+    const byGroup = labelsByGroup('PLATFORM_ADMIN', ALL_ON)
+    expect(byGroup.groupOperations).toEqual(['dashboard', 'bookings', 'messages'])
+    expect(byGroup.groupCatalog).toEqual(['fleet', 'classes', 'locations'])
+    expect(byGroup.groupSetup).toEqual(['insurance', 'terms', 'fees', 'addOns', 'team', 'settings'])
+  })
+
+  it('drops gated items from a section but keeps the section (beta operator)', () => {
+    const byGroup = labelsByGroup('OPERATOR_OWNER', ALL_OFF)
+    // messaging off -> Messages leaves Operations, which keeps Dashboard + Bookings.
+    expect(byGroup.groupOperations).toEqual(['dashboard', 'bookings'])
+    // terms/team/settings off -> Setup keeps only its always-on items.
+    expect(byGroup.groupSetup).toEqual(['insurance', 'fees', 'addOns'])
+  })
+
+  it('previews Messages under Operations for the platform admin with messaging off', () => {
+    expect(labelsByGroup('PLATFORM_ADMIN', ALL_OFF).groupOperations).toEqual([
+      'dashboard',
+      'bookings',
+      'messages',
+    ])
+  })
+
+  it('never emits an empty section and never drops or duplicates a visible route', () => {
+    const cases: ReadonlyArray<readonly [UserRole | undefined, BusinessNavFlags]> = [
+      ['OPERATOR_OWNER', ALL_OFF],
+      ['PLATFORM_ADMIN', ALL_ON],
+      [undefined, ALL_OFF],
+    ]
+    for (const [role, flags] of cases) {
+      const groups = visibleBusinessNavGroups(role, flags)
+      for (const group of groups) expect(group.items.length).toBeGreaterThan(0)
+      const grouped = groups.flatMap((group) => group.items.map((item) => item.to))
+      const flat = visibleBusinessNavItems(role, flags).map((item) => item.to)
+      expect(new Set(grouped)).toEqual(new Set(flat))
+      expect(grouped).toHaveLength(flat.length)
+    }
+  })
+
+  it('assigns a section to every route so grouping can never silently drop one', () => {
+    const grouped = visibleBusinessNavGroups('PLATFORM_ADMIN', ALL_ON).flatMap((group) =>
+      group.items.map((item) => item.to),
+    )
+    expect(new Set(grouped)).toEqual(new Set(businessNavItems.map((item) => item.to)))
   })
 })

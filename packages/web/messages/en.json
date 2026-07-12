@@ -78,6 +78,9 @@
     }
   },
   "nav": {
+    "groupOperations": "Operations",
+    "groupCatalog": "Catalog",
+    "groupSetup": "Setup",
     "home": "Home",
     "vehicles": "Vehicles",
     "bookings": "Bookings",

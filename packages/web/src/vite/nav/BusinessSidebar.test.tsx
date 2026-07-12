@@ -138,4 +138,32 @@ describe('BusinessSidebar', () => {
     expect(badge.textContent).toBe('4')
     expect(badge.getAttribute('aria-label')).toBe('4 unread messages')
   })
+
+  it('renders a section heading for each visible nav group', () => {
+    renderSidebar({ OPERATOR_TEAM: true, OPERATOR_SETTINGS: true, MESSAGING: true })
+    expect(screen.getByRole('heading', { name: 'Operations', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Catalog', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Setup', level: 2 })).toBeInTheDocument()
+  })
+
+  it('nests each link under its section as a list labelled by the section header', () => {
+    renderSidebar({ OPERATOR_TEAM: true, OPERATOR_SETTINGS: true, MESSAGING: true })
+    const operations = within(screen.getByRole('list', { name: 'Operations' }))
+    expect(operations.getAllByRole('link').map((link) => link.textContent)).toEqual([
+      'Dashboard',
+      'Bookings',
+      'Messages',
+    ])
+    const catalog = within(screen.getByRole('list', { name: 'Catalog' }))
+    expect(catalog.getAllByRole('link').map((link) => link.textContent)).toEqual([
+      'Fleet',
+      'Classes',
+      'Locations',
+    ])
+    // Team belongs to Setup, not Catalog — proves items land in the right section.
+    expect(catalog.queryByRole('link', { name: 'Team' })).toBeNull()
+    expect(
+      within(screen.getByRole('list', { name: 'Setup' })).queryByRole('link', { name: 'Team' }),
+    ).not.toBeNull()
+  })
 })
