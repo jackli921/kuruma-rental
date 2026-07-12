@@ -1,6 +1,6 @@
 import { bookingEventSchema, operatorBookingDetailSchema } from '@/vite/operator-bookings/schema'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { bookingDtoSchema, fetchBookingDetail } from './api'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { bookingDtoSchema, createBooking, fetchBookingDetail } from './api'
 
 // Minimal valid SPECIFIC booking — all required fields, both vehicle ids present.
 const baseBooking = {
@@ -108,6 +108,70 @@ describe('fetchBookingDetail — #464 renter confirmation expanded read', () => 
     const result = await fetchBookingDetail(baseBooking.id)
 
     expect(result).toBeNull()
+  })
+})
+
+describe('createBooking — #877 operator-terms pin fields', () => {
+  // Stub in beforeEach (not at collection time) so this describe doesn't clobber
+  // the module-level fetch stub the fetchBookingDetail block installs above.
+  const fetchMock = vi.fn()
+  beforeEach(() => vi.stubGlobal('fetch', fetchMock))
+  afterEach(() => fetchMock.mockReset())
+
+  const specificInput = {
+    fulfillmentMode: 'SPECIFIC' as const,
+    requestedVehicleId: baseBooking.requestedVehicleId as string,
+    pickupLocationId: baseBooking.pickupLocationId,
+    dropoffLocationId: baseBooking.dropoffLocationId,
+    startAt: baseBooking.startAt,
+    endAt: baseBooking.endAt,
+    insuranceOptionId: null,
+    addOnIds: [],
+    idempotencyKey: 'idem-1',
+    disclaimerAccepted: true,
+  }
+
+  function okResponse(): Response {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: baseBooking }),
+    } as Response
+  }
+
+  function sentBody(): Record<string, unknown> {
+    return JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string)
+  }
+
+  it('sends the pinned version + locale when the renter accepted operator terms', async () => {
+    fetchMock.mockResolvedValue(okResponse())
+
+    await createBooking(
+      {
+        ...specificInput,
+        operatorRentalTermsAccepted: true,
+        operatorRentalTermsAcceptedVersion: 'v3',
+        locale: 'ja',
+      },
+      'csrf',
+    )
+
+    expect(sentBody()).toMatchObject({
+      operatorRentalTermsAccepted: true,
+      operatorRentalTermsAcceptedVersion: 'v3',
+      locale: 'ja',
+    })
+  })
+
+  it('omits every operator-terms field when the renter did not supply them', async () => {
+    fetchMock.mockResolvedValue(okResponse())
+
+    await createBooking(specificInput, 'csrf')
+
+    const body = sentBody()
+    expect(body).not.toHaveProperty('operatorRentalTermsAccepted')
+    expect(body).not.toHaveProperty('operatorRentalTermsAcceptedVersion')
+    expect(body).not.toHaveProperty('locale')
   })
 })
 
