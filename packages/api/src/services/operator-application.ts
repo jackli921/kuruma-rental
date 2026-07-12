@@ -15,7 +15,7 @@ import type {
   RunOperatorApproval,
 } from '../repositories/types'
 import type { OperatorApplication } from '../stores'
-import { type MintedInvite, mintInvite } from './invite-mint'
+import { mintInvite } from './invite-mint'
 import type { ProviderInviteAuditEvent } from './provider-invite'
 import { buildProviderInviteRecord } from './provider-invite-record'
 import { resolveUniqueSlug, slugify } from './slug'
@@ -42,8 +42,9 @@ export interface OperatorApplicationRejectedAuditEvent {
   readonly applicationId: string
 }
 
-// Widened to include ProviderInviteAuditEvent because approve() also mints the
+// Widened to include ProviderInviteAuditEvent because remintInvite() still mints an
 // OPERATOR_OWNER invite and emits PROVIDER_INVITE_CREATED through the same sink.
+// (approve() now promotes the applicant account directly and emits no invite event.)
 export type OperatorApplicationAuditEvent =
   | OperatorApplicationApprovedAuditEvent
   | OperatorApplicationRejectedAuditEvent
@@ -53,7 +54,7 @@ export type OperatorApplicationAuditEvent =
 // the injected sink accepts only THIS service's events, so the compiler rejects an
 // accidental emit of a foreign kind. The composition root's wider RecordAuditEvent
 // sink stays assignable to it (parameter contravariance). Also accepts
-// PROVIDER_INVITE_CREATED because approve() emits it when minting the OWNER invite.
+// PROVIDER_INVITE_CREATED because remintInvite() emits it when re-minting the OWNER invite.
 export type RecordOperatorApplicationAudit = (event: OperatorApplicationAuditEvent) => void
 
 export interface OperatorApplicationServiceConfig {
@@ -120,9 +121,9 @@ export class OperatorApplicationService {
   async approve(
     id: string,
     reviewerUserId: string,
-  ): Promise<{ operatorId: string; operatorSlug: string; inviteUrl: string; expiresAt: Date }> {
+  ): Promise<{ operatorId: string; operatorSlug: string }> {
     // Idempotency-first: a re-approve of a non-PENDING row must read as "already
-    // reviewed", not trip the C1 guard on the OWNER invite the first approval minted.
+    // reviewed", not trip the C1 guard on the operator the first approval created.
     // The atomic markApprovedIfPending below is still the race fence for concurrent
     // approvals that both pass this read. Email/name are immutable once PENDING, so
     // reading here (outside the tx) is safe.
@@ -131,15 +132,14 @@ export class OperatorApplicationService {
     if (application.status !== 'PENDING') {
       throw new ConflictError('application already reviewed')
     }
-    const minted = mintInvite({ webBaseUrl: this.config.webBaseUrl })
-    const outcome = await this.provisionApproval(id, application, minted, reviewerUserId)
-    for (const e of outcome.events) this.recordAudit(e)
-    return {
-      operatorId: outcome.operatorId,
-      operatorSlug: outcome.operatorSlug,
-      inviteUrl: minted.inviteUrl,
-      expiresAt: minted.expiresAt,
+    if (!application.applicantUserId) {
+      // Sign-in-first invariant (§8): a PENDING row always carries its applicant.
+      // A legacy anonymous row is handled via the admin escape hatch, not this path.
+      throw new ConflictError('application is not linked to an account; use the manual invite')
     }
+    const outcome = await this.provisionApproval(id, application, reviewerUserId)
+    for (const e of outcome.events) this.recordAudit(e)
+    return { operatorId: outcome.operatorId, operatorSlug: outcome.operatorSlug }
   }
 
   /** Run the approval tx, retrying once on a concurrent slug race. Maps in-tx
@@ -149,13 +149,12 @@ export class OperatorApplicationService {
   private async provisionApproval(
     id: string,
     application: OperatorApplication,
-    minted: MintedInvite,
     reviewerUserId: string,
   ): Promise<ApprovalOutcome> {
     for (let attempt = 1; attempt <= SLUG_ATTEMPTS; attempt++) {
       try {
         return await this.runApproval((repos) =>
-          this.provision(repos, id, application, minted, reviewerUserId),
+          this.provision(repos, id, application, reviewerUserId),
         )
       } catch (err) {
         if (pgErrorCode(err) !== PG_ERROR.UNIQUE_VIOLATION) throw err
@@ -163,9 +162,6 @@ export class OperatorApplicationService {
         if (constraint === OPERATORS_SLUG_CONSTRAINT) {
           if (attempt < SLUG_ATTEMPTS) continue
           throw new ConflictError('could not allocate a unique operator slug, please retry')
-        }
-        if (constraint === PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT) {
-          throw new ConflictError('this email is already invited to an operator')
         }
         throw err
       }
@@ -178,7 +174,6 @@ export class OperatorApplicationService {
     repos: OperatorApprovalRepos,
     id: string,
     application: OperatorApplication,
-    minted: MintedInvite,
     reviewerUserId: string,
   ): Promise<ApprovalOutcome> {
     await assertEmailUnclaimed(repos, application.contactEmail)
@@ -190,15 +185,22 @@ export class OperatorApplicationService {
       slug,
       preAuthHandoffUrl: null,
     })
-    const invite = buildProviderInviteRecord(minted, {
-      email: application.contactEmail,
+    // Direct promotion (§6.2): the same membership-ledger + users-projection writes
+    // operator-grant.resolve() does, minus the invite token lookup + email match.
+    // applicantUserId is non-null (guarded in approve()).
+    const applicantUserId = application.applicantUserId as string
+    await repos.memberships.create({
+      userId: applicantUserId,
       operatorId: operator.id,
       role: 'OPERATOR_OWNER',
-      invitedByUserId: reviewerUserId,
+      status: 'ACTIVE',
     })
-    await repos.invites.create(invite.row)
+    await repos.users.setOperatorAccess(applicantUserId, {
+      role: 'OPERATOR_OWNER',
+      operatorId: operator.id,
+    })
     // Atomic claim+link + race fence: undefined => another approval won; the throw
-    // rolls back the operator + invite created above (no orphan).
+    // rolls back the operator + membership + projection created above (no orphan).
     const claimed = await repos.applications.markApprovedIfPending(
       id,
       operator.id,
@@ -210,7 +212,6 @@ export class OperatorApplicationService {
       operatorId: operator.id,
       operatorSlug: slug,
       events: [
-        invite.event,
         {
           type: 'OPERATOR_APPLICATION_APPROVED',
           actorUserId: reviewerUserId,

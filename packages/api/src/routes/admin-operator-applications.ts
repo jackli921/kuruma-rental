@@ -81,14 +81,12 @@ export function createAdminOperatorApplicationRoutes(service: OperatorApplicatio
 
       const idr = parseId(c)
       if (!idr.ok) return idr.response
-      // NotFoundError (unknown id) → 404. ConflictError (already reviewed / C1 email-in-use /
-      // concurrent race) → 409. No request body: approval takes no reviewer input.
+      // NotFoundError (unknown id) → 404. ConflictError (already reviewed /
+      // not-linked-to-account / C1 email-in-use / concurrent race) → 409. No request
+      // body: approval takes no reviewer input. Sign-in-first (§6.2): approval promotes
+      // the applicant's own account directly — no invite link to hand back.
       const result = await service.approve(idr.id, user.id)
-      return ok(c, {
-        operatorId: result.operatorId,
-        inviteUrl: result.inviteUrl,
-        expiresAt: result.expiresAt,
-      })
+      return ok(c, { operatorId: result.operatorId, operatorSlug: result.operatorSlug })
     })
     .post('/admin/operator-applications/:id/remint-invite', async (c) => {
       const user = requireUser(c)

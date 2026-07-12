@@ -15,12 +15,15 @@ export interface OperatorApplicationListParams {
 
 export interface OperatorApplicationRepository {
   /** Insert a PENDING application. Throws UNIQUE_VIOLATION on the live-email
-   *  partial index (named OPERATOR_APPLICATION_EMAIL_CONSTRAINT) -> service 409. */
+   *  partial index (named OPERATOR_APPLICATION_EMAIL_CONSTRAINT) -> service 409.
+   *  `applicantUserId` is optional: the sign-in-first submit (#877 Task 9) supplies
+   *  the authenticated applicant; legacy/anonymous rows default to null. */
   create(
     data: Omit<
       OperatorApplication,
       | 'id'
       | 'status'
+      | 'applicantUserId'
       | 'operatorId'
       | 'reviewedByUserId'
       | 'reviewedAt'
@@ -28,7 +31,7 @@ export interface OperatorApplicationRepository {
       | 'rejectionReason'
       | 'createdAt'
       | 'updatedAt'
-    >,
+    > & { applicantUserId?: string | null },
   ): Promise<OperatorApplication>
   findById(id: string): Promise<OperatorApplication | undefined>
   /** Admin queue. Optional status filter; newest first; capped page (limit+offset). */

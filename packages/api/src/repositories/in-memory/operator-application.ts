@@ -32,6 +32,7 @@ export class InMemoryOperatorApplicationRepository implements OperatorApplicatio
       ...data,
       id: crypto.randomUUID(),
       status: 'PENDING',
+      applicantUserId: data.applicantUserId ?? null,
       operatorId: null,
       reviewedByUserId: null,
       reviewedAt: null,

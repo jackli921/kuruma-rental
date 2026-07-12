@@ -5,7 +5,13 @@ import { InMemoryOperatorApplicationRepository } from '../repositories/in-memory
 import { InMemoryOperatorMembershipRepository } from '../repositories/in-memory/operator-membership'
 import { InMemoryProviderInviteRepository } from '../repositories/in-memory/provider-invite'
 import { InMemoryUserRepository } from '../repositories/in-memory/user'
-import type { Operator, OperatorApplication, ProviderInvite } from '../stores'
+import type {
+  Operator,
+  OperatorApplication,
+  OperatorMembership,
+  ProviderInvite,
+  User,
+} from '../stores'
 import { OperatorApplicationService } from './operator-application'
 
 const input = {
@@ -147,20 +153,24 @@ describe('OperatorApplicationService.approve', () => {
   function setupApprove() {
     // External Maps so the transactional runApproval below can snapshot + restore
     // them, faithfully emulating the real runTx rollback boundary in production.
+    // membershipStore + userStore back the direct-promotion writes (§6.2) so tests
+    // can assert the OWNER membership row and the users projection after approval.
     const inviteStore = new Map<string, ProviderInvite>()
     const operatorStore = new Map<string, Operator>()
     const applicationStore = new Map<string, OperatorApplication>()
+    const membershipStore = new Map<string, OperatorMembership>()
+    const userStore = new Map<string, User>()
     const applications = new InMemoryOperatorApplicationRepository(applicationStore)
     const operators = new InMemoryOperatorRepository(operatorStore)
     const invites = new InMemoryProviderInviteRepository(inviteStore)
-    const users = new InMemoryUserRepository()
-    const memberships = new InMemoryOperatorMembershipRepository()
+    const users = new InMemoryUserRepository(userStore)
+    const memberships = new InMemoryOperatorMembershipRepository(membershipStore)
     const audit = vi.fn()
 
     // Transactional passthrough: snapshot the mutable stores, run the approval
     // callback, and roll the stores back if it throws — so a race-fence throw
     // (markApprovedIfPending -> undefined) or an exhausted slug retry leaves no
-    // orphaned operator/invite, exactly as the real DB transaction guarantees.
+    // orphaned operator/membership/projection, exactly as the real DB tx guarantees.
     const runOperatorApproval = async <T>(
       fn: (repos: {
         users: typeof users
@@ -173,12 +183,16 @@ describe('OperatorApplicationService.approve', () => {
       const opSnapshot = new Map(operatorStore)
       const appSnapshot = new Map(applicationStore)
       const inviteSnapshot = new Map(inviteStore)
+      const membershipSnapshot = new Map(membershipStore)
+      const userSnapshot = new Map(userStore)
       try {
         return await fn({ users, memberships, invites, operators, applications })
       } catch (err) {
         restoreStore(operatorStore, opSnapshot)
         restoreStore(applicationStore, appSnapshot)
         restoreStore(inviteStore, inviteSnapshot)
+        restoreStore(membershipStore, membershipSnapshot)
+        restoreStore(userStore, userSnapshot)
         throw err
       }
     }
@@ -188,57 +202,98 @@ describe('OperatorApplicationService.approve', () => {
     })
     return {
       service,
-      repos: { applications, operators, invites, users, memberships, inviteStore },
+      repos: {
+        applications,
+        operators,
+        invites,
+        users,
+        memberships,
+        inviteStore,
+        membershipStore,
+        userStore,
+      },
       audit,
     }
   }
 
-  it('provisions operator + invite and returns inviteUrl on first approval', async () => {
+  // Seed the authenticated applicant a sign-in-first PENDING application belongs to:
+  // a RENTER user row (so setOperatorAccess can flip its projection) plus the
+  // application carrying that applicantUserId. Returns the seeded ids.
+  async function seedApplicant(
+    repos: ReturnType<typeof setupApprove>['repos'],
+    overrides: Partial<typeof base> = {},
+  ): Promise<{ applicationId: string; applicantUserId: string }> {
+    const fields = { ...base, ...overrides }
+    const applicant = await repos.users.quickCreate({
+      name: fields.contactName,
+      email: fields.contactEmail,
+      phone: fields.contactPhone,
+      language: 'en',
+    })
+    const app = await repos.applications.create({ ...fields, applicantUserId: applicant.id })
+    return { applicationId: app.id, applicantUserId: applicant.id }
+  }
+
+  it('promotes the applicant account: creates an OWNER membership + sets users projection', async () => {
     const { service, repos, audit } = setupApprove()
-    const { id } = await repos.applications.create(base)
+    const { applicationId, applicantUserId } = await seedApplicant(repos)
 
-    const r = await service.approve(id, 'admin-1')
+    const r = await service.approve(applicationId, 'admin-1')
 
-    expect(r.inviteUrl).toMatch(/\/provider\/invite\//)
+    // The approve() return contract drops inviteUrl/expiresAt entirely (§6.2).
+    expect(r).toEqual({ operatorId: expect.any(String), operatorSlug: 'tokyo-wheels' })
+    expect(r).not.toHaveProperty('inviteUrl')
+    expect(r).not.toHaveProperty('expiresAt')
+
+    // No invite is minted on the promotion path.
+    expect(repos.inviteStore.size).toBe(0)
 
     const operator = await repos.operators.findBySlug(r.operatorSlug)
-    expect(operator).toBeTruthy()
     expect(operator?.name).toBe(base.businessName)
 
-    expect(repos.inviteStore.size).toBe(1)
-    const invite = [...repos.inviteStore.values()][0]
-    expect(invite).toMatchObject({
+    // The applicant's OWN account is promoted to OPERATOR_OWNER: a ledger row...
+    const membership = await repos.memberships.findActiveByUserId(applicantUserId)
+    expect(membership).toMatchObject({
+      userId: applicantUserId,
+      operatorId: r.operatorId,
       role: 'OPERATOR_OWNER',
-      email: 'owner@example.com',
-      invitedByUserId: 'admin-1',
-      acceptedByUserId: null,
-      status: 'PENDING',
+      status: 'ACTIVE',
+    })
+    // ...and the denormalised users projection the JWT reads.
+    expect(repos.userStore.get(applicantUserId)).toMatchObject({
+      role: 'OPERATOR_OWNER',
+      operatorId: r.operatorId,
     })
 
-    const reloaded = await repos.applications.findById(id)
+    const reloaded = await repos.applications.findById(applicationId)
     expect(reloaded).toMatchObject({ status: 'APPROVED', operatorId: r.operatorId })
 
+    // The only audit event is the approval — no PROVIDER_INVITE_CREATED on this path.
     const auditTypes = (audit.mock.calls as [{ type: string }][]).map(([e]) => e.type)
-    expect(auditTypes).toContain('PROVIDER_INVITE_CREATED')
-    expect(auditTypes).toContain('OPERATOR_APPLICATION_APPROVED')
+    expect(auditTypes).toEqual(['OPERATOR_APPLICATION_APPROVED'])
   })
 
-  it('is idempotency-safe: second approve on same id throws and creates no duplicates', async () => {
+  it('is idempotency-safe: a second approve on the same id throws 409 and creates no second membership', async () => {
     const { service, repos } = setupApprove()
-    const { id } = await repos.applications.create(base)
+    const { applicationId, applicantUserId } = await seedApplicant(repos)
 
-    await service.approve(id, 'admin-1')
-    await expect(service.approve(id, 'admin-1')).rejects.toThrow(/already reviewed/)
+    await service.approve(applicationId, 'admin-1')
+    await expect(service.approve(applicationId, 'admin-1')).rejects.toThrow(ConflictError)
+    await expect(service.approve(applicationId, 'admin-1')).rejects.toThrow(/already reviewed/)
 
-    expect(repos.inviteStore.size).toBe(1)
+    // Exactly one operator and one ACTIVE membership for the applicant survive.
     expect((await repos.operators.list()).length).toBe(1)
+    const applicantMemberships = [...repos.membershipStore.values()].filter(
+      (m) => m.userId === applicantUserId,
+    )
+    expect(applicantMemberships).toHaveLength(1)
   })
 
-  it('C1 — blocks approval when contactEmail already has an active membership', async () => {
+  it('blocks approval when the applicant email already has an active operator (assertEmailUnclaimed)', async () => {
     const { service, repos } = setupApprove()
-    const { id } = await repos.applications.create(base)
+    const { applicationId } = await seedApplicant(repos)
 
-    // Seed an existing user + ACTIVE membership for the same email.
+    // The same email already owns an operator (an existing user + ACTIVE membership).
     const existingUser = await repos.users.quickCreate({
       name: 'Existing Owner',
       email: base.contactEmail,
@@ -257,18 +312,60 @@ describe('OperatorApplicationService.approve', () => {
       status: 'ACTIVE',
     })
 
-    await expect(service.approve(id, 'admin-1')).rejects.toThrow(/already has/)
-    // No new operator should have been created beyond the pre-seeded one.
+    const err = await service.approve(applicationId, 'admin-1').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    expect(err instanceof Error ? err.message : '').toMatch(/this email already has an operator/)
+    // No new operator was provisioned beyond the pre-seeded one.
     expect((await repos.operators.list()).length).toBe(1)
   })
 
-  it('retries once on a concurrent operators.slug race, then provisions successfully', async () => {
+  it('blocks approval when the applicant email already has a live pending invite', async () => {
     const { service, repos } = setupApprove()
+    const { applicationId } = await seedApplicant(repos)
+
+    // A live PENDING invite for the same email at another operator (the C1 guard).
+    const otherOperator = await repos.operators.create({
+      name: 'Other Co',
+      slug: 'other-co',
+      preAuthHandoffUrl: null,
+    })
+    await repos.invites.create({
+      email: base.contactEmail,
+      operatorId: otherOperator.id,
+      role: 'OPERATOR_OWNER',
+      tokenHash: 'deadbeef'.repeat(8),
+      status: 'PENDING',
+      expiresAt: new Date(Date.now() + 86_400_000),
+      invitedByUserId: 'some-admin',
+      acceptedByUserId: null,
+    })
+
+    const err = await service.approve(applicationId, 'admin-1').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    expect(err instanceof Error ? err.message : '').toMatch(/already invited to an operator/)
+  })
+
+  it('rejects a legacy application with no applicantUserId (use the manual invite)', async () => {
+    const { service, repos } = setupApprove()
+    // A legacy/anonymous PENDING row carries no applicantUserId.
     const { id } = await repos.applications.create(base)
 
+    const err = await service.approve(id, 'admin-1').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    expect(err instanceof Error ? err.message : '').toMatch(
+      /not linked to an account; use the manual invite/,
+    )
+    // Nothing was provisioned; the row stays PENDING for the escape hatch.
+    expect((await repos.operators.list()).length).toBe(0)
+    expect(await repos.applications.findById(id)).toMatchObject({ status: 'PENDING' })
+  })
+
+  it('retries once on a concurrent operators.slug race, then promotes successfully', async () => {
+    const { service, repos } = setupApprove()
+    const { applicationId, applicantUserId } = await seedApplicant(repos)
+
     // First attempt loses the operators_slug_unique race; the retry re-resolves a
-    // fresh slug against the now-committed row and succeeds (#1371b). The minted
-    // invite is reused across attempts, so only one invite exists at the end.
+    // fresh slug against the now-committed row and succeeds (#1371b).
     const realCreate = repos.operators.create.bind(repos.operators)
     let attempts = 0
     repos.operators.create = (data) => {
@@ -284,23 +381,25 @@ describe('OperatorApplicationService.approve', () => {
       return realCreate(data)
     }
 
-    const r = await service.approve(id, 'admin-1')
+    const r = await service.approve(applicationId, 'admin-1')
 
     expect(attempts).toBe(2)
     expect(await repos.operators.findBySlug(r.operatorSlug)).toMatchObject({
       name: base.businessName,
     })
-    expect(repos.inviteStore.size).toBe(1)
-    expect(await repos.applications.findById(id)).toMatchObject({ status: 'APPROVED' })
+    expect(await repos.memberships.findActiveByUserId(applicantUserId)).toMatchObject({
+      operatorId: r.operatorId,
+      role: 'OPERATOR_OWNER',
+    })
+    expect(await repos.applications.findById(applicationId)).toMatchObject({ status: 'APPROVED' })
   })
 
   it('surfaces a distinct retryable 409 — never "already reviewed" — when the slug race persists', async () => {
     const { service, repos } = setupApprove()
-    const { id } = await repos.applications.create(base)
+    const { applicationId, applicantUserId } = await seedApplicant(repos)
 
     // Every attempt loses the slug race: after SLUG_ATTEMPTS the loser gets an
-    // accurate, retryable message — critically NOT the misleading review conflict
-    // the old catch-all mapping produced (#1371b).
+    // accurate, retryable message — NOT the misleading review conflict (#1371b).
     repos.operators.create = () =>
       Promise.reject(
         Object.assign(new Error('duplicate key value violates unique constraint'), {
@@ -309,72 +408,75 @@ describe('OperatorApplicationService.approve', () => {
         }),
       )
 
-    const err = await service.approve(id, 'admin-1').catch((e: unknown) => e)
+    const err = await service.approve(applicationId, 'admin-1').catch((e: unknown) => e)
     expect(err).toBeInstanceOf(ConflictError)
     const message = err instanceof Error ? err.message : String(err)
     expect(message).toMatch(/could not allocate a unique operator slug/)
     expect(message).not.toMatch(/already reviewed/)
-    // Rolled back: the application is left PENDING and nothing was provisioned,
-    // so a genuine retry can still succeed.
-    expect(await repos.applications.findById(id)).toMatchObject({ status: 'PENDING' })
+    // Rolled back: the application is left PENDING and nothing was provisioned.
+    expect(await repos.applications.findById(applicationId)).toMatchObject({ status: 'PENDING' })
     expect((await repos.operators.list()).length).toBe(0)
-    expect(repos.inviteStore.size).toBe(0)
+    expect(await repos.memberships.findActiveByUserId(applicantUserId)).toBeUndefined()
   })
 
-  it('race fence: markApprovedIfPending -> undefined rolls back the operator + invite', async () => {
+  it('race fence: markApprovedIfPending -> undefined rolls back the operator + membership + projection', async () => {
     const { service, repos } = setupApprove()
-    const { id } = await repos.applications.create(base)
+    const { applicationId, applicantUserId } = await seedApplicant(repos)
 
     // A concurrent approval won the atomic claim: our tx created the operator +
-    // invite, then the fence returns undefined -> ConflictError -> full rollback.
+    // membership + projection, then the fence returns undefined -> ConflictError.
     repos.applications.markApprovedIfPending = () => Promise.resolve(undefined)
 
-    const err = await service.approve(id, 'admin-1').catch((e: unknown) => e)
+    const err = await service.approve(applicationId, 'admin-1').catch((e: unknown) => e)
     expect(err).toBeInstanceOf(ConflictError)
-    const message = err instanceof Error ? err.message : String(err)
-    expect(message).toMatch(/already reviewed/)
+    expect(err instanceof Error ? err.message : String(err)).toMatch(/already reviewed/)
     // Rollback proof: nothing the tx created survives.
     expect((await repos.operators.list()).length).toBe(0)
-    expect(repos.inviteStore.size).toBe(0)
+    expect(await repos.memberships.findActiveByUserId(applicantUserId)).toBeUndefined()
+    // The applicant's projection is untouched — still a plain RENTER.
+    expect(repos.userStore.get(applicantUserId)).toMatchObject({ role: 'RENTER' })
     // The pre-existing application row is left PENDING for a real retry.
-    expect(await repos.applications.findById(id)).toMatchObject({ status: 'PENDING' })
-  })
-
-  it('C1 — blocks approval when contactEmail already has a live pending invite', async () => {
-    const { service, repos } = setupApprove()
-    const { id } = await repos.applications.create(base)
-
-    // Seed a pending invite for the same email at a different operator.
-    const otherOperator = await repos.operators.create({
-      name: 'Other Co',
-      slug: 'other-co',
-      preAuthHandoffUrl: null,
-    })
-    // Manually insert a PENDING invite with a dummy tokenHash (not testing token generation here).
-    await repos.invites.create({
-      email: base.contactEmail,
-      operatorId: otherOperator.id,
-      role: 'OPERATOR_OWNER',
-      tokenHash: 'deadbeef'.repeat(8), // 64-char placeholder
-      status: 'PENDING',
-      expiresAt: new Date(Date.now() + 86_400_000),
-      invitedByUserId: 'some-admin',
-      acceptedByUserId: null,
-    })
-
-    await expect(service.approve(id, 'admin-1')).rejects.toThrow(/invited/)
+    expect(await repos.applications.findById(applicationId)).toMatchObject({ status: 'PENDING' })
   })
 
   describe('remintInvite (#1370)', () => {
+    // The remint path is untouched until Task 8. approve() no longer mints the seed
+    // invite, so these tests seed an APPROVED application + its PENDING OWNER invite
+    // DIRECTLY (the state a legacy admin-invite approval would have left), then
+    // exercise remint against it.
+    async function seedApprovedWithInvite(
+      repos: ReturnType<typeof setupApprove>['repos'],
+    ): Promise<{
+      applicationId: string
+      operatorId: string
+    }> {
+      const { id } = await repos.applications.create(base)
+      const operator = await repos.operators.create({
+        name: base.businessName,
+        slug: 'tokyo-wheels',
+        preAuthHandoffUrl: null,
+      })
+      await repos.applications.markApprovedIfPending(id, operator.id, 'admin-1', new Date())
+      await repos.invites.create({
+        email: base.contactEmail,
+        operatorId: operator.id,
+        role: 'OPERATOR_OWNER',
+        tokenHash: 'facefeed'.repeat(8),
+        status: 'PENDING',
+        expiresAt: new Date(Date.now() + 86_400_000),
+        invitedByUserId: 'admin-1',
+        acceptedByUserId: null,
+      })
+      return { applicationId: id, operatorId: operator.id }
+    }
+
     it('revokes the stale invite and issues a fresh one for an approved application', async () => {
       const { service, repos, audit } = setupApprove()
-      const { id } = await repos.applications.create(base)
-      const first = await service.approve(id, 'admin-1')
+      const { applicationId } = await seedApprovedWithInvite(repos)
 
-      const second = await service.remintInvite(id, 'admin-2')
+      const second = await service.remintInvite(applicationId, 'admin-2')
 
-      // A genuinely new link (fresh token), not the lost/expired one.
-      expect(second.inviteUrl).not.toBe(first.inviteUrl)
+      // A genuinely new link.
       expect(second.inviteUrl).toMatch(/\/provider\/invite\//)
       // Exactly one live invite remains; the prior one is revoked (kept for audit).
       const invites = [...repos.inviteStore.values()]
@@ -404,8 +506,7 @@ describe('OperatorApplicationService.approve', () => {
 
     it('maps a concurrent re-invite race (pending-email 23505) to a retryable 409', async () => {
       const { service, repos } = setupApprove()
-      const { id } = await repos.applications.create(base)
-      await service.approve(id, 'admin-1') // real invite created
+      const { applicationId } = await seedApprovedWithInvite(repos)
 
       // A concurrent remint claimed the (operatorId,email) pending slot between our
       // revoke and insert: the create loses the partial-unique index.
@@ -417,15 +518,14 @@ describe('OperatorApplicationService.approve', () => {
           }),
         )
 
-      const err = await service.remintInvite(id, 'admin-2').catch((e: unknown) => e)
+      const err = await service.remintInvite(applicationId, 'admin-2').catch((e: unknown) => e)
       expect(err).toBeInstanceOf(ConflictError)
       expect(err instanceof Error ? err.message : '').toMatch(/re-invite is already in progress/)
     })
 
     it('refuses to re-invite once the owner has onboarded (active membership) → 409', async () => {
       const { service, repos } = setupApprove()
-      const { id } = await repos.applications.create(base)
-      const approved = await service.approve(id, 'admin-1')
+      const { applicationId, operatorId } = await seedApprovedWithInvite(repos)
 
       // Simulate the owner accepting: a user + ACTIVE membership now exist.
       const owner = await repos.users.quickCreate({
@@ -436,26 +536,25 @@ describe('OperatorApplicationService.approve', () => {
       })
       await repos.memberships.create({
         userId: owner.id,
-        operatorId: approved.operatorId,
+        operatorId,
         role: 'OPERATOR_OWNER',
         status: 'ACTIVE',
       })
 
-      const err = await service.remintInvite(id, 'admin-2').catch((e: unknown) => e)
+      const err = await service.remintInvite(applicationId, 'admin-2').catch((e: unknown) => e)
       expect(err).toBeInstanceOf(ConflictError)
       expect(err instanceof Error ? err.message : '').toMatch(/already has an operator/)
     })
 
     it('C1 — refuses re-mint when the email holds a pending invite at another operator', async () => {
       const { service, repos } = setupApprove()
-      const { id } = await repos.applications.create(base)
-      const approved = await service.approve(id, 'admin-1')
+      const { applicationId, operatorId } = await seedApprovedWithInvite(repos)
 
       // The original owner link is lost, so this operator has no live invite left...
       const own = [...repos.inviteStore.values()].find(
-        (i) => i.operatorId === approved.operatorId && i.status === 'PENDING',
+        (i) => i.operatorId === operatorId && i.status === 'PENDING',
       )
-      await repos.invites.revoke(own!.id, approved.operatorId)
+      await repos.invites.revoke(own!.id, operatorId)
       // ...but the same email now holds a live pending invite at a DIFFERENT operator.
       const other = await repos.operators.create({
         name: 'Other Co',
@@ -475,7 +574,7 @@ describe('OperatorApplicationService.approve', () => {
 
       // findPendingByEmail is cross-operator but revoke is operator-scoped: without the
       // C1 check the scoped revoke no-ops and a second live invite is minted (#1277).
-      const err = await service.remintInvite(id, 'admin-2').catch((e: unknown) => e)
+      const err = await service.remintInvite(applicationId, 'admin-2').catch((e: unknown) => e)
       expect(err).toBeInstanceOf(ConflictError)
       expect(err instanceof Error ? err.message : '').toMatch(/invited/)
       // The other operator's invite is untouched and NO duplicate was minted.
