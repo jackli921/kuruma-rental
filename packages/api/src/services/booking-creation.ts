@@ -133,11 +133,11 @@ export class BookingCreationService {
     // + version-pin check + HMAC sign happen INSIDE submitInTx, after the booking
     // insert whose id the signature binds. Gate on ctx.role === 'RENTER' (self-serve
     // only) so operator/manual/walk-in/PARTNER creates skip it entirely.
+    const active = ctx.role === 'RENTER' && (await this.isOperatorTermsEnabled())
     const operatorTerms: OperatorTermsTxContext = {
-      active: ctx.role === 'RENTER' && (await this.isOperatorTermsEnabled()),
-      signingKey: undefined,
+      active,
+      signingKey: active ? this.getSigningKey() : undefined,
     }
-    if (operatorTerms.active) operatorTerms.signingKey = this.getSigningKey()
 
     let lastErr: unknown
     for (let attempt = 0; attempt < MAX_BOOKING_CODE_ATTEMPTS; attempt++) {

@@ -239,6 +239,9 @@ describe('operator-terms acceptance sealed inside the booking tx (#877 Slice B, 
     if (res.ok) return
     expect(res.status).toBe(422)
     expect(res.code).toBe('OPERATOR_TERMS_CHANGED')
+    // Same pre-insert return as REQUIRED: no booking row was minted.
+    const booked = await db.select().from(bookings).where(eq(bookings.renterId, w.renterId))
+    expect(booked).toHaveLength(0)
   })
 
   it('books normally with no acceptance row when the operator has no published terms', async () => {

@@ -55,15 +55,14 @@ export interface TransactionRepos {
   operatorRepo: Pick<OperatorRepository, 'findById'>
   // #877 Slice B: the renter's operator-terms acceptance is written INSIDE the
   // booking tx (one ledger row, atomic with the booking insert that yields the
-  // bookingId the signature binds). Narrowed to the reads the resolve+pin needs
-  // plus the write; none of these four call runTransaction, so the tx-bound
+  // bookingId the signature binds). Narrowed to the two reads the resolve+pin
+  // needs plus the write; none of these three call runTransaction, so the tx-bound
   // instance's sentinel runTx is never reached (M4 — Pick narrowing, not a throw).
+  // The (bookingId, consentType) unique seal is the idempotency backstop, so no
+  // pre-read (findBookingAcceptance) is threaded here.
   consentRepo: Pick<
     ConsentRepository,
-    | 'findBookingAcceptance'
-    | 'createAcceptance'
-    | 'findLatestPublishedVersionForOperator'
-    | 'findPublishedOperatorDocument'
+    'createAcceptance' | 'findLatestPublishedVersionForOperator' | 'findPublishedOperatorDocument'
   >
 }
 

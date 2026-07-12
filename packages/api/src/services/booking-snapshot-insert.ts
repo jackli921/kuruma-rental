@@ -133,23 +133,10 @@ export async function snapshotAndInsert(
 
   const bookingCode = generateCode()
 
-  // #875: mint the walk-in renter HERE — past every validation `return` above
-  // (a return COMMITS the tx, so an earlier insert would orphan on a 400),
-  // and right before the booking insert whose 409 / booking_code-collision
-  // THROW rolls this back with it. Atomic: a failed attempt leaves no orphan
-  // customer.
-  const bookingRenterId = input.walkInCustomer
-    ? (await repos.userRepo.createWalkInRenter(input.walkInCustomer)).id
-    : renterId
-  if (bookingRenterId === null) {
-    // Invariant: a non-walk-in booking always resolves renterId in `create`.
-    throw new Error('booking submit: renterId unresolved (non-walk-in)')
-  }
-
-  // #877 Slice B: resolve + pin-check the operator's rental terms INSIDE the tx,
-  // against the operatorId validated above. `required`/`changed` return 422 BEFORE
-  // the insert — a return here commits nothing, mints no booking, no rollback cost.
-  // Skipped unless active (RENTER self-serve + OPERATOR_TERMS on + the operator has
+  // #877 Slice B: resolve + pin-check the operator's rental terms BEFORE any side
+  // effect (esp. the walk-in mint below): `required`/`changed` return 422 with
+  // nothing minted or inserted — a `return` here would COMMIT the tx. Skipped
+  // unless active (RENTER self-serve + OPERATOR_TERMS on + the operator has
   // published effective terms), so every other path never touches consentRepo. The
   // exact pinned version is signed — resolving "latest" instead would seal text the
   // renter never saw (C1 TOCTOU); a stale pin is a re-consent prompt, not a swap.
@@ -175,6 +162,15 @@ export async function snapshotAndInsert(
           'en',
         )))
       : undefined
+    // `en` is a REQUIRED base locale at save (saveOperatorTermsDraftSchema), so a
+    // published version always resolves via the en fallback. If it ever does not
+    // (e.g. a raw DB write bypassing the validator), fail CLOSED loudly rather than
+    // silently booking with no consent recorded — the resolver would otherwise skip.
+    if (latest && !doc) {
+      throw new Error(
+        `operator ${operatorId} published OPERATOR_RENTAL_TERMS ${latest} with no resolvable document`,
+      )
+    }
     const decision = resolveOperatorTermsDecision({
       role: ctx.role,
       latest,
@@ -199,6 +195,19 @@ export async function snapshotAndInsert(
       }
     }
     if (decision.kind === 'accept') operatorTermsDoc = decision.doc
+  }
+
+  // #875: mint the walk-in renter HERE — past every validation `return` above
+  // (a return COMMITS the tx, so an earlier insert would orphan on a 400),
+  // and right before the booking insert whose 409 / booking_code-collision
+  // THROW rolls this back with it. Atomic: a failed attempt leaves no orphan
+  // customer.
+  const bookingRenterId = input.walkInCustomer
+    ? (await repos.userRepo.createWalkInRenter(input.walkInCustomer)).id
+    : renterId
+  if (bookingRenterId === null) {
+    // Invariant: a non-walk-in booking always resolves renterId in `create`.
+    throw new Error('booking submit: renterId unresolved (non-walk-in)')
   }
 
   // Insert FIRST: the exclusion / unique constraints fire here, BEFORE the
