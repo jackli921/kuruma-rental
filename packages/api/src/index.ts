@@ -267,13 +267,19 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     { webBaseUrl },
     recordAudit,
   )
+  const emailConfig = resolveEmailConfig()
   const operatorApplicationService = new OperatorApplicationService(
     operatorApplicationRepo,
     recordAudit,
     runOperatorApproval,
-    { webBaseUrl },
+    {
+      webBaseUrl,
+      fromAddress: emailConfig.emailFrom,
+      ...(emailConfig.emailReplyTo ? { replyTo: emailConfig.emailReplyTo } : {}),
+    },
     operatorMembershipRepo,
     userRepo,
+    emailSender,
   )
   // #904: operator self-service team page. Reuses providerInviteService to mint
   // (so the audit trail + TTL stay single-sourced); reads invites + members

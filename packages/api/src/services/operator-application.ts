@@ -16,6 +16,9 @@ import type {
   UserRepository,
 } from '../repositories/types'
 import type { OperatorApplication } from '../stores'
+import type { EmailSender } from './email/email-sender'
+import { renderOperatorApplicationApproved } from './email/templates/operator-application-approved'
+import { renderOperatorApplicationRejected } from './email/templates/operator-application-rejected'
 import { resolveUniqueSlug, slugify } from './slug'
 
 // A concurrent slug race (two similarly-named businesses approved at once) is
@@ -54,8 +57,12 @@ export type RecordOperatorApplicationAudit = (event: OperatorApplicationAuditEve
 
 export interface OperatorApplicationServiceConfig {
   /** Public web origin; used to build the applicant-facing welcome/status URL in the
-   *  approved/rejected emails (Task 12). Kept even while momentarily unreferenced. */
+   *  approved/rejected emails (Task 12). */
   readonly webBaseUrl: string
+  /** From address for outbound applicant notification emails. */
+  readonly fromAddress: string
+  /** Optional reply-to address for outbound notification emails. */
+  readonly replyTo?: string
 }
 
 // The honeypot/consent fields are validated + stripped at the route boundary; the
@@ -106,6 +113,7 @@ export class OperatorApplicationService {
     // never the token's display email. Narrowed to the two reads submit() needs.
     private readonly members: Pick<OperatorMembershipRepository, 'findActiveByUserId'>,
     private readonly users: Pick<UserRepository, 'findById'>,
+    private readonly emailSender: EmailSender,
   ) {}
 
   async list(params: OperatorApplicationListParams): Promise<OperatorApplication[]> {
@@ -139,6 +147,7 @@ export class OperatorApplicationService {
       actorUserId: reviewerUserId,
       applicationId: id,
     })
+    await this.notifyRejected(row)
     return row
   }
 
@@ -163,6 +172,7 @@ export class OperatorApplicationService {
     }
     const outcome = await this.provisionApproval(id, application, reviewerUserId)
     for (const e of outcome.events) this.recordAudit(e)
+    await this.notifyApproved(application, outcome)
     return { operatorId: outcome.operatorId, operatorSlug: outcome.operatorSlug }
   }
 
@@ -243,6 +253,55 @@ export class OperatorApplicationService {
           applicationId: id,
         },
       ],
+    }
+  }
+
+  private async notifyApproved(
+    application: OperatorApplication,
+    _outcome: ApprovalOutcome,
+  ): Promise<void> {
+    try {
+      const welcomeUrl = `${this.config.webBaseUrl}/${application.submittedLocale}/operator/welcome`
+      const email = renderOperatorApplicationApproved(
+        { businessName: application.businessName, welcomeUrl },
+        application.submittedLocale,
+      )
+      await this.emailSender.send({
+        to: application.contactEmail,
+        from: this.config.fromAddress,
+        ...(this.config.replyTo ? { replyTo: this.config.replyTo } : {}),
+        subject: email.subject,
+        html: email.html,
+        text: email.text,
+      })
+    } catch (err) {
+      // Best-effort (§6.4): the decision already committed; a failed notice must
+      // not roll it back. Log so a chronically-failing send is visible.
+      console.error('[operator-application] approved email failed', {
+        applicationId: application.id,
+        err,
+      })
+    }
+  }
+
+  private async notifyRejected(row: OperatorApplication): Promise<void> {
+    try {
+      const email = renderOperatorApplicationRejected(
+        { businessName: row.businessName, reason: row.rejectionReason ?? '' },
+        row.submittedLocale,
+      )
+      await this.emailSender.send({
+        to: row.contactEmail,
+        from: this.config.fromAddress,
+        ...(this.config.replyTo ? { replyTo: this.config.replyTo } : {}),
+        subject: email.subject,
+        html: email.html,
+        text: email.text,
+      })
+    } catch (err) {
+      // Best-effort (§6.4): the decision already committed; a failed notice must
+      // not roll it back. Log so a chronically-failing send is visible.
+      console.error('[operator-application] rejected email failed', { applicationId: row.id, err })
     }
   }
 

@@ -12,6 +12,7 @@ import type {
   ProviderInvite,
   User,
 } from '../stores'
+import type { EmailMessage, EmailSender } from './email/email-sender'
 import { OperatorApplicationService } from './operator-application'
 
 // Sign-in-first: submit no longer carries contactEmail (server-resolved from the
@@ -256,9 +257,10 @@ describe('OperatorApplicationService.approve', () => {
       applications,
       audit,
       runOperatorApproval,
-      { webBaseUrl: 'https://app.example.com' },
+      { webBaseUrl: 'https://app.example.com', fromAddress: 'noreply@test.io' },
       memberships,
       users,
+      noopEmailSender,
     )
     return {
       service,
@@ -498,6 +500,109 @@ describe('OperatorApplicationService.approve', () => {
     // The pre-existing application row is left PENDING for a real retry.
     expect(await repos.applications.findById(applicationId)).toMatchObject({ status: 'PENDING' })
   })
+
+  // buildService: a self-contained approve harness with injectable emailSender,
+  // seeded with an 'Acme' / 'acme@example.com' applicant for email assertion tests.
+  async function buildService(opts: { emailSender?: EmailSender } = {}): Promise<{
+    service: OperatorApplicationService
+    applicationId: string
+  }> {
+    const inviteStore = new Map<string, ProviderInvite>()
+    const operatorStore = new Map<string, Operator>()
+    const applicationStore = new Map<string, OperatorApplication>()
+    const membershipStore = new Map<string, OperatorMembership>()
+    const userStore = new Map<string, User>()
+    const applications = new InMemoryOperatorApplicationRepository(applicationStore)
+    const operatorsRepo = new InMemoryOperatorRepository(operatorStore)
+    const invites = new InMemoryProviderInviteRepository(inviteStore)
+    const usersRepo = new InMemoryUserRepository(userStore)
+    const membershipsRepo = new InMemoryOperatorMembershipRepository(membershipStore)
+
+    // Seed the applicant with a known email and 'Acme' as the business name.
+    const applicant = await usersRepo.quickCreate({
+      name: 'Acme Owner',
+      email: 'acme@example.com',
+      phone: null,
+      language: 'en',
+    })
+    const app = await applications.create({
+      businessName: 'Acme',
+      contactName: 'Acme Owner',
+      contactEmail: 'acme@example.com',
+      contactPhone: '+81 90',
+      serviceArea: 'Osaka',
+      estimatedFleetSize: '6-20' as const,
+      website: null,
+      businessLicenseNumber: null,
+      businessType: null,
+      message: null,
+      submittedLocale: 'en' as const,
+      applicantUserId: applicant.id,
+    })
+
+    const runApproval = async <T>(
+      fn: (repos: {
+        users: typeof usersRepo
+        memberships: typeof membershipsRepo
+        invites: typeof invites
+        operators: typeof operatorsRepo
+        applications: typeof applications
+      }) => Promise<T>,
+    ): Promise<T> => {
+      // Simple passthrough (no snapshot/rollback needed for email assertion tests)
+      return fn({
+        users: usersRepo,
+        memberships: membershipsRepo,
+        invites,
+        operators: operatorsRepo,
+        applications,
+      })
+    }
+
+    const service = new OperatorApplicationService(
+      applications,
+      vi.fn(),
+      runApproval,
+      { webBaseUrl: 'https://app.example.com', fromAddress: 'noreply@test.io' },
+      membershipsRepo,
+      usersRepo,
+      opts.emailSender ?? noopEmailSender,
+    )
+    return { service, applicationId: app.id }
+  }
+
+  it('approve() sends the approved email to the applicant account (best-effort)', async () => {
+    const send = vi.fn<(msg: EmailMessage) => Promise<{ providerMessageId: string }>>(async () => ({
+      providerMessageId: 'm1',
+    }))
+    const { service, applicationId } = await buildService({ emailSender: { send } })
+    await service.approve(applicationId, 'admin_1')
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0]?.[0]).toMatchObject({
+      to: 'acme@example.com',
+      subject: expect.stringContaining('Acme'),
+    })
+  })
+
+  it('reject() sends the rejected email with the reason', async () => {
+    const send = vi.fn<(msg: EmailMessage) => Promise<{ providerMessageId: string }>>(async () => ({
+      providerMessageId: 'm1',
+    }))
+    const { service, applicationId } = await buildService({ emailSender: { send } })
+    await service.reject(applicationId, 'admin_1', 'Incomplete license number')
+    expect(send.mock.calls[0]?.[0]).toMatchObject({
+      html: expect.stringContaining('Incomplete license number'),
+    })
+  })
+
+  it('a send failure does not throw or roll back the decision', async () => {
+    const send = vi.fn<(msg: EmailMessage) => Promise<never>>(async () => {
+      throw new Error('smtp down')
+    })
+    const { service, applicationId } = await buildService({ emailSender: { send } })
+    const r = await service.approve(applicationId, 'admin_1')
+    expect(r.operatorId).toBeDefined()
+  })
 })
 
 // Roll a Map store back to a saved snapshot — the rollback half of the test's
@@ -507,12 +612,15 @@ function restoreStore<V>(store: Map<string, V>, saved: Map<string, V>): void {
   for (const [k, v] of saved) store.set(k, v)
 }
 
+const noopEmailSender: EmailSender = { send: async () => ({ providerMessageId: 'noop' }) }
+
 function makeService(
   repo: InMemoryOperatorApplicationRepository,
   recordAudit: ReturnType<typeof vi.fn> = vi.fn(),
   deps: {
     users?: InMemoryUserRepository
     memberships?: InMemoryOperatorMembershipRepository
+    emailSender?: EmailSender
   } = {},
 ) {
   // Provide a stub runOperatorApproval that throws if accidentally called in
@@ -526,8 +634,9 @@ function makeService(
     repo,
     recordAudit,
     stubRunApproval,
-    { webBaseUrl: '' },
+    { webBaseUrl: '', fromAddress: 'noreply@test.io' },
     memberships,
     users,
+    deps.emailSender ?? noopEmailSender,
   )
 }

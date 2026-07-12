@@ -138,9 +138,10 @@ describe.skipIf(!NEON_URL)('operator approval promotion transaction atomicity (T
       repo,
       noopAudit,
       createDrizzleOperatorApproval(runTx),
-      { webBaseUrl: WEB_BASE_URL },
+      { webBaseUrl: WEB_BASE_URL, fromAddress: 'noreply@test.io' },
       new DrizzleOperatorMembershipRepository(db),
       new DrizzleUserRepository(db),
+      { send: async () => ({ providerMessageId: 'noop' }) },
     )
     const result = await service.approve(app.id, reviewerId)
 
@@ -229,9 +230,10 @@ describe.skipIf(!NEON_URL)('operator approval promotion transaction atomicity (T
       repo,
       noopAudit,
       failingFenceRun,
-      { webBaseUrl: WEB_BASE_URL },
+      { webBaseUrl: WEB_BASE_URL, fromAddress: 'noreply@test.io' },
       new DrizzleOperatorMembershipRepository(db),
       new DrizzleUserRepository(db),
+      { send: async () => ({ providerMessageId: 'noop' }) },
     )
     await expect(service.approve(app.id, reviewerId)).rejects.toThrow('already reviewed')
 
