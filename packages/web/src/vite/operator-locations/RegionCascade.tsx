@@ -1,5 +1,5 @@
 import { Label } from '@/components/ui/label'
-import { LocationCombobox } from '@/vite/regions/LocationCombobox'
+import { LocationCombobox } from '@/vite/regions'
 import type { RegionNode } from '@kuruma/shared/types/region'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'

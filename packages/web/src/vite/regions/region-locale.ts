@@ -31,9 +31,16 @@ export function orderRegionsForLocale(
   return [...regions]
 }
 
-// Case- and accent-insensitive fold: NFD splits accented letters into base + combining
-// mark, then we strip the marks so "Kyōto" and "kyoto" compare equal.
-function fold(value: string): string {
+// Case-only fold for CJK display labels: normalize + lowercase, but NEVER strip combining
+// marks. Japanese dakuten/handakuten (き vs ぎ, は vs ば/ぱ) are phonemic, not accents —
+// stripping them would make ぎ match き and ば match は.
+function foldLabel(value: string): string {
+  return value.normalize('NFC').toLowerCase().trim()
+}
+
+// Accent-insensitive fold for the romanized English name only: NFD splits accented
+// letters into base + combining mark, then we strip the marks so "Kyōto" matches "kyoto".
+function foldRomaji(value: string): string {
   return value
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
@@ -43,11 +50,13 @@ function fold(value: string): string {
 
 /**
  * Whether a region matches a type-to-search query. Matches the active-locale display name
- * OR the romanized (English) name, so an English typer can find a Japanese-labelled entry
- * ("osaka" finds 大阪). Empty/whitespace query matches everything.
+ * (case-insensitive, diacritics preserved) OR the romanized English name (accent-insensitive),
+ * so an English typer can find a Japanese-labelled entry ("osaka" finds 大阪) without a
+ * kana search collapsing dakuten. Empty/whitespace query matches everything.
  */
 export function regionMatchesQuery(region: RegionNode, query: string, locale: string): boolean {
-  const needle = fold(query)
-  if (needle === '') return true
-  return fold(regionName(region, locale)).includes(needle) || fold(region.nameEn).includes(needle)
+  if (query.trim() === '') return true
+  const labelHit = foldLabel(regionName(region, locale)).includes(foldLabel(query))
+  const romajiHit = foldRomaji(region.nameEn).includes(foldRomaji(query))
+  return labelHit || romajiHit
 }

@@ -79,7 +79,9 @@ export function LocationCombobox({
           aria-invalid={ariaInvalid}
           aria-describedby={ariaDescribedby}
           className={cn(
-            'flex h-9 w-full rounded-md border border-input bg-transparent py-1 pr-14 pl-3 text-sm shadow-xs transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20',
+            // text-base on mobile: iOS Safari zooms the page when a focused input's font is
+            // below 16px; this input is on the public landing/storefront search path.
+            'flex h-9 w-full rounded-md border border-input bg-transparent py-1 pr-14 pl-3 text-base shadow-xs transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 sm:text-sm',
           )}
         />
         <div className="absolute inset-y-0 right-2 flex items-center gap-0.5">

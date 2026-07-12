@@ -99,4 +99,10 @@ describe('regionMatchesQuery', () => {
   it('returns false when nothing matches', () => {
     expect(regionMatchesQuery(OSAKA, 'zzz', 'en')).toBe(false)
   })
+
+  it('does not fold Japanese dakuten in the display label (ぎ must not match き)', () => {
+    const gifu = makeRegion({ id: 'gifu', nameEn: 'Gifu', nameJa: 'ぎふ', nameZh: '岐阜' })
+    expect(regionMatchesQuery(gifu, 'ぎ', 'ja')).toBe(true)
+    expect(regionMatchesQuery(gifu, 'き', 'ja')).toBe(false)
+  })
 })
