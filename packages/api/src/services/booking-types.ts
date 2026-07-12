@@ -31,6 +31,14 @@ interface CreateBookingCommon {
   // Required for renter self-serve bookings (enforced by caller role in `create`);
   // staff/manual bookings are exempt. The server stamps the timestamp + version.
   disclaimerAccepted?: boolean
+  // #877 Slice B: renter accepted the operator's published rental terms at checkout,
+  // pinning the exact version + displayed locale they rendered. The server requires
+  // this only for RENTER self-serve when the operator has a published+effective doc
+  // and the OPERATOR_TERMS flag is on (else 422). locale is the renter's displayed
+  // locale, threaded to submitInTx because the booking path never loads the User row.
+  operatorRentalTermsAccepted?: boolean
+  operatorRentalTermsAcceptedVersion?: string
+  locale?: string
 }
 
 // Slice 6 (#392): the renter books a CONCRETE vehicle chosen in the storefront

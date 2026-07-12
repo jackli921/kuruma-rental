@@ -1,10 +1,10 @@
 import type { UserRole } from '@kuruma/shared/auth/roles'
-import { CONSENT_CARDINALITY, type ConsentMethod, type ConsentType } from '@kuruma/shared/enums'
-import { CANONICAL_VERSION } from '@kuruma/shared/lib/consent-canonical'
+import { CONSENT_CARDINALITY, type ConsentType } from '@kuruma/shared/enums'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { ConsentRepository, NewConsentAcceptance } from '../repositories/types'
 import type { ConsentAcceptance, ConsentDocument } from '../stores'
-import { type SigningKey, resolveSigningKey, signAcceptanceRecord } from './consent-signing'
+import { buildAcceptanceRow } from './consent-acceptance-row'
+import { type SigningKey, resolveSigningKey } from './consent-signing'
 
 /**
  * Required once-per-subject document types by role (operator types arrive in
@@ -172,58 +172,23 @@ export class ConsentService {
     operatorId: string | null,
     bookingId: string | null,
   ): NewConsentAcceptance {
-    const acceptedAt = meta.now
-    const ipAddress = meta.ipAddress ?? null
-    const userAgent = meta.userAgent ?? null
-    // Single source of truth: the signed payload and the persisted row must carry
-    // the identical method, or the signature wouldn't cover what's stored.
-    const method: ConsentMethod = 'CLICKWRAP'
-    const key = this.getSigningKey()
-    const signed = key
-      ? signAcceptanceRecord(
-          {
-            documentId: doc.id,
-            contentHash: doc.contentHash,
-            consentType: doc.type,
-            version: doc.version,
-            locale: doc.locale,
-            userId: input.userId,
-            operatorId,
-            operatorMembershipId: input.operatorMembershipId ?? null,
-            bookingId,
-            method,
-            acceptedAt,
-            ipAddress,
-            userAgent,
-          },
-          key,
-        )
-      : undefined
-    return {
-      documentId: doc.id,
-      consentType: doc.type,
-      userId: input.userId,
-      operatorId,
-      operatorMembershipId: input.operatorMembershipId ?? null,
-      actorRole: input.actorRole,
-      bookingId,
-      acceptedAt,
-      context: null,
-      ipAddress,
-      userAgent,
-      method,
-      recordSignature: signed?.signature ?? null,
-      signingKeyId: signed?.signingKeyId ?? null,
-      signatureCanonicalVersion: signed ? CANONICAL_VERSION : null,
-      documentSnapshot: {
-        version: doc.version,
-        locale: doc.locale,
-        title: doc.title,
-        body: doc.body,
-        acceptanceLabel: doc.acceptanceLabel,
-        contentHash: doc.contentHash,
+    // Delegate to the shared pure builder so the self-serve accept path and the
+    // booking-create tx path seal the identical signed row (#877 Slice B, M2).
+    return buildAcceptanceRow(
+      doc,
+      {
+        userId: input.userId,
+        operatorId,
+        operatorMembershipId: input.operatorMembershipId ?? null,
+        actorRole: input.actorRole,
+        bookingId,
+        method: 'CLICKWRAP',
+        acceptedAt: meta.now,
+        ipAddress: meta.ipAddress ?? null,
+        userAgent: meta.userAgent ?? null,
       },
-    }
+      this.getSigningKey(),
+    )
   }
 
   private findExisting(
