@@ -4,7 +4,12 @@ import {
   updateClassRatePlanSchema,
 } from '@kuruma/shared/validators/class-rate-plan'
 import { Hono } from 'hono'
-import { MANAGEMENT_READ_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
+import {
+  MANAGEMENT_READ_ROLES,
+  requireAuth,
+  requireUser,
+  toCallerContext,
+} from '../middleware/auth'
 import type { ClassRatePlanService } from '../services/class-rate-plan'
 import type { ClassRatePlanFilters } from '../services/filters'
 import type { ResolveWriteOperatorId } from '../tenancy'
