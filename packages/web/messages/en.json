@@ -1899,7 +1899,12 @@
       "errorConflict": "This vehicle was just booked for these dates. Please go back and choose another.",
       "errorGeneric": "We couldn't create your booking. Please review and try again.",
       "errorDocs": "Document verification is required before you can book. Please upload your documents first.",
-      "errorAuth": "Your session has expired. Please sign in again to complete your booking."
+      "errorAuth": "Your session has expired. Please sign in again to complete your booking.",
+      "termsChanged": "The operator updated their rental terms. Please review the latest version before you reserve."
+    },
+    "operatorTerms": {
+      "description": "Please review the operator's rental terms. You must agree before you can reserve.",
+      "cancel": "Cancel"
     },
     "disclaimer": {
       "label": "I agree to present a valid driver's license and International Driving Permit at pickup, and I accept the rental liability terms.",

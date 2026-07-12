@@ -26,6 +26,8 @@ interface ReservationWizardProps {
   readonly subject: ReservationSubject
   /** Storefront the subject belongs to — pickup and dropoff for the MVP (one location). */
   readonly locationId: string
+  /** #877: the storefront's operator, threaded to PaymentStep for the rental-terms gate. */
+  readonly operatorId: string
   readonly addOns: ReservationAddOn[]
   readonly insuranceOptions: ReservationInsuranceOption[]
   readonly from: Date
@@ -51,6 +53,7 @@ export function ReservationWizard({
   locale,
   subject,
   locationId,
+  operatorId,
   addOns,
   insuranceOptions,
   from,
@@ -192,7 +195,12 @@ export function ReservationWizard({
         />
       ) : null}
       {step === 'payment' ? (
-        <PaymentStep locale={locale} bookingInput={bookingInput} onBack={goBack} />
+        <PaymentStep
+          locale={locale}
+          operatorId={operatorId}
+          bookingInput={bookingInput}
+          onBack={goBack}
+        />
       ) : null}
 
       {step !== 'payment' ? (

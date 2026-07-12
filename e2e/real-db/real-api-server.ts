@@ -5,6 +5,7 @@ import postgres from 'postgres'
 import { buildDrizzleRepos } from '../../packages/api/src/composition/repositories'
 import { createApp } from '../../packages/api/src/index'
 import type { Db } from '../../packages/api/src/repositories/drizzle'
+import { InMemoryPhotoStorage } from '../../packages/api/src/repositories/in-memory/photo-storage'
 import { pgConnectOptions } from './pg-connect-options'
 
 // Driver note: production's getDb() uses @neondatabase/serverless (HTTP), whose
@@ -41,7 +42,17 @@ const runOnTestDb: RunTx = (fn) => db.transaction(fn)
 // on TCP Postgres (production's neon-http getDb() throws on db.transaction())
 // while every repo, booking_events, and the atomic booking submit stay Drizzle-
 // backed against the real test database.
-const app = createApp(undefined, buildDrizzleRepos({ db, runTx: runOnTestDb }))
+// #1538: buildDrizzleRepos wires DisabledPhotoStorage when no R2 bucket is bound — correct
+// for production CF Workers (a per-request InMemory instance would "succeed" then serve URLs
+// pointing at nothing), but it makes the vehicle-photo upload/delete path throw locally. This
+// harness is a SINGLE long-lived Bun process, so one InMemoryPhotoStorage persists across
+// requests and the upload -> visible -> delete -> gone flow round-trips for real. Swapped in
+// exactly like the postgres-js db/runTx above; inert for every spec that doesn't touch photos.
+const repos = {
+  ...buildDrizzleRepos({ db, runTx: runOnTestDb }),
+  photoStorage: new InMemoryPhotoStorage(),
+}
+const app = createApp(undefined, repos)
 
 Bun.serve({ port, fetch: app.fetch })
 console.log(`[e2e] real API listening on http://localhost:${port}`)

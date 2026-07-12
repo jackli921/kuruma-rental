@@ -86,4 +86,58 @@ describe('OperatorTermsService', () => {
     }
     await expect(svc.saveDraft(OP, draft, NOW)).rejects.toThrow('connection terminated')
   })
+
+  // #877 Slice B: the renter-facing read. getPublished resolves the operator's
+  // latest PUBLISHED+effective terms in the requested locale (en fallback) —
+  // the SAME resolver the booking tx uses, so the modal shows exactly what the
+  // server will seal (no display/enforcement drift).
+  describe('getPublished', () => {
+    const multi = {
+      en: { title: 'Terms EN', body: 'Agree EN', acceptanceLabel: 'I agree' },
+      ja: { title: '規約', body: '同意します', acceptanceLabel: '同意する' },
+    }
+
+    async function publishTerms(
+      operatorId: string,
+      input: Parameters<typeof svc.saveDraft>[1],
+      version = 'v1',
+    ): Promise<void> {
+      await svc.saveDraft(operatorId, input, NOW)
+      await svc.publish(operatorId, version, NOW)
+    }
+
+    it('resolves the latest published doc in the requested locale', async () => {
+      await publishTerms(OP, multi)
+      const r = await svc.getPublished(OP, 'ja', NOW)
+      expect(r).toMatchObject({
+        ok: true,
+        doc: { version: 'v1', locale: 'ja', title: '規約', acceptanceLabel: '同意する' },
+      })
+    })
+
+    it('falls back to en when the requested locale is missing', async () => {
+      await publishTerms(OP, { en: multi.en })
+      const r = await svc.getPublished(OP, 'zh', NOW)
+      expect(r).toMatchObject({ ok: true, doc: { version: 'v1', locale: 'en', title: 'Terms EN' } })
+    })
+
+    it('returns the highest published version, not a stale one', async () => {
+      await publishTerms(OP, multi)
+      await svc.saveDraft(OP, { en: { ...multi.en, body: 'v2 body' } }, NOW) // v2 draft
+      await svc.publish(OP, 'v2', NOW)
+      const r = await svc.getPublished(OP, 'en', NOW)
+      expect(r).toMatchObject({ ok: true, doc: { version: 'v2', body: 'v2 body' } })
+    })
+
+    it('404 NO_PUBLISHED_TERMS when the operator has no published terms', async () => {
+      await svc.saveDraft(OP, multi, NOW) // draft only, never published
+      const r = await svc.getPublished(OP, 'en', NOW)
+      expect(r).toEqual({ ok: false, status: 404, error: 'NO_PUBLISHED_TERMS' })
+    })
+
+    it('404 for an operator that does not exist', async () => {
+      const r = await svc.getPublished('op_absent', 'en', NOW)
+      expect(r).toEqual({ ok: false, status: 404, error: 'NO_PUBLISHED_TERMS' })
+    })
+  })
 })
