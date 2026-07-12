@@ -590,7 +590,10 @@ describe('OperatorApplicationService.approve', () => {
     }))
     const { service, applicationId } = await buildService({ emailSender: { send } })
     await service.reject(applicationId, 'admin_1', 'Incomplete license number')
+    expect(send).toHaveBeenCalledTimes(1)
     expect(send.mock.calls[0]?.[0]).toMatchObject({
+      to: 'acme@example.com',
+      from: 'noreply@test.io',
       html: expect.stringContaining('Incomplete license number'),
     })
   })
@@ -600,8 +603,11 @@ describe('OperatorApplicationService.approve', () => {
       throw new Error('smtp down')
     })
     const { service, applicationId } = await buildService({ emailSender: { send } })
+    // The decision must still commit: approve resolves with the provisioned
+    // operator identity (businessName 'Acme' → slug 'acme'), the send throw swallowed.
     const r = await service.approve(applicationId, 'admin_1')
-    expect(r.operatorId).toBeDefined()
+    expect(r).toMatchObject({ operatorSlug: 'acme' })
+    expect(r.operatorId.length).toBeGreaterThan(0)
   })
 })
 
