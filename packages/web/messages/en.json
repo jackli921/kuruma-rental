@@ -1973,5 +1973,12 @@
     "approximately": "approximately",
     "disclaimer": "Indicative only — you're charged in JPY",
     "asOf": "Rates as of {date}"
+  },
+  "operator": {
+    "welcome": {
+      "title": "Your application is under review",
+      "body": "We've received your operator application and our team is reviewing it. You'll receive an email once a decision has been made.",
+      "hint": "Already approved? Try refreshing the page."
+    }
   }
 }
