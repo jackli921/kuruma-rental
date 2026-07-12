@@ -153,6 +153,21 @@ describe('ClassRatePlanService.create', () => {
     expect(result.status).toBe(400)
     expect(result.code).toBe('INVALID_LOCATION')
   })
+
+  it('rejects an INACTIVE deal against an archived class with 400 INVALID_VEHICLE_CLASS', async () => {
+    const svc = new ClassRatePlanService(
+      new InMemoryClassRatePlanRepository(),
+      {
+        findById: async (_ctx, id) =>
+          id === CLASS_ID ? makeClass({ status: 'ARCHIVED' }) : undefined,
+      },
+      { findById: async (_ctx, id) => (id === LOCATION_ID ? makeLocation() : undefined) },
+    )
+
+    const result = await svc.create(operatorCtx, makePlanData({ isActive: false }))
+
+    expect(result).toMatchObject({ ok: false, status: 400, code: 'INVALID_VEHICLE_CLASS' })
+  })
 })
 
 // ---- update ----------------------------------------------------------------
@@ -211,6 +226,42 @@ describe('ClassRatePlanService.update', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.plan.isActive).toBe(false)
+  })
+
+  it('update retarget to an already-occupied (class, location) returns 409', async () => {
+    const LOCATION_ID2 = 'loc_test2'
+    const repo = new InMemoryClassRatePlanRepository()
+    // Stub location repo: echoes the requested id back so any location looks active+owned
+    const locationRepo: LocationRepoStub = {
+      findById: async (_ctx, id) => makeLocation({ id, operatorId: OPERATOR_ID, status: 'ACTIVE' }),
+    }
+    const classRepo: ClassRepoStub = {
+      findById: async (_ctx, id) => (id === CLASS_ID ? makeClass() : undefined),
+    }
+    const service = new ClassRatePlanService(repo, classRepo, locationRepo)
+
+    // Seed two active deals for the same operator: one at LOC, one at LOC2
+    const plan1 = await repo.create({
+      operatorId: OPERATOR_ID,
+      classId: CLASS_ID,
+      pickupLocationId: LOCATION_ID,
+      dayRateJpy: 8000,
+      isActive: true,
+      label: null,
+    })
+    await repo.create({
+      operatorId: OPERATOR_ID,
+      classId: CLASS_ID,
+      pickupLocationId: LOCATION_ID2,
+      dayRateJpy: 9000,
+      isActive: true,
+      label: null,
+    })
+
+    // Retarget plan1 to LOC2 — already occupied by plan2
+    const result = await service.update(operatorCtx, plan1.id, { pickupLocationId: LOCATION_ID2 })
+
+    expect(result).toMatchObject({ ok: false, status: 409 })
   })
 
   it('allows a rate-only edit on an active deal even when the class is archived (regression)', async () => {

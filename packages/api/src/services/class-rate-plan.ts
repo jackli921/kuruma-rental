@@ -103,16 +103,14 @@ export class ClassRatePlanService {
     ctx: CallerContext,
     data: Omit<ClassRatePlan, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<ClassRatePlanResult> {
-    // Publishability: creating an active deal requires active class + location.
-    // An inactive deal skips this check — operators may pre-stage inactive plans.
-    if (data.isActive) {
-      const [cls, loc] = await Promise.all([
-        this.classRepo.findById(ctx, data.classId),
-        this.locationRepo.findById(ctx, data.pickupLocationId),
-      ])
-      const denial = assertPublishable(cls, loc, data.operatorId)
-      if (denial) return denial
-    }
+    // Publishability: always check — reject creating a deal whose class or
+    // location is archived or cross-operator, regardless of isActive (Q-B).
+    const [cls, loc] = await Promise.all([
+      this.classRepo.findById(ctx, data.classId),
+      this.locationRepo.findById(ctx, data.pickupLocationId),
+    ])
+    const denial = assertPublishable(cls, loc, data.operatorId)
+    if (denial) return denial
 
     const existing = await this.repo.findByScope(
       data.operatorId,
@@ -160,15 +158,27 @@ export class ClassRatePlanService {
     const needsPublishabilityCheck =
       isActivating || ((retargetingClass || retargetingLocation) && willBeActive)
 
+    const mergedClassId = patch.classId ?? existing.classId
+    const mergedLocationId = patch.pickupLocationId ?? existing.pickupLocationId
+    const targetChanged = retargetingClass || retargetingLocation
+
     if (needsPublishabilityCheck) {
-      const mergedClassId = patch.classId ?? existing.classId
-      const mergedLocationId = patch.pickupLocationId ?? existing.pickupLocationId
       const [cls, loc] = await Promise.all([
         this.classRepo.findById(ctx, mergedClassId),
         this.locationRepo.findById(ctx, mergedLocationId),
       ])
       const publishDenial = assertPublishable(cls, loc, existing.operatorId)
       if (publishDenial) return publishDenial
+    }
+
+    if (targetChanged) {
+      const clash = await this.repo.findByScope(
+        existing.operatorId,
+        mergedClassId,
+        mergedLocationId,
+      )
+      if (clash && clash.id !== id)
+        return { ok: false, error: DUPLICATE_SCOPE_MESSAGE, status: 409 }
     }
 
     try {
