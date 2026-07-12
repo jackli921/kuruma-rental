@@ -19,7 +19,11 @@ const LINK_CLASSNAME =
   'aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-accent-foreground ' +
   'aria-[current=page]:hover:bg-sidebar-accent'
 
-// Non-interactive section header above each group of links.
+// Non-interactive section label above each group of links. Deliberately a <div>,
+// not an <h2>: it is navigation chrome, and BusinessLayout renders this sidebar
+// before <main>, so a heading here would precede the page <h1> and pollute the
+// screen-reader heading outline. The <ul aria-labelledby> below still gives each
+// list its accessible section name without injecting a heading into the outline.
 const HEADING_CLASSNAME =
   'px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60'
 
@@ -51,9 +55,9 @@ export function BusinessSidebar() {
           const headingId = `nav-group-${group.labelKey}`
           return (
             <div key={group.labelKey}>
-              <h2 id={headingId} className={HEADING_CLASSNAME}>
+              <div id={headingId} className={HEADING_CLASSNAME}>
                 {t(group.labelKey)}
-              </h2>
+              </div>
               {/* aria-labelledby names the list after its header, so a screen reader
                   announces "Operations, list, 3 items" instead of an unlabelled list. */}
               <ul aria-labelledby={headingId} className="flex flex-col gap-1">

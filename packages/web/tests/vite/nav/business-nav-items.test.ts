@@ -1,5 +1,6 @@
 import {
   type BusinessNavFlags,
+  businessNavGroupOrder,
   businessNavItems,
   visibleBusinessNavGroups,
   visibleBusinessNavItems,
@@ -7,6 +8,8 @@ import {
 import type { UserRole } from '@kuruma/shared/auth/roles'
 import { describe, expect, it } from 'vitest'
 import en from '../../../messages/en.json'
+import ja from '../../../messages/ja.json'
+import zh from '../../../messages/zh.json'
 
 // businessNavItems is now the single source of truth for the operator nav: both
 // Navbar's rendered list and MobileMenu's `NavTo` union derive from it (#603).
@@ -35,6 +38,22 @@ describe('businessNavItems', () => {
     for (const item of businessNavItems) {
       expect(en.nav[item.labelKey as keyof typeof en.nav]).toBeTruthy()
     }
+  })
+
+  // The sidebar renders these three group headers; a renamed key or a locale that
+  // dropped one would surface a raw key (e.g. `groupCatalog`) in the UI with nothing
+  // else to catch it. The missing list is `locale.nav.key` strings so a failure names
+  // exactly which locale/key is absent.
+  it('pairs every nav group header with an i18n key present in en, ja, and zh', () => {
+    const navByLocale: Record<string, Record<string, unknown>> = {
+      en: en.nav,
+      ja: ja.nav,
+      zh: zh.nav,
+    }
+    const missing = Object.entries(navByLocale).flatMap(([locale, nav]) =>
+      businessNavGroupOrder.filter((key) => !nav[key]).map((key) => `${locale}.nav.${key}`),
+    )
+    expect(missing).toEqual([])
   })
 })
 
