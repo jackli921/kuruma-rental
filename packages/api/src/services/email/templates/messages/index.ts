@@ -59,6 +59,14 @@ export interface EmailStrings {
   newMessageHeading: string
   newMessageCtaTitle: string
   newMessageCta: string
+  // #operator-onboarding application status notifications
+  operatorApplicationApprovedSubject: string
+  operatorApplicationApprovedHeading: string
+  operatorApplicationRejectedSubject: string
+  operatorApplicationRejectedHeading: string
+  operatorApplicationBusinessLabel: string
+  operatorApplicationWelcomeLabel: string
+  operatorApplicationReasonLabel: string
   // Fee-type display names
   feeLabels: Record<FeeType, string>
   // #916 §5.4 compliance digest (operator-facing fleet reminder)
@@ -117,6 +125,15 @@ const en: EmailStrings = {
   newMessageHeading: 'A renter sent you a new message:',
   newMessageCtaTitle: 'Reply to the renter',
   newMessageCta: 'Open the conversation',
+  operatorApplicationApprovedSubject: 'Your operator application has been approved —',
+  operatorApplicationApprovedHeading:
+    'Congratulations! Your application to become an operator has been approved.',
+  operatorApplicationRejectedSubject: 'Your operator application was not approved —',
+  operatorApplicationRejectedHeading:
+    'Thank you for applying. Unfortunately we are unable to approve your application at this time.',
+  operatorApplicationBusinessLabel: 'Business name',
+  operatorApplicationWelcomeLabel: 'Get started',
+  operatorApplicationReasonLabel: 'Reason',
   feeLabels: {
     OVERTIME_HOURLY: 'Overtime (per hour)',
     CLEANING_FLAT: 'Cleaning',
@@ -185,6 +202,14 @@ const ja: EmailStrings = {
   newMessageHeading: '利用者から新しいメッセージが届きました:',
   newMessageCtaTitle: '利用者に返信する',
   newMessageCta: '会話を開く',
+  operatorApplicationApprovedSubject: '事業者申請が承認されました —',
+  operatorApplicationApprovedHeading: 'おめでとうございます！事業者申請が承認されました。',
+  operatorApplicationRejectedSubject: '事業者申請の結果について —',
+  operatorApplicationRejectedHeading:
+    'お申し込みいただきありがとうございます。誠に恐れ入りますが、今回はご承認が難しい状況です。',
+  operatorApplicationBusinessLabel: '事業者名',
+  operatorApplicationWelcomeLabel: 'はじめる',
+  operatorApplicationReasonLabel: '理由',
   feeLabels: {
     OVERTIME_HOURLY: '延長料金（1時間あたり）',
     CLEANING_FLAT: 'クリーニング',
@@ -251,6 +276,13 @@ const zh: EmailStrings = {
   newMessageHeading: '租客给您发来一条新消息:',
   newMessageCtaTitle: '回复租客',
   newMessageCta: '打开对话',
+  operatorApplicationApprovedSubject: '您的运营商申请已通过 —',
+  operatorApplicationApprovedHeading: '恭喜！您的运营商申请已获批准。',
+  operatorApplicationRejectedSubject: '您的运营商申请结果 —',
+  operatorApplicationRejectedHeading: '感谢您的申请。很遗憾，我们目前无法批准您的申请。',
+  operatorApplicationBusinessLabel: '企业名称',
+  operatorApplicationWelcomeLabel: '立即开始',
+  operatorApplicationReasonLabel: '原因',
   feeLabels: {
     OVERTIME_HOURLY: '超时费(每小时)',
     CLEANING_FLAT: '清洁费',
