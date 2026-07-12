@@ -42,6 +42,15 @@ const bookingCommonFields = {
   // Optional here because the route forces source=DIRECT for renters and exempts
   // staff/manual bookings — the service requires it by caller role, not source.
   disclaimerAccepted: z.boolean().optional(),
+  // #877 Slice B: the renter accepted the operator's published OPERATOR_RENTAL_TERMS
+  // at checkout, pinning the EXACT version + displayed locale they rendered. Optional
+  // at the type level; the service requires them only for a self-serve RENTER when the
+  // operator has a published+effective doc and the server flag is on (else 422). The
+  // version is a `v1`-style string compared EXACTLY (a stale pin → 422 CHANGED), never
+  // "resolve latest" — that would sign text the renter never saw (consent TOCTOU, C1).
+  operatorRentalTermsAccepted: z.boolean().optional(),
+  operatorRentalTermsAcceptedVersion: z.string().optional(),
+  locale: z.enum(['en', 'ja', 'zh']).optional(),
 } as const
 
 // #464 SPECIFIC = the renter books a CONCRETE vehicle (requestedVehicleId) — the

@@ -5,6 +5,7 @@ import { DrizzleAvailabilityRepository } from './availability'
 import { DrizzleBookingRepository } from './booking'
 import { DrizzleBookingEventRepository } from './booking-event'
 import { DrizzleClassRatePlanRepository } from './class-rate-plan'
+import { DrizzleConsentRepository } from './consent'
 import { DrizzleFeeScheduleRepository } from './fee-schedule'
 import { DrizzleInsuranceOptionRepository } from './insurance-option'
 import { DrizzleLocationRepository } from './location'
@@ -21,6 +22,14 @@ import { DrizzleUserRepository } from './user'
 import { DrizzleVehicleRepository } from './vehicle'
 import { DrizzleVehicleBlockRepository } from './vehicle-block'
 import { DrizzleVehicleClassRepository } from './vehicle-class'
+
+// #877 Slice B: the tx-bound consent repo serves only reads + createAcceptance,
+// none of which call runTransaction; a nested tx inside the booking tx would be a
+// bug, so this sentinel fails loudly rather than opening a second tx (M4 — the
+// Pick<> narrowing in TransactionRepos means this is never actually reached).
+const txConsentSentinel: RunTx = () => {
+  throw new Error('consentRepo.runTransaction is not available inside a booking tx')
+}
 
 export function createDrizzleTransaction(
   runInteractiveTx: RunTx,
@@ -64,6 +73,10 @@ export function createDrizzleTransaction(
         // #1206: tx-bound so the deactivated-operator guard reads the operator at
         // the same point-in-time snapshot as the booking insert that follows it.
         operatorRepo: new DrizzleOperatorRepository(txDb),
+        // #877 Slice B: tx-bound so the renter's operator-terms acceptance row is
+        // written in the same tx as the booking insert (atomic; the signature binds
+        // the bookingId that insert yields). Sentinel runTx — see module top.
+        consentRepo: new DrizzleConsentRepository(txDb, txConsentSentinel),
       })
     })
 }

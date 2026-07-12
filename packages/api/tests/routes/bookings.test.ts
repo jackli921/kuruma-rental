@@ -1,6 +1,6 @@
 import { jstDateString } from '@kuruma/shared/lib/compliance'
 import { Hono } from 'hono'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAddOnRepository,
@@ -909,6 +909,34 @@ describe('Booking Routes', () => {
       const body = await res.json()
       expect(body.data.disclaimerAcknowledgedAt).toBeNull()
       expect(body.data.disclaimerTermsVersion).toBeNull()
+    })
+
+    // #877 Slice B T10: the operator-terms pin fields (accept flag + the exact
+    // rendered version + displayed locale) must survive Zod's unknown-key
+    // stripping and reach the service, or the in-tx acceptance writer (T11) can
+    // never see what the renter agreed to. The service ignores them today (dark).
+    it('forwards operator-terms pin fields to the service (#877)', async () => {
+      const createSpy = vi.spyOn(service, 'create')
+
+      const res = await createBooking(
+        validBookingInput({
+          operatorRentalTermsAccepted: true,
+          operatorRentalTermsAcceptedVersion: 'v3',
+          locale: 'ja',
+        }),
+      )
+
+      expect(res.status).toBe(201)
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operatorRentalTermsAccepted: true,
+          operatorRentalTermsAcceptedVersion: 'v3',
+          locale: 'ja',
+        }),
+        undefined,
+        OPERATOR,
+      )
     })
 
     it('rejects an unknown requestedVehicleId with 400', async () => {

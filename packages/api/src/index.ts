@@ -423,6 +423,14 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const verificationGate = parseBoolFlag(process.env.REQUIRE_DOCUMENT_VERIFICATION)
     ? documentVerificationGate(renterDocumentService)
     : undefined
+  // #877 Slice B: FeatureFlagsService moves above BookingService so the create path
+  // can gate the operator-terms write on OPERATOR_TERMS. That is a WEB flag
+  // (registry.ts:74), so isEnabled floors to false server-side (dark today) and is
+  // flippable via a DB override at GA — a DELIBERATE deviation from the "don't call
+  // isEnabled for a web flag" note in feature-flags.ts, so one flag drives the whole
+  // GA switch. The registry stays unchanged (its strict union forbids serverDefault
+  // on a web flag; changing it would break registry.test.ts + the web VITE read).
+  const featureFlagsService = new FeatureFlagsService(featureFlagRepo)
   const bookingService = new BookingService(
     bookingRepo,
     runInTransaction,
@@ -437,6 +445,10 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     // #851: PaymentService coordinates the auto-refund on cancel (isBookingPaid +
     // initiateCancellationRefund). It's constructed above with the same repos.
     paymentService,
+    // #877 Slice B: consent signing key + the OPERATOR_TERMS flag thunk. Dark until
+    // the flag flips (DB override at GA); the create path skips the write when off.
+    resolveSigningKey,
+    () => featureFlagsService.isEnabled('OPERATOR_TERMS'),
   )
   const notificationService = new NotificationService(
     notificationLogRepo,
@@ -499,7 +511,6 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const vehicleService = new VehicleService(vehicleRepo, resolveWriteOperatorId, photosPublicUrl)
   const locationService = new LocationService(locationRepo, bookingRepo, cachedGeocoder, regionRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
-  const featureFlagsService = new FeatureFlagsService(featureFlagRepo)
   // #1437: SHARED_CATALOG is server-enforced. Both the operator picker read (empty when
   // off) and the add-on create path (reject a templateId when off) gate on ONE narrow
   // thunk (ISP) rather than the whole FeatureFlagsService.

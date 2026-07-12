@@ -117,6 +117,8 @@ const TX_EXPECTED_KEY_MAP: Record<keyof TransactionRepos, true> = {
   vehicleBlockRepo: true,
   // #1206: the deactivated-operator booking guard reads operatorRepo in-tx.
   operatorRepo: true,
+  // #877 Slice B: the renter's operator-terms acceptance is written in-tx.
+  consentRepo: true,
 }
 const TX_EXPECTED_KEYS = Object.keys(TX_EXPECTED_KEY_MAP) as ReadonlyArray<keyof TransactionRepos>
 

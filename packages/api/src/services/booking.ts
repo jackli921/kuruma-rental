@@ -24,6 +24,7 @@ import type {
   StatusTransitionResult,
   SubstituteResult,
 } from './booking-types'
+import type { SigningKey } from './consent-signing'
 
 // Re-exported for import compatibility — `services/booking` stays the booking
 // domain's public entry point after the #713 split into three single-purpose
@@ -38,7 +39,7 @@ export type {
   StatusTransitionResult,
   SubstituteResult,
 } from './booking-types'
-export { DISCLAIMER_TERMS_VERSION } from './booking-creation'
+export { DISCLAIMER_TERMS_VERSION } from './booking-snapshot-insert'
 
 /**
  * Composite facade over the three booking services (#713). It owns NO logic:
@@ -80,6 +81,12 @@ export class BookingService {
     // #851: auto-refund coordinator for the cancel paths (PaymentService at the
     // composition root). Optional so existing wiring/tests stay unaffected.
     refundInitiator?: CancellationRefundCoordinator,
+    // #877 Slice B: consent signing key + OPERATOR_TERMS flag thunk, forwarded to
+    // the creation service. Optional — undefined lets BookingCreationService apply
+    // its defaults (resolveSigningKey + a floored-false flag), keeping the consent
+    // write dark for every wiring/test that omits them.
+    getSigningKey?: () => SigningKey | undefined,
+    isOperatorTermsEnabled?: () => Promise<boolean>,
   ) {
     this.query = new BookingQueryService(
       bookingRepo,
@@ -94,6 +101,8 @@ export class BookingService {
       postCommit,
       generateCode,
       verificationGate,
+      getSigningKey,
+      isOperatorTermsEnabled,
     )
     this.lifecycle = new BookingLifecycleService(
       bookingRepo,
