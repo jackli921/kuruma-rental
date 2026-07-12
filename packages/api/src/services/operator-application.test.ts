@@ -14,10 +14,11 @@ import type {
 } from '../stores'
 import { OperatorApplicationService } from './operator-application'
 
+// Sign-in-first: submit no longer carries contactEmail (server-resolved from the
+// users repo) but DOES carry applicantUserId (derived from the session at the route).
 const input = {
   businessName: 'Osaka Rentals',
   contactName: 'Aiko',
-  contactEmail: 'aiko@example.com',
   contactPhone: '+81 90',
   serviceArea: 'Osaka',
   estimatedFleetSize: '6-20' as const,
@@ -26,14 +27,25 @@ const input = {
   businessType: undefined,
   message: undefined,
   submittedLocale: 'en' as const,
+  applicantUserId: 'user_7',
 }
 
 describe('OperatorApplicationService.submit', () => {
   let repo: InMemoryOperatorApplicationRepository
+  let users: InMemoryUserRepository
+  let memberships: InMemoryOperatorMembershipRepository
   let service: OperatorApplicationService
-  beforeEach(() => {
+
+  beforeEach(async () => {
     repo = new InMemoryOperatorApplicationRepository()
-    service = makeService(repo)
+    users = new InMemoryUserRepository()
+    memberships = new InMemoryOperatorMembershipRepository()
+    service = makeService(repo, vi.fn(), { users, memberships })
+    // Seed the authenticated applicant's account so submit can resolve its email.
+    await users.quickCreate({ name: 'Aiko', email: 'real@x.io', phone: null, language: 'en' })
+    // quickCreate mints a random id; pin the applicant to a known id for the tests.
+    const account = await users.findByEmail('real@x.io')
+    input.applicantUserId = account!.id
   })
 
   it('persists a PENDING application and returns {id,status}', async () => {
@@ -41,22 +53,65 @@ describe('OperatorApplicationService.submit', () => {
     expect(r).toMatchObject({ status: 'PENDING' })
     expect(r.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
   })
+  it('links the application to applicantUserId + uses the account email from the users repo', async () => {
+    // No contactEmail is passed in — the service resolves it from the users repo.
+    await service.submit(input)
+    const [created] = await repo.list({ limit: 10, offset: 0 })
+    expect(created).toMatchObject({
+      applicantUserId: input.applicantUserId,
+      contactEmail: 'real@x.io',
+    })
+  })
   it('throws ConflictError on a duplicate live email', async () => {
     await service.submit(input)
     await expect(service.submit(input)).rejects.toThrow(ConflictError)
     await expect(service.submit(input)).rejects.toThrow('already')
   })
+  it('throws ConflictError when the caller already has an active membership', async () => {
+    await memberships.create({
+      userId: input.applicantUserId,
+      operatorId: 'op_existing',
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+    })
+    await expect(service.submit(input)).rejects.toThrow(ConflictError)
+    await expect(service.submit(input)).rejects.toThrow(/already/i)
+  })
+  it('throws ConflictError when the account has no email on file', async () => {
+    const phoneOnly = await users.createWalkInRenter({ name: 'Phone Only', phone: '+81 70' })
+    await expect(service.submit({ ...input, applicantUserId: phoneOnly.id })).rejects.toThrow(
+      ConflictError,
+    )
+    await expect(service.submit({ ...input, applicantUserId: phoneOnly.id })).rejects.toThrow(
+      /no email/i,
+    )
+  })
 })
 
 describe('OperatorApplicationService.list + reject', () => {
   let repo: InMemoryOperatorApplicationRepository
+  let users: InMemoryUserRepository
   let recordAudit: ReturnType<typeof vi.fn>
   let service: OperatorApplicationService
+  // Two seeded applicants — submit resolves each application's email from its
+  // applicantUserId, so distinct rows now need distinct accounts (not a body email).
+  let applicantA: string
+  let applicantB: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     repo = new InMemoryOperatorApplicationRepository()
+    users = new InMemoryUserRepository()
     recordAudit = vi.fn()
-    service = makeService(repo, recordAudit)
+    service = makeService(repo, recordAudit, {
+      users,
+      memberships: new InMemoryOperatorMembershipRepository(),
+    })
+    applicantA = (
+      await users.quickCreate({ name: 'A', email: 'a@example.com', phone: null, language: 'en' })
+    ).id
+    applicantB = (
+      await users.quickCreate({ name: 'B', email: 'b@example.com', phone: null, language: 'en' })
+    ).id
   })
 
   it('list() returns applications newest-first', async () => {
@@ -64,9 +119,9 @@ describe('OperatorApplicationService.list + reject', () => {
     // this, both are stamped at the same millisecond and the tie-break is by id.
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2024-01-01T00:00:00Z'))
-    const a = await service.submit(input)
+    const a = await service.submit({ ...input, applicantUserId: applicantA })
     vi.setSystemTime(new Date('2024-01-02T00:00:00Z'))
-    const b = await service.submit({ ...input, contactEmail: 'other@example.com' })
+    const b = await service.submit({ ...input, applicantUserId: applicantB })
     vi.useRealTimers()
 
     const all = await service.list({ limit: 50, offset: 0 })
@@ -77,7 +132,7 @@ describe('OperatorApplicationService.list + reject', () => {
   })
 
   it('reject() flips status to REJECTED and returns the updated row', async () => {
-    const { id } = await service.submit(input)
+    const { id } = await service.submit({ ...input, applicantUserId: applicantA })
     const adminUserId = 'admin-user-1'
     const reason = 'Does not meet requirements'
 
@@ -91,7 +146,7 @@ describe('OperatorApplicationService.list + reject', () => {
   })
 
   it('reject() emits exactly one OPERATOR_APPLICATION_REJECTED audit event', async () => {
-    const { id } = await service.submit(input)
+    const { id } = await service.submit({ ...input, applicantUserId: applicantA })
     const adminUserId = 'admin-user-1'
 
     await service.reject(id, adminUserId, 'Too small fleet')
@@ -113,7 +168,7 @@ describe('OperatorApplicationService.list + reject', () => {
   })
 
   it('reject() on an already-rejected (non-PENDING) application throws NotFoundError', async () => {
-    const { id } = await service.submit(input)
+    const { id } = await service.submit({ ...input, applicantUserId: applicantA })
     await service.reject(id, 'admin-1', 'first rejection')
     await expect(service.reject(id, 'admin-1', 'again')).rejects.toThrow(NotFoundError)
     // The audit event fired once for the first (successful) rejection only.
@@ -121,8 +176,8 @@ describe('OperatorApplicationService.list + reject', () => {
   })
 
   it('list(status) filters by status', async () => {
-    const pending = await service.submit(input)
-    const toReject = await service.submit({ ...input, contactEmail: 'reject@example.com' })
+    const pending = await service.submit({ ...input, applicantUserId: applicantA })
+    const toReject = await service.submit({ ...input, applicantUserId: applicantB })
     await service.reject(toReject.id, 'admin-1', 'no')
 
     const onlyPending = await service.list({ status: 'PENDING', limit: 50, offset: 0 })
@@ -197,9 +252,14 @@ describe('OperatorApplicationService.approve', () => {
       }
     }
 
-    const service = new OperatorApplicationService(applications, audit, runOperatorApproval, {
-      webBaseUrl: 'https://app.example.com',
-    })
+    const service = new OperatorApplicationService(
+      applications,
+      audit,
+      runOperatorApproval,
+      { webBaseUrl: 'https://app.example.com' },
+      memberships,
+      users,
+    )
     return {
       service,
       repos: {
@@ -450,11 +510,24 @@ function restoreStore<V>(store: Map<string, V>, saved: Map<string, V>): void {
 function makeService(
   repo: InMemoryOperatorApplicationRepository,
   recordAudit: ReturnType<typeof vi.fn> = vi.fn(),
+  deps: {
+    users?: InMemoryUserRepository
+    memberships?: InMemoryOperatorMembershipRepository
+  } = {},
 ) {
   // Provide a stub runOperatorApproval that throws if accidentally called in
   // submit/reject tests — they don't need the approval transaction.
   const stubRunApproval = () => {
     throw new Error('runOperatorApproval called unexpectedly in non-approve test')
   }
-  return new OperatorApplicationService(repo, recordAudit, stubRunApproval, { webBaseUrl: '' })
+  const memberships = deps.memberships ?? new InMemoryOperatorMembershipRepository()
+  const users = deps.users ?? new InMemoryUserRepository()
+  return new OperatorApplicationService(
+    repo,
+    recordAudit,
+    stubRunApproval,
+    { webBaseUrl: '' },
+    memberships,
+    users,
+  )
 }

@@ -11,7 +11,9 @@ import type {
   OperatorApplicationListParams,
   OperatorApplicationRepository,
   OperatorApprovalRepos,
+  OperatorMembershipRepository,
   RunOperatorApproval,
+  UserRepository,
 } from '../repositories/types'
 import type { OperatorApplication } from '../stores'
 import { resolveUniqueSlug, slugify } from './slug'
@@ -57,8 +59,13 @@ export interface OperatorApplicationServiceConfig {
 }
 
 // The honeypot/consent fields are validated + stripped at the route boundary; the
-// service persists only the domain fields (contactEmail already lowercased by zod).
-type SubmitInput = Omit<OperatorApplicationInput, 'honeypot' | 'consent'>
+// service persists only the domain fields. Sign-in-first (#877): contactEmail is no
+// longer a client field (already removed from the schema) — the service resolves the
+// authoritative email from the users repo — and the route injects applicantUserId
+// derived from the authenticated session.
+type SubmitInput = Omit<OperatorApplicationInput, 'honeypot' | 'consent'> & {
+  applicantUserId: string
+}
 
 // Collected inside the approval tx, emitted only after commit (fire-and-forget).
 interface ApprovalOutcome {
@@ -86,6 +93,11 @@ export class OperatorApplicationService {
     private readonly recordAudit: RecordOperatorApplicationAudit,
     private readonly runApproval: RunOperatorApproval,
     private readonly config: OperatorApplicationServiceConfig,
+    // Sign-in-first (#877): the already-operator guard reads the membership ledger,
+    // and the authoritative applicant email is resolved from the users projection —
+    // never the token's display email. Narrowed to the two reads submit() needs.
+    private readonly members: Pick<OperatorMembershipRepository, 'findActiveByUserId'>,
+    private readonly users: Pick<UserRepository, 'findById'>,
   ) {}
 
   async list(params: OperatorApplicationListParams): Promise<OperatorApplication[]> {
@@ -217,11 +229,23 @@ export class OperatorApplicationService {
   }
 
   async submit(input: SubmitInput): Promise<Pick<OperatorApplication, 'id' | 'status'>> {
+    // Already-operator guard: a signed-in caller who already owns or staffs an
+    // operator can't apply again (the ledger is the revocation-aware source of truth,
+    // not the users.role projection).
+    if (await this.members.findActiveByUserId(input.applicantUserId)) {
+      throw new ConflictError('you already belong to an operator')
+    }
+    // Server-authoritative email: resolve the applicant's real account email from the
+    // users repo. Never trust a client-supplied email or the token's display email.
+    const account = await this.users.findById(input.applicantUserId)
+    if (!account?.email) {
+      throw new ConflictError('your account has no email on file')
+    }
     try {
       const app = await this.repo.create({
         businessName: input.businessName,
         contactName: input.contactName,
-        contactEmail: input.contactEmail,
+        contactEmail: account.email,
         contactPhone: input.contactPhone,
         serviceArea: input.serviceArea,
         estimatedFleetSize: input.estimatedFleetSize,
@@ -230,6 +254,7 @@ export class OperatorApplicationService {
         businessType: input.businessType ?? null,
         message: input.message ?? null,
         submittedLocale: input.submittedLocale,
+        applicantUserId: input.applicantUserId,
       })
       return { id: app.id, status: app.status }
     } catch (err) {

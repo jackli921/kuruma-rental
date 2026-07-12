@@ -25,6 +25,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import ws from 'ws'
 import {
   DrizzleOperatorApplicationRepository,
+  DrizzleOperatorMembershipRepository,
+  DrizzleUserRepository,
   createDrizzleOperatorApproval,
 } from '../../src/repositories/drizzle'
 import type { RunOperatorApproval } from '../../src/repositories/types'
@@ -137,6 +139,8 @@ describe.skipIf(!NEON_URL)('operator approval promotion transaction atomicity (T
       noopAudit,
       createDrizzleOperatorApproval(runTx),
       { webBaseUrl: WEB_BASE_URL },
+      new DrizzleOperatorMembershipRepository(db),
+      new DrizzleUserRepository(db),
     )
     const result = await service.approve(app.id, reviewerId)
 
@@ -221,9 +225,14 @@ describe.skipIf(!NEON_URL)('operator approval promotion transaction atomicity (T
         }),
       )
 
-    const service = new OperatorApplicationService(repo, noopAudit, failingFenceRun, {
-      webBaseUrl: WEB_BASE_URL,
-    })
+    const service = new OperatorApplicationService(
+      repo,
+      noopAudit,
+      failingFenceRun,
+      { webBaseUrl: WEB_BASE_URL },
+      new DrizzleOperatorMembershipRepository(db),
+      new DrizzleUserRepository(db),
+    )
     await expect(service.approve(app.id, reviewerId)).rejects.toThrow('already reviewed')
 
     // The projection write genuinely executed inside the tx (visible on the tx connection

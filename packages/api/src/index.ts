@@ -272,6 +272,8 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     recordAudit,
     runOperatorApproval,
     { webBaseUrl },
+    operatorMembershipRepo,
+    userRepo,
   )
   // #904: operator self-service team page. Reuses providerInviteService to mint
   // (so the audit trail + TTL stay single-sourced); reads invites + members
