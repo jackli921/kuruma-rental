@@ -11,15 +11,14 @@ export function createOperatorApplicationRoutes(
   limiter?: RateLimitBinding,
 ) {
   const app = new Hono()
-  // Sign-in-first (#877): all routes under this prefix require a session. Using
-  // the wildcard `/*` suffix ensures both POST (submit) and GET /me are gated —
-  // `app.use('/operator-applications', mw)` only matches the exact path, not sub-paths.
+  // Sign-in-first (#877): all routes under this prefix require a session. The
+  // wildcard `/*` covers BOTH the bare `/operator-applications` (POST submit) and
+  // sub-paths like `/me` — a bare `app.use('/operator-applications', mw)` matches
+  // only the exact path. Register on the wildcard ALONE: adding the exact-path
+  // registration too would double-run every middleware on the bare path, which for
+  // rateLimitByIp means a double token decrement per POST.
   app.use('/operator-applications/*', requireAuth())
-  app.use('/operator-applications', requireAuth())
-  if (limiter) {
-    app.use('/operator-applications/*', rateLimitByIp(limiter))
-    app.use('/operator-applications', rateLimitByIp(limiter))
-  }
+  if (limiter) app.use('/operator-applications/*', rateLimitByIp(limiter))
 
   app.get('/operator-applications/me', async (c) => {
     const user = requireUser(c)

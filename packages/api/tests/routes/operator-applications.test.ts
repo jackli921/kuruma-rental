@@ -142,7 +142,7 @@ describe('GET /operator-applications/me', () => {
       headers: await renterBearer(sub),
     })
 
-  test('200 returns the caller own application', async () => {
+  test('200 returns the caller own application without internal review fields', async () => {
     await postAuthed(valid, RENTER.id)
     const res = await getAuthed(RENTER.id)
     expect(res.status).toBe(200)
@@ -151,6 +151,10 @@ describe('GET /operator-applications/me', () => {
       success: true,
       data: { status: 'PENDING', applicantUserId: RENTER.id },
     })
+    // Self-read must not leak admin-only review metadata (keeps operatorId +
+    // rejectionReason, which the applicant status UI renders).
+    expect(body.data).not.toHaveProperty('reviewedByUserId')
+    expect(body.data).not.toHaveProperty('reviewerNotes')
   })
 
   test('404 when the caller has no application', async () => {

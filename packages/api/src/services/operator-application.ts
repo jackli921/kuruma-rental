@@ -67,6 +67,14 @@ type SubmitInput = Omit<OperatorApplicationInput, 'honeypot' | 'consent'> & {
   applicantUserId: string
 }
 
+// Applicant-facing projection of their own application (GET /operator-applications/me).
+// Strips internal review metadata the self-read must not leak; keeps operatorId +
+// rejectionReason, which the applicant status UI (welcome link + rejection reason) needs.
+export type ApplicantApplicationView = Omit<
+  OperatorApplication,
+  'reviewedByUserId' | 'reviewerNotes'
+>
+
 // Collected inside the approval tx, emitted only after commit (fire-and-forget).
 interface ApprovalOutcome {
   readonly operatorId: string
@@ -104,8 +112,14 @@ export class OperatorApplicationService {
     return this.repo.list(params)
   }
 
-  async findMine(userId: string): Promise<OperatorApplication | undefined> {
-    return this.repo.findByApplicantUserId(userId)
+  async findMine(userId: string): Promise<ApplicantApplicationView | undefined> {
+    const application = await this.repo.findByApplicantUserId(userId)
+    if (!application) return undefined
+    // Applicant self-read must not leak internal review metadata. Keep operatorId +
+    // rejectionReason (the status UI shows the portal link + the rejection reason);
+    // drop reviewedByUserId + reviewerNotes (admin-only commentary).
+    const { reviewedByUserId: _reviewedBy, reviewerNotes: _notes, ...view } = application
+    return view
   }
 
   async reject(
