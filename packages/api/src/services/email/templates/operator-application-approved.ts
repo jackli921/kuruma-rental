@@ -1,4 +1,4 @@
-import { type RenderedEmail, renderRowsEmail } from './layout'
+import { type RenderedEmail, renderCtaSection, renderRowsEmail } from './layout'
 import { emailStrings } from './messages'
 
 export interface OperatorApplicationApprovedData {
@@ -11,12 +11,20 @@ export function renderOperatorApplicationApproved(
   locale: string,
 ): RenderedEmail {
   const m = emailStrings(locale)
-  const rows: Array<[string, string]> = [
+  const body = renderRowsEmail(m.operatorApplicationApprovedHeading, [
     [m.operatorApplicationBusinessLabel, data.businessName],
-    [m.operatorApplicationWelcomeLabel, data.welcomeUrl],
-  ]
+  ])
+  // The welcome link is the whole point of this email, so it must be clickable —
+  // a plain row value renders as unlinked text. renderCtaSection wraps it in an
+  // <a> (and keeps the raw URL in the text/plain part), matching operator-alert.ts.
+  const cta = renderCtaSection(
+    m.operatorApplicationWelcomeLabel,
+    data.welcomeUrl,
+    m.operatorApplicationWelcomeLabel,
+  )
   return {
     subject: `${m.operatorApplicationApprovedSubject} ${data.businessName}`,
-    ...renderRowsEmail(m.operatorApplicationApprovedHeading, rows),
+    html: body.html + cta.html,
+    text: body.text + cta.text,
   }
 }
