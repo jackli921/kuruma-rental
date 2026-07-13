@@ -104,6 +104,7 @@ export const OPERATOR_CONTEXT_ROUTE_IDS: ReadonlySet<string> = new Set([
   // dead-end the write at the API's ownership 404 (#1361). The write still binds: the
   // route reads the ?operator= param (retained by _business) via useOperatorContext.
   '/$locale/_business/manage/classes',
+  '/$locale/_business/manage/combo-deals', // #464 slice 7 — combo-deals list narrows to picked operator
   '/$locale/_business/manage/fees',
   '/$locale/_business/manage/fleet/', // slice 4 residual (#1264) — list reads narrow; detail is by-id, intentionally NOT registered
   '/$locale/_business/manage/insurance',

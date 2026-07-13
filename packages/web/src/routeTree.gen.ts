@@ -41,6 +41,7 @@ import { Route as LocaleBusinessManageMessagesRouteImport } from './routes/$loca
 import { Route as LocaleBusinessManageLocationsRouteImport } from './routes/$locale/_business/manage/locations'
 import { Route as LocaleBusinessManageInsuranceRouteImport } from './routes/$locale/_business/manage/insurance'
 import { Route as LocaleBusinessManageFeesRouteImport } from './routes/$locale/_business/manage/fees'
+import { Route as LocaleBusinessManageComboDealsRouteImport } from './routes/$locale/_business/manage/combo-deals'
 import { Route as LocaleBusinessManageClassesRouteImport } from './routes/$locale/_business/manage/classes'
 import { Route as LocaleBusinessManageAddOnsRouteImport } from './routes/$locale/_business/manage/add-ons'
 import { Route as LocaleAdminAdminTemplatesRouteImport } from './routes/$locale/_admin/admin/templates'
@@ -233,6 +234,12 @@ const LocaleBusinessManageFeesRoute =
     path: '/manage/fees',
     getParentRoute: () => LocaleBusinessRoute,
   } as any)
+const LocaleBusinessManageComboDealsRoute =
+  LocaleBusinessManageComboDealsRouteImport.update({
+    id: '/manage/combo-deals',
+    path: '/manage/combo-deals',
+    getParentRoute: () => LocaleBusinessRoute,
+  } as any)
 const LocaleBusinessManageClassesRoute =
   LocaleBusinessManageClassesRouteImport.update({
     id: '/manage/classes',
@@ -378,6 +385,7 @@ export interface FileRoutesByFullPath {
   '/$locale/admin/templates': typeof LocaleAdminAdminTemplatesRoute
   '/$locale/manage/add-ons': typeof LocaleBusinessManageAddOnsRoute
   '/$locale/manage/classes': typeof LocaleBusinessManageClassesRoute
+  '/$locale/manage/combo-deals': typeof LocaleBusinessManageComboDealsRoute
   '/$locale/manage/fees': typeof LocaleBusinessManageFeesRoute
   '/$locale/manage/insurance': typeof LocaleBusinessManageInsuranceRoute
   '/$locale/manage/locations': typeof LocaleBusinessManageLocationsRoute
@@ -426,6 +434,7 @@ export interface FileRoutesByTo {
   '/$locale/admin/templates': typeof LocaleAdminAdminTemplatesRoute
   '/$locale/manage/add-ons': typeof LocaleBusinessManageAddOnsRoute
   '/$locale/manage/classes': typeof LocaleBusinessManageClassesRoute
+  '/$locale/manage/combo-deals': typeof LocaleBusinessManageComboDealsRoute
   '/$locale/manage/fees': typeof LocaleBusinessManageFeesRoute
   '/$locale/manage/insurance': typeof LocaleBusinessManageInsuranceRoute
   '/$locale/manage/locations': typeof LocaleBusinessManageLocationsRoute
@@ -480,6 +489,7 @@ export interface FileRoutesById {
   '/$locale/_admin/admin/templates': typeof LocaleAdminAdminTemplatesRoute
   '/$locale/_business/manage/add-ons': typeof LocaleBusinessManageAddOnsRoute
   '/$locale/_business/manage/classes': typeof LocaleBusinessManageClassesRoute
+  '/$locale/_business/manage/combo-deals': typeof LocaleBusinessManageComboDealsRoute
   '/$locale/_business/manage/fees': typeof LocaleBusinessManageFeesRoute
   '/$locale/_business/manage/insurance': typeof LocaleBusinessManageInsuranceRoute
   '/$locale/_business/manage/locations': typeof LocaleBusinessManageLocationsRoute
@@ -533,6 +543,7 @@ export interface FileRouteTypes {
     | '/$locale/admin/templates'
     | '/$locale/manage/add-ons'
     | '/$locale/manage/classes'
+    | '/$locale/manage/combo-deals'
     | '/$locale/manage/fees'
     | '/$locale/manage/insurance'
     | '/$locale/manage/locations'
@@ -581,6 +592,7 @@ export interface FileRouteTypes {
     | '/$locale/admin/templates'
     | '/$locale/manage/add-ons'
     | '/$locale/manage/classes'
+    | '/$locale/manage/combo-deals'
     | '/$locale/manage/fees'
     | '/$locale/manage/insurance'
     | '/$locale/manage/locations'
@@ -634,6 +646,7 @@ export interface FileRouteTypes {
     | '/$locale/_admin/admin/templates'
     | '/$locale/_business/manage/add-ons'
     | '/$locale/_business/manage/classes'
+    | '/$locale/_business/manage/combo-deals'
     | '/$locale/_business/manage/fees'
     | '/$locale/_business/manage/insurance'
     | '/$locale/_business/manage/locations'
@@ -892,6 +905,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleBusinessManageFeesRouteImport
       parentRoute: typeof LocaleBusinessRoute
     }
+    '/$locale/_business/manage/combo-deals': {
+      id: '/$locale/_business/manage/combo-deals'
+      path: '/manage/combo-deals'
+      fullPath: '/$locale/manage/combo-deals'
+      preLoaderRoute: typeof LocaleBusinessManageComboDealsRouteImport
+      parentRoute: typeof LocaleBusinessRoute
+    }
     '/$locale/_business/manage/classes': {
       id: '/$locale/_business/manage/classes'
       path: '/manage/classes'
@@ -1096,6 +1116,7 @@ interface LocaleBusinessRouteChildren {
   LocaleBusinessDashboardRoute: typeof LocaleBusinessDashboardRoute
   LocaleBusinessManageAddOnsRoute: typeof LocaleBusinessManageAddOnsRoute
   LocaleBusinessManageClassesRoute: typeof LocaleBusinessManageClassesRoute
+  LocaleBusinessManageComboDealsRoute: typeof LocaleBusinessManageComboDealsRoute
   LocaleBusinessManageFeesRoute: typeof LocaleBusinessManageFeesRoute
   LocaleBusinessManageInsuranceRoute: typeof LocaleBusinessManageInsuranceRoute
   LocaleBusinessManageLocationsRoute: typeof LocaleBusinessManageLocationsRoute
@@ -1113,6 +1134,7 @@ const LocaleBusinessRouteChildren: LocaleBusinessRouteChildren = {
   LocaleBusinessDashboardRoute: LocaleBusinessDashboardRoute,
   LocaleBusinessManageAddOnsRoute: LocaleBusinessManageAddOnsRoute,
   LocaleBusinessManageClassesRoute: LocaleBusinessManageClassesRoute,
+  LocaleBusinessManageComboDealsRoute: LocaleBusinessManageComboDealsRoute,
   LocaleBusinessManageFeesRoute: LocaleBusinessManageFeesRoute,
   LocaleBusinessManageInsuranceRoute: LocaleBusinessManageInsuranceRoute,
   LocaleBusinessManageLocationsRoute: LocaleBusinessManageLocationsRoute,

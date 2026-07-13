@@ -229,12 +229,9 @@ export const classRatePlans = pgTable(
     // The priced class. NOT NULL — a rate plan is always for one class. The
     // composite FK below seals it to the SAME operator (mirrors fee_schedules).
     classId: text('classId').notNull(),
-    // Per-location: the same class can carry a different deal rate per store
-    // (ruling 4). Simple FK to locations (matches bookings.pickupLocationId);
-    // cross-operator location is caught at the service layer.
-    pickupLocationId: text('pickupLocationId')
-      .notNull()
-      .references(() => locations.id),
+    // Per-location. Ownership is sealed by the composite FK below (Q-A #464
+    // slice 6), mirroring vehicles' (operatorId, pickupLocationId) seal.
+    pickupLocationId: text('pickupLocationId').notNull(),
     // The combo's day rate — set deliberately (e.g. below the cheapest member
     // car = a real "deal"). The absence of a deal is NO row (or isActive=false),
     // never a 0 rate.
@@ -274,6 +271,16 @@ export const classRatePlans = pgTable(
       columns: [table.operatorId, table.classId],
       foreignColumns: [vehicleClasses.operatorId, vehicleClasses.id],
       name: 'class_rate_plans_operator_class_fk',
+    }),
+    // Composite FK seal (Q-A #464 slice 6): the pickup location must belong to
+    // the SAME operator. Mirrors vehicles_operatorId_pickupLocationId_fk. The FK
+    // target locations_operatorId_id_unique already exists (location.ts:91).
+    // pickupLocationId leads idx_class_rate_plans_pickup_location and operatorId
+    // leads idx_class_rate_plans_operator, so both FK columns keep their cover.
+    foreignKey({
+      columns: [table.operatorId, table.pickupLocationId],
+      foreignColumns: [locations.operatorId, locations.id],
+      name: 'class_rate_plans_operator_location_fk',
     }),
     check('class_rate_plans_day_rate_non_negative', sql`${table.dayRateJpy} >= 0`),
   ],

@@ -72,6 +72,10 @@ export const EXEMPTIONS: ReadonlyMap<string, string> = new Map([
     'review',
     'ReviewEdit = Pick<Review, "overall" | "subRatings" | "comment"> — structurally cannot carry operatorId, so `.set({ ...patch })` / `{ ...existing, ...patch }` is safe.',
   ],
+  [
+    'class-rate-plan',
+    'ClassRatePlanUpdate = Partial<Pick<ClassRatePlan, "classId" | "pickupLocationId" | "dayRateJpy" | "isActive" | "label">> (interface + service + in-memory all use this narrow type) — structurally cannot carry operatorId, so `.set({ ...patch })` is safe; the in-memory twin additionally pins operatorId to current.',
+  ],
 ])
 
 const UPDATE_CALL_RE = /\.update\(\s*([\w.]+)\s*\)/g
