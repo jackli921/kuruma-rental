@@ -5,12 +5,15 @@ import { createApp } from '../../src/index'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorMembershipRepository,
   InMemoryOperatorRepository,
   InMemoryProviderInviteRepository,
+  InMemoryUserRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
-import type { Operator } from '../../src/stores'
+import { createOperatorGrantService } from '../../src/services/operator-grant'
+import type { Operator, User } from '../../src/stores'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 
 async function bearer(payload: Record<string, unknown>): Promise<Record<string, string>> {
@@ -202,5 +205,209 @@ describe('GET /provider-invites/:token/preview', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.data).toEqual({ valid: false })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// P1a regression guard: STAFF + manual-OWNER invite mint -> resolve end-to-end
+//
+// These tests prove the shared provider-invite machinery (invite-mint.ts,
+// provider-invite.ts, operator-grant.ts) keeps both non-application invite
+// flows working after the approval-path stopped minting invites.
+//
+// A single shared InMemoryProviderInviteRepository is injected into createApp
+// (so both mint routes write into it) AND into createOperatorGrantService (so
+// resolve() reads the freshly-minted invite by token hash). The same
+// operatorMembershipRepo and userRepo are shared so all three grant writes
+// (membership, user projection, invite consumption) are visible to assertions.
+// ---------------------------------------------------------------------------
+
+const GUARD_OPERATOR: Operator = {
+  id: 'op_guard',
+  slug: 'guard',
+  name: 'Guard Operator',
+  preAuthHandoffUrl: null,
+  createdAt: new Date('2026-01-01T00:00:00Z'),
+  updatedAt: new Date('2026-01-01T00:00:00Z'),
+}
+
+const STAFF_USER: User = {
+  id: 'staff-user-1',
+  name: 'Staff Member',
+  email: 'staff@guard.example',
+  phone: null,
+  language: 'en',
+  country: null,
+  role: 'RENTER',
+}
+
+const OWNER_USER: User = {
+  id: 'owner-user-1',
+  name: 'Incoming Owner',
+  email: 'new.owner@guard.example',
+  phone: null,
+  language: 'en',
+  country: null,
+  role: 'RENTER',
+}
+
+function makeGuardApp() {
+  setupAuthEnv()
+  const vehicleRepo = new InMemoryVehicleRepository()
+  const bookingRepo = new InMemoryBookingRepository()
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
+  )
+  const providerInviteRepo = new InMemoryProviderInviteRepository()
+  const operatorMembershipRepo = new InMemoryOperatorMembershipRepository()
+  const userRepo = new InMemoryUserRepository(
+    new Map([
+      [STAFF_USER.id, STAFF_USER],
+      [OWNER_USER.id, OWNER_USER],
+    ]),
+  )
+  const operatorRepo = new InMemoryOperatorRepository(
+    new Map([[GUARD_OPERATOR.id, GUARD_OPERATOR]]),
+  )
+
+  const app = createApp({
+    vehicleRepo,
+    bookingRepo,
+    availabilityRepo,
+    providerInviteRepo,
+    operatorMembershipRepo,
+    userRepo,
+    operatorRepo,
+  })
+
+  // Grant service reads from the SAME repos the app's mint routes wrote into.
+  const grantService = createOperatorGrantService({
+    memberships: operatorMembershipRepo,
+    invites: providerInviteRepo,
+    runGrant: (fn) =>
+      fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo }),
+  })
+
+  return { app, providerInviteRepo, operatorMembershipRepo, userRepo, grantService }
+}
+
+describe('invite acceptance survives approval-mint removal (P1a)', () => {
+  let ctx: ReturnType<typeof makeGuardApp>
+
+  beforeEach(() => {
+    ctx = makeGuardApp()
+  })
+
+  test('STAFF path: operator owner mints, grant resolves OPERATOR_STAFF membership', async () => {
+    // Step 1: OPERATOR_OWNER mints a STAFF invite via the team route.
+    const mintRes = await ctx.app.request('/operators/me/invites', {
+      method: 'POST',
+      headers: {
+        ...(await bearer({
+          sub: 'op-owner-caller',
+          role: 'OPERATOR_OWNER',
+          operatorId: GUARD_OPERATOR.id,
+        })),
+      },
+      body: JSON.stringify({ email: STAFF_USER.email }),
+    })
+    expect(mintRes.status).toBe(201)
+    const mintData = (await mintRes.json()).data as { inviteUrl: string; expiresAt: string }
+
+    // Extract the token from the invite URL (last path segment).
+    const token = mintData.inviteUrl.split('/').at(-1) ?? ''
+    expect(token.length).toBeGreaterThan(10)
+
+    // Step 2: The staff user redeems the invite.
+    const result = await ctx.grantService.resolve({
+      userId: STAFF_USER.id,
+      email: STAFF_USER.email,
+      emailVerified: true,
+      inviteToken: token,
+    })
+
+    // Grant result.
+    expect(result).toEqual({
+      type: 'granted',
+      operatorId: GUARD_OPERATOR.id,
+      role: 'OPERATOR_STAFF',
+    })
+
+    // Membership written.
+    const membership = await ctx.operatorMembershipRepo.findActiveByUserId(STAFF_USER.id)
+    expect(membership).toMatchObject({
+      userId: STAFF_USER.id,
+      operatorId: GUARD_OPERATOR.id,
+      role: 'OPERATOR_STAFF',
+      status: 'ACTIVE',
+    })
+
+    // User projected to OPERATOR_STAFF.
+    const [user] = await ctx.userRepo.findByIds([STAFF_USER.id])
+    expect(user).toMatchObject({ role: 'OPERATOR_STAFF', operatorId: GUARD_OPERATOR.id })
+
+    // Invite consumed.
+    const { createHash: nodeHash } = await import('node:crypto')
+    const tokenHash = nodeHash('sha256').update(token).digest('hex')
+    const consumed = await ctx.providerInviteRepo.findByTokenHash(tokenHash)
+    expect(consumed).toMatchObject({ status: 'ACCEPTED', acceptedByUserId: STAFF_USER.id })
+  })
+
+  test('manual OWNER path: platform admin mints, grant resolves OPERATOR_OWNER membership', async () => {
+    // Step 1: PLATFORM_ADMIN mints an OPERATOR_OWNER invite via the admin route.
+    const mintRes = await ctx.app.request('/admin/provider-invites', {
+      method: 'POST',
+      headers: await bearer({ sub: 'platform-admin-caller', role: 'PLATFORM_ADMIN' }),
+      body: JSON.stringify({
+        email: OWNER_USER.email,
+        operatorId: GUARD_OPERATOR.id,
+        role: 'OPERATOR_OWNER',
+      }),
+    })
+    expect(mintRes.status).toBe(201)
+    const mintData = (await mintRes.json()).data as {
+      token: string
+      inviteUrl: string
+      expiresAt: string
+    }
+    const { token } = mintData
+    expect(token).toMatch(/^[A-Za-z0-9_-]{20,}$/)
+
+    // Step 2: The incoming owner redeems the invite.
+    const result = await ctx.grantService.resolve({
+      userId: OWNER_USER.id,
+      email: OWNER_USER.email,
+      emailVerified: true,
+      inviteToken: token,
+    })
+
+    // Grant result.
+    expect(result).toEqual({
+      type: 'granted',
+      operatorId: GUARD_OPERATOR.id,
+      role: 'OPERATOR_OWNER',
+    })
+
+    // Membership written.
+    const membership = await ctx.operatorMembershipRepo.findActiveByUserId(OWNER_USER.id)
+    expect(membership).toMatchObject({
+      userId: OWNER_USER.id,
+      operatorId: GUARD_OPERATOR.id,
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+    })
+
+    // User projected to OPERATOR_OWNER.
+    const [user] = await ctx.userRepo.findByIds([OWNER_USER.id])
+    expect(user).toMatchObject({ role: 'OPERATOR_OWNER', operatorId: GUARD_OPERATOR.id })
+
+    // Invite consumed.
+    const { createHash: nodeHash } = await import('node:crypto')
+    const tokenHash = nodeHash('sha256').update(token).digest('hex')
+    const consumed = await ctx.providerInviteRepo.findByTokenHash(tokenHash)
+    expect(consumed).toMatchObject({ status: 'ACCEPTED', acceptedByUserId: OWNER_USER.id })
   })
 })
