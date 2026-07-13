@@ -130,8 +130,11 @@ describe('ApplicationReviewCard', () => {
 
   it('when approved is true, renders plain Approved confirmation and hides invite input, copy, regenerate, and Approve/Reject controls', () => {
     renderCard({ approved: true })
-    // Plain approved text is visible
-    expect(screen.queryByText(en.admin.applications.approved)).not.toBeNull()
+    // The approved confirmation is announced to assistive tech via role=status (an
+    // <output> live region), since the Approve button that held focus unmounts on
+    // success. Asserting the role — not just the text — locks that a11y contract so
+    // a refactor back to a bare <span> fails here instead of silently regressing.
+    expect(screen.getByRole('status')).toHaveTextContent(en.admin.applications.approved)
     // No invite input or copy/regenerate buttons (keys deleted from messages)
     expect(screen.queryByRole('textbox')).toBeNull()
     expect(screen.queryByRole('button', { name: /copy/i })).toBeNull()
