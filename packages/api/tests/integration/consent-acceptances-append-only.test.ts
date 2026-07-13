@@ -135,6 +135,19 @@ describe('consent_acceptances append-only enforcement (#1553, role separation)',
     expect(row?.id).toBe(id)
   })
 
+  it('the runtime role MAY still UPDATE a non-ledger table (the REVOKE is scoped)', async () => {
+    // Pins the scope of the append-only seal: the runtime role keeps ordinary
+    // write access everywhere else, so an over-broad `REVOKE ... ON ALL TABLES`
+    // regression would fail this test instead of silently crippling the app.
+    const userId = await seedUser()
+    await db.transaction(async (tx) => {
+      await tx.execute(sql.raw(`SET LOCAL ROLE ${RUNTIME_ROLE}`))
+      await tx.update(users).set({ language: 'ja' }).where(eq(users.id, userId))
+    })
+    const [row] = await db.select().from(users).where(eq(users.id, userId))
+    expect(row?.language).toBe('ja')
+  })
+
   it('the runtime role may NOT UPDATE an acceptance', async () => {
     const acceptanceId = await seedAcceptance()
     await expectInsufficientPrivilege(
