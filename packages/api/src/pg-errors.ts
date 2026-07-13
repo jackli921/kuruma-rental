@@ -34,6 +34,12 @@ export const VEHICLES_PICKUP_LOCATION_FK = 'vehicles_operatorId_pickupLocationId
  */
 export const FEE_SCHEDULES_CLASS_FK = 'fee_schedules_operator_class_fk'
 
+// #464 slice 6: class_rate_plans tenant seals. The class FK already exists in
+// the schema (pricing.ts); the location FK is added in this slice. Named so the
+// service maps each 23503 to the right 400 code.
+export const CLASS_RATE_PLANS_CLASS_FK = 'class_rate_plans_operator_class_fk'
+export const CLASS_RATE_PLANS_LOCATION_FK = 'class_rate_plans_operator_location_fk'
+
 /**
  * locations(regionId) -> regions(id), named in schema.ts (#394). locations also
  * carries operatorId -> operators, so once regionId is a client-supplied FK a

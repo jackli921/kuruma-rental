@@ -1,6 +1,7 @@
+import type { ClassRatePlanData } from '@kuruma/shared/types/class-rate-plan'
 import type { FeeScheduleData } from '@kuruma/shared/types/fee-schedule'
 import { expect, test } from 'vitest'
-import type { FeeSchedule } from './stores'
+import type { ClassRatePlan, FeeSchedule } from './stores'
 
 // #847: the operator fee route returns its store row verbatim (`ok(c, row)`);
 // Hono's `c.json` renders Date columns as ISO strings and leaves every other
@@ -36,4 +37,14 @@ test('fee wire DTO equals the JSON shape of its API row type', () => {
   // runtime keeps the fence in the suite, so a `never` collapse fails loudly here
   // too rather than only in a separate typecheck step.
   expect(feeContract).toBe(true)
+})
+
+// #464: class-rate-plan route returns its store row verbatim (`ok(c, row)`).
+// Fences the ClassRatePlan store row to the ClassRatePlanData wire DTO so any
+// field drift (rename, retype, add, remove) fails to compile at both producer
+// and consumer ends.
+const classRatePlanContract: Exact<Jsonified<ClassRatePlan>, ClassRatePlanData> = true
+
+test('ClassRatePlan wire row matches ClassRatePlanData', () => {
+  expect(classRatePlanContract).toBe(true)
 })

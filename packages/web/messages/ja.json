@@ -93,6 +93,7 @@
     "insurance": "保険",
     "terms": "レンタル規約",
     "fees": "料金",
+    "comboDeals": "コンボプラン",
     "addOns": "オプション",
     "menu": "メニュー",
     "language": "言語",
@@ -796,6 +797,51 @@
         "save": "ドラフトを保存",
         "saving": "保存中...",
         "cancel": "キャンセル"
+      }
+    },
+    "comboDeals": {
+      "title": "コンボプラン",
+      "subtitle": "特定の受取場所で車両クラスの割引日額料金を提供します。",
+      "addDeal": "プランを追加",
+      "addSubtitle": "クラスと受取場所の新しいコンボプランを作成します。",
+      "editDeal": "プランを編集",
+      "editSubtitle": "このコンボプランを更新します。",
+      "empty": "コンボプランがまだありません。受取場所のクラス割引料金を追加してください。",
+      "loadError": "コンボプランを読み込めませんでした",
+      "retry": "再試行",
+      "perDay": "1日あたり",
+      "unknownClass": "不明なクラス",
+      "unknownLocation": "不明な場所",
+      "activateAction": "プランを有効化",
+      "deactivateAction": "プランを無効化",
+      "removeAction": "プランを削除",
+      "removeTitle": "{name}を削除しますか？",
+      "removeDescription": "このコンボプランを完全に削除します。この操作は取り消せません。",
+      "removeConfirm": "削除",
+      "removing": "削除中...",
+      "status": {
+        "active": "有効",
+        "inactive": "無効"
+      },
+      "form": {
+        "vehicleClass": "車両クラス",
+        "vehicleClassPlaceholder": "クラスを選択",
+        "pickupLocation": "受取場所",
+        "pickupLocationPlaceholder": "場所を選択",
+        "dayRate": "日額料金（円）",
+        "label": "ラベル（任意）",
+        "labelPlaceholder": "例: 軽自動車クラス割引 — 難波",
+        "labelHint": "このプランの内部名です。お客様には表示されません。",
+        "active": "有効",
+        "activeHint": "無効なプランはリストに残りますが、お客様には提供されません。",
+        "save": "プランを保存",
+        "saving": "保存中...",
+        "cancel": "キャンセル"
+      },
+      "error": {
+        "invalidClass": "その車両クラスはこの事業者では無効です。有効なクラスを選択してください。",
+        "invalidLocation": "その受取場所はこの事業者では無効です。有効な場所を選択してください。",
+        "duplicate": "このクラスと受取場所のプランは既に存在します。"
       }
     },
     "addOns": {

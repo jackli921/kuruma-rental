@@ -40,6 +40,7 @@ import { createAdminTemplateRoutes } from './routes/admin-templates'
 import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
+import { createClassRatePlanRoutes } from './routes/class-rate-plans'
 import { createConsentRoutes } from './routes/consent'
 import { createCustomerRoutes } from './routes/customers'
 import { createDocumentRoutes } from './routes/documents'
@@ -86,6 +87,7 @@ import { AvailabilityService } from './services/availability'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
 import { ClassOfferingService } from './services/class-offering'
+import { ClassRatePlanService } from './services/class-rate-plan'
 import { ComplianceDigestService } from './services/compliance-digest'
 import { ConsentService } from './services/consent'
 import { ConsentEvidenceService } from './services/consent-evidence'
@@ -531,6 +533,11 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     insuranceTemplateRepo,
   )
   const feeScheduleService = new FeeScheduleService(feeScheduleRepo)
+  const classRatePlanService = new ClassRatePlanService(
+    classRatePlanRepo,
+    vehicleClassRepo,
+    locationRepo,
+  )
   const storefrontSearchService = new StorefrontSearchService(
     storefrontRepo,
     availabilityRepo,
@@ -657,6 +664,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createAddOnTemplateRoutes(addOnTemplateService))
     .route('/', createAdminTemplateRoutes(templateLibraryService))
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))
+    .route('/', createClassRatePlanRoutes(classRatePlanService, resolveWriteOperatorId))
     .route('/', createNotificationRoutes(notificationService))
     .route('/', createOperatorRoutes(operatorService))
     .route('/', createOperatorTeamRoutes(operatorTeamService))
