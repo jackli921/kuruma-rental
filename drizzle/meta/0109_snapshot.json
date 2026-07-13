@@ -1,5 +1,5 @@
 {
-  "id": "02a0e14b-4978-461b-a5e1-c914b71d541b",
+  "id": "b2022240-3408-411b-ab5a-ac26813de7f1",
   "prevId": "8123fed3-459c-4655-b226-c59ac7dbd235",
   "version": "7",
   "dialect": "postgresql",
@@ -102,12 +102,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "applicantUserId": {
-          "name": "applicantUserId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "reviewedAt": {
           "name": "reviewedAt",
           "type": "timestamp with time zone",
@@ -187,21 +181,6 @@
           "method": "btree",
           "with": {}
         },
-        "idx_operator_applications_applicantUserId": {
-          "name": "idx_operator_applications_applicantUserId",
-          "columns": [
-            {
-              "expression": "applicantUserId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "operator_applications_live_email_unique": {
           "name": "operator_applications_live_email_unique",
           "columns": [
@@ -244,19 +223,6 @@
             "id"
           ],
           "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "operator_applications_applicantUserId_users_id_fk": {
-          "name": "operator_applications_applicantUserId_users_id_fk",
-          "tableFrom": "operator_applications",
-          "tableTo": "users",
-          "columnsFrom": [
-            "applicantUserId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -1934,19 +1900,6 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "class_rate_plans_pickupLocationId_locations_id_fk": {
-          "name": "class_rate_plans_pickupLocationId_locations_id_fk",
-          "tableFrom": "class_rate_plans",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "pickupLocationId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "class_rate_plans_operator_class_fk": {
           "name": "class_rate_plans_operator_class_fk",
           "tableFrom": "class_rate_plans",
@@ -1954,6 +1907,21 @@
           "columnsFrom": [
             "operatorId",
             "classId"
+          ],
+          "columnsTo": [
+            "operatorId",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "class_rate_plans_operator_location_fk": {
+          "name": "class_rate_plans_operator_location_fk",
+          "tableFrom": "class_rate_plans",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "operatorId",
+            "pickupLocationId"
           ],
           "columnsTo": [
             "operatorId",

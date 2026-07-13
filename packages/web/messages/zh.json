@@ -78,6 +78,9 @@
     }
   },
   "nav": {
+    "groupOperations": "运营",
+    "groupCatalog": "目录",
+    "groupSetup": "配置",
     "home": "首页",
     "vehicles": "车辆",
     "bookings": "预订",
@@ -90,6 +93,7 @@
     "insurance": "保险",
     "terms": "租赁条款",
     "fees": "费用",
+    "comboDeals": "组合优惠",
     "addOns": "附加项目",
     "menu": "菜单",
     "language": "语言",
@@ -793,6 +797,51 @@
         "save": "保存草稿",
         "saving": "保存中...",
         "cancel": "取消"
+      }
+    },
+    "comboDeals": {
+      "title": "组合优惠",
+      "subtitle": "为某个取车地点的车辆类别提供折扣日租金。",
+      "addDeal": "添加优惠",
+      "addSubtitle": "为某个类别和取车地点创建新的组合优惠。",
+      "editDeal": "编辑优惠",
+      "editSubtitle": "更新此组合优惠。",
+      "empty": "还没有组合优惠。为某个取车地点添加类别折扣价。",
+      "loadError": "无法加载组合优惠",
+      "retry": "重试",
+      "perDay": "每天",
+      "unknownClass": "未知类别",
+      "unknownLocation": "未知地点",
+      "activateAction": "启用优惠",
+      "deactivateAction": "停用优惠",
+      "removeAction": "删除优惠",
+      "removeTitle": "删除 {name}？",
+      "removeDescription": "此操作将永久删除该组合优惠，无法撤销。",
+      "removeConfirm": "删除",
+      "removing": "删除中...",
+      "status": {
+        "active": "已启用",
+        "inactive": "已停用"
+      },
+      "form": {
+        "vehicleClass": "车辆类别",
+        "vehicleClassPlaceholder": "选择类别",
+        "pickupLocation": "取车地点",
+        "pickupLocationPlaceholder": "选择地点",
+        "dayRate": "日租金（日元）",
+        "label": "标签（可选）",
+        "labelPlaceholder": "例如：轻型车类别优惠 — 难波",
+        "labelHint": "此优惠的内部名称，不会向客户显示。",
+        "active": "已启用",
+        "activeHint": "已停用的优惠会保留在列表中，但不会提供给客户。",
+        "save": "保存优惠",
+        "saving": "保存中...",
+        "cancel": "取消"
+      },
+      "error": {
+        "invalidClass": "该车辆类别对此运营商无效。请选择一个有效的类别。",
+        "invalidLocation": "该取车地点对此运营商无效。请选择一个有效的地点。",
+        "duplicate": "此类别和取车地点的优惠已存在。"
       }
     },
     "addOns": {
@@ -1888,7 +1937,12 @@
       "errorConflict": "该车辆刚刚被预订。请返回并选择其他车辆。",
       "errorGeneric": "无法创建您的预订。请检查后重试。",
       "errorDocs": "预订前需要完成证件验证。请先上传您的证件。",
-      "errorAuth": "您的会话已过期。请重新登录以完成预订。"
+      "errorAuth": "您的会话已过期。请重新登录以完成预订。",
+      "termsChanged": "运营商更新了租赁条款。请在预订前查看最新版本。"
+    },
+    "operatorTerms": {
+      "description": "请查看运营商的租赁条款。您需要同意后才能预订。",
+      "cancel": "取消"
     },
     "disclaimer": {
       "label": "我同意在取车时出示有效驾驶证和国际驾驶许可证，并接受租赁责任条款。",
@@ -1988,5 +2042,10 @@
       "errorBody": "加载申请状态时出现错误。请刷新页面或稍后再试。",
       "loading": "正在加载申请状态…"
     }
+  },
+  "locationCombobox": {
+    "clear": "清除",
+    "open": "打开选项",
+    "noMatches": "无匹配地区"
   }
 }

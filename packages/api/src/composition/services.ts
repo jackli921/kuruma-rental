@@ -9,8 +9,11 @@ import { KvGeocodeCache, type KvStore } from '../services/geocoding/kv-geocode-c
 import { NominatimGeocoder } from '../services/geocoding/nominatim-geocoder'
 import { ThrottledGeocoder } from '../services/geocoding/throttled-geocoder'
 import type { GeocodeCache, Geocoder } from '../services/geocoding/types'
+import { NotificationDispatcher } from '../services/notification-dispatcher'
+import { makeResolveOperatorRecipients } from '../services/operator-recipients'
 import type { PaymentGateway } from '../services/payment/payment-gateway'
 import { StripePaymentGateway } from '../services/payment/stripe-payment-gateway'
+import type { Repos } from './repositories'
 
 /**
  * Infra-resolution policy for the composition root (#1115, audit L3). Decides
@@ -185,4 +188,42 @@ export function resolveGeocoder(overrides?: AppOverrides): Geocoder {
       return kv ? new KvGeocodeCache(kv) : new InMemoryGeocodeCache()
     })()
   return new CachingGeocoder(geocoder, geocodeCache)
+}
+
+/**
+ * The notification dispatcher wiring, shared by createApp's post-commit seam and
+ * the #1125 retry-sweep cron so the two never drift on recipient resolution,
+ * fallback inbox, or deep-link base. Caller passes the already-resolved email
+ * sender + web origin so createApp reuses its locals (no double-construction).
+ * Lives here (not index.ts) alongside the email envelope it resolves, keeping the
+ * composition root under its file-size cap.
+ */
+export function resolveNotificationDispatcher(
+  repos: Repos,
+  emailSender: EmailSender,
+  webBaseUrl: string,
+): NotificationDispatcher {
+  const {
+    notificationLogRepo,
+    operatorRepo,
+    vehicleRepo,
+    userRepo,
+    operatorMembershipRepo,
+    locationRepo,
+  } = repos
+  return new NotificationDispatcher(
+    notificationLogRepo,
+    operatorRepo,
+    vehicleRepo,
+    userRepo,
+    makeResolveOperatorRecipients({ membershipRepo: operatorMembershipRepo, userRepo }),
+    locationRepo,
+    emailSender,
+    {
+      ...resolveEmailConfig(),
+      fallbackOperatorEmail: resolveOperatorAlertEmail(),
+      // #960: empty string (WEB_ORIGIN unset) -> the dispatcher omits the deep link.
+      webBaseUrl,
+    },
+  )
 }

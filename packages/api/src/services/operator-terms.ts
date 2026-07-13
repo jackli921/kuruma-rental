@@ -26,6 +26,21 @@ export type OperatorTermsListResult =
   | { ok: true; versions: OperatorTermsVersion[] }
   | { ok: false; error: string; status: number }
 
+/** The renter-facing published-terms projection (#877 Slice B): the exact fields
+ *  the modal renders and the booking tx seals — kept in lockstep so what the
+ *  renter accepts is what the server signs. No status/draft metadata leaks. */
+export interface PublishedOperatorTerms {
+  version: string
+  locale: string
+  title: string
+  body: string
+  acceptanceLabel: string
+  contentHash: string
+}
+export type PublishedTermsResult =
+  | { ok: true; doc: PublishedOperatorTerms }
+  | { ok: false; error: string; status: number }
+
 function versionNumber(v: string): number {
   const n = Number(v.replace(/^v/, ''))
   return Number.isFinite(n) ? n : 0
@@ -48,6 +63,33 @@ function toVersion(rows: ConsentDocument[]): OperatorTermsVersion {
 
 export class OperatorTermsService {
   constructor(private readonly repo: ConsentRepository) {}
+
+  /**
+   * Renter-facing (#877 Slice B): the operator's latest PUBLISHED+effective terms
+   * in `locale`, falling back to the always-present `en` row when the locale is
+   * missing. Never returns drafts or archived versions. This is the SAME
+   * resolution the booking tx runs (booking-snapshot-insert.ts), so the modal
+   * displays exactly the (version, locale) the server will seal — no drift.
+   */
+  async getPublished(operatorId: string, locale: string, now: Date): Promise<PublishedTermsResult> {
+    const version = await this.repo.findLatestPublishedVersionForOperator(operatorId, TYPE, now)
+    if (!version) return { ok: false, status: 404, error: 'NO_PUBLISHED_TERMS' }
+    const doc =
+      (await this.repo.findPublishedOperatorDocument(operatorId, TYPE, version, locale)) ??
+      (await this.repo.findPublishedOperatorDocument(operatorId, TYPE, version, 'en'))
+    if (!doc) return { ok: false, status: 404, error: 'NO_PUBLISHED_TERMS' }
+    return {
+      ok: true,
+      doc: {
+        version: doc.version,
+        locale: doc.locale,
+        title: doc.title,
+        body: doc.body,
+        acceptanceLabel: doc.acceptanceLabel,
+        contentHash: doc.contentHash,
+      },
+    }
+  }
 
   async list(operatorId: string): Promise<OperatorTermsListResult> {
     const rows = await this.repo.findOperatorDocuments(operatorId, TYPE)

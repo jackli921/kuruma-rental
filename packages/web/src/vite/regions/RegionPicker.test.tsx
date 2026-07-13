@@ -119,45 +119,78 @@ function renderPicker(props: { value?: string | null } = {}) {
   return { onChange, ...utils }
 }
 
+// Each level is a combobox; open it via its own trigger (scoped to that level's group so
+// the three identical "Open options" triggers don't collide), then pick an option by name.
+function openLevel(label: string) {
+  const input = screen.getByLabelText(label)
+  const group = input.closest('div')
+  if (group === null) throw new Error(`no group for ${label}`)
+  fireEvent.click(within(group).getByRole('button', { name: 'Open options' }))
+}
+
+function pickOption(name: string) {
+  fireEvent.click(screen.getByRole('option', { name }))
+}
+
 describe('RegionPicker', () => {
   it('builds the prefecture dropdown from the region list', () => {
     renderPicker()
-    const select = screen.getByLabelText('Prefecture')
-    const optionLabels = within(select)
-      .getAllByRole('option')
-      .map((option) => option.textContent)
+    openLevel('Prefecture')
+    const optionLabels = screen.getAllByRole('option').map((option) => option.textContent)
     expect(optionLabels).toContain('Osaka')
     expect(optionLabels).toContain('Kyoto')
   })
 
+  it('lists English options A-Z with the Anywhere default pinned first', () => {
+    renderPicker()
+    openLevel('Prefecture')
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Anywhere',
+      'Kyoto',
+      'Osaka',
+    ])
+  })
+
   it('emits the prefecture slug when a prefecture is chosen', () => {
     const { onChange } = renderPicker()
-    fireEvent.change(screen.getByLabelText('Prefecture'), { target: { value: 'reg_osaka' } })
+    openLevel('Prefecture')
+    pickOption('Osaka')
     expect(onChange).toHaveBeenCalledWith('osaka')
   })
 
   it('emits the city slug when a city is chosen', () => {
     const { onChange } = renderPicker({ value: 'osaka' })
-    fireEvent.change(screen.getByLabelText('City'), { target: { value: 'reg_osaka_city' } })
+    openLevel('City')
+    pickOption('Osaka City')
     expect(onChange).toHaveBeenCalledWith('osaka-city')
   })
 
   it('emits the area slug when an area is chosen', () => {
     const { onChange } = renderPicker({ value: 'osaka-city' })
-    fireEvent.change(screen.getByLabelText('Area'), { target: { value: 'reg_namba' } })
+    openLevel('Area')
+    pickOption('Namba')
     expect(onChange).toHaveBeenCalledWith('namba')
   })
 
-  it('prefills all three selects from an area-slug value', () => {
+  it('prefills all three levels from an area-slug value', () => {
     renderPicker({ value: 'namba' })
-    expect(screen.getByLabelText<HTMLSelectElement>('Prefecture').value).toBe('reg_osaka')
-    expect(screen.getByLabelText<HTMLSelectElement>('City').value).toBe('reg_osaka_city')
-    expect(screen.getByLabelText<HTMLSelectElement>('Area').value).toBe('reg_namba')
+    expect(screen.getByLabelText<HTMLInputElement>('Prefecture').value).toBe('Osaka')
+    expect(screen.getByLabelText<HTMLInputElement>('City').value).toBe('Osaka City')
+    expect(screen.getByLabelText<HTMLInputElement>('Area').value).toBe('Namba')
+  })
+
+  it('emits the parent slug when a deeper level is cleared to its default', () => {
+    // Clearing the city to "All cities" should filter to the whole prefecture, not null.
+    const { onChange } = renderPicker({ value: 'osaka-city' })
+    openLevel('City')
+    pickOption('All cities')
+    expect(onChange).toHaveBeenCalledWith('osaka')
   })
 
   it('emits null when the prefecture is cleared to Anywhere', () => {
     const { onChange } = renderPicker({ value: 'osaka' })
-    fireEvent.change(screen.getByLabelText('Prefecture'), { target: { value: '' } })
+    openLevel('Prefecture')
+    pickOption('Anywhere')
     expect(onChange).toHaveBeenCalledWith(null)
   })
 
@@ -174,6 +207,13 @@ describe('RegionPicker', () => {
     const { onChange } = renderPicker()
     fireEvent.click(screen.getByRole('button', { name: 'Near me' }))
     expect(onChange).toHaveBeenCalledWith('namba')
+  })
+
+  it('passes a timeout so a hung geolocation prompt cannot stall', () => {
+    renderPicker()
+    fireEvent.click(screen.getByRole('button', { name: 'Near me' }))
+    const options = getCurrentPosition.mock.calls[0]?.[2]
+    expect(options).toMatchObject({ timeout: 10_000 })
   })
 
   it('falls back to the full list when Near me is denied', () => {

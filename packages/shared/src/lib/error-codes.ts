@@ -15,6 +15,7 @@ export const ERROR_CODES = [
   'DOCUMENT_VERIFICATION_REQUIRED',
   'CONSENT_REQUIRED',
   'INVALID_VEHICLE_CLASS',
+  'INVALID_LOCATION', // #464 slice 6
   'CLASS_HAS_ACTIVE_BOOKINGS',
   'LOCATION_HAS_ACTIVE_BOOKINGS',
   // #1206: a booking is attempted against a soft-deactivated operator

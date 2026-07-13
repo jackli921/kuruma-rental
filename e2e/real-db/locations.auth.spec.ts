@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { testSql } from './pg'
+import { pickRegionCascade } from './region-cascade'
 
 // Names this spec creates; cleaned up in afterAll so a reused local branch
 // doesn't accrete rows (a per-run CI branch is disposable, so this is belt-and-
@@ -64,9 +65,11 @@ test.describe('operator locations (authenticated, real DB)', () => {
     // A synthetic address can't be geocoded, so the server can't auto-derive a
     // region and rejects the create ("needs a region"). Pick one explicitly via the
     // prefecture -> city -> area cascade; only the AREA level yields a regionId.
-    await addDialog.locator('#region-prefecture').selectOption({ label: 'Osaka' })
-    await addDialog.locator('#region-city').selectOption({ label: 'Osaka City' })
-    await addDialog.locator('#region-area').selectOption({ label: 'Namba' })
+    await pickRegionCascade(page, addDialog, {
+      prefecture: 'Osaka',
+      city: 'Osaka City',
+      area: 'Namba',
+    })
     await addDialog.getByRole('button', { name: 'Save location' }).click()
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
 

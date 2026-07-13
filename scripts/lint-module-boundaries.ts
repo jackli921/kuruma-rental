@@ -113,7 +113,13 @@ const DEPRECATED_WEB_TREE_BASELINE = 170
 // 165 (#877 operator terms): routes/$locale/_business/manage/terms.tsx composes the
 // operator-terms feature view + api (two reach-ins) — the same sanctioned
 // routes-compose-a-vite-feature pattern as the siblings above.
-const VITE_CROSS_FEATURE_REACH_IN_BASELINE = 166
+// 169 (#464 combo deals): routes/$locale/_business/manage/combo-deals.tsx composes the
+// operator-combo-deals feature view + api AND the operator-classes/api +
+// operator-locations/api query options for the class/location pickers (four
+// reach-ins) — the same sanctioned routes-compose-a-vite-feature pattern.
+// 170 (sign-in-first onboarding): routes/$locale/_renter/application-status.tsx
+// composes the operator-registration api (one reach-in) — same sanctioned pattern.
+const VITE_CROSS_FEATURE_REACH_IN_BASELINE = 170
 
 export type DeprecatedTreeStatus = {
   count: number

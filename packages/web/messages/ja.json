@@ -78,6 +78,9 @@
     }
   },
   "nav": {
+    "groupOperations": "運営",
+    "groupCatalog": "カタログ",
+    "groupSetup": "セットアップ",
     "home": "ホーム",
     "vehicles": "車両",
     "bookings": "予約",
@@ -90,6 +93,7 @@
     "insurance": "保険",
     "terms": "レンタル規約",
     "fees": "料金",
+    "comboDeals": "コンボプラン",
     "addOns": "オプション",
     "menu": "メニュー",
     "language": "言語",
@@ -793,6 +797,51 @@
         "save": "ドラフトを保存",
         "saving": "保存中...",
         "cancel": "キャンセル"
+      }
+    },
+    "comboDeals": {
+      "title": "コンボプラン",
+      "subtitle": "特定の受取場所で車両クラスの割引日額料金を提供します。",
+      "addDeal": "プランを追加",
+      "addSubtitle": "クラスと受取場所の新しいコンボプランを作成します。",
+      "editDeal": "プランを編集",
+      "editSubtitle": "このコンボプランを更新します。",
+      "empty": "コンボプランがまだありません。受取場所のクラス割引料金を追加してください。",
+      "loadError": "コンボプランを読み込めませんでした",
+      "retry": "再試行",
+      "perDay": "1日あたり",
+      "unknownClass": "不明なクラス",
+      "unknownLocation": "不明な場所",
+      "activateAction": "プランを有効化",
+      "deactivateAction": "プランを無効化",
+      "removeAction": "プランを削除",
+      "removeTitle": "{name}を削除しますか？",
+      "removeDescription": "このコンボプランを完全に削除します。この操作は取り消せません。",
+      "removeConfirm": "削除",
+      "removing": "削除中...",
+      "status": {
+        "active": "有効",
+        "inactive": "無効"
+      },
+      "form": {
+        "vehicleClass": "車両クラス",
+        "vehicleClassPlaceholder": "クラスを選択",
+        "pickupLocation": "受取場所",
+        "pickupLocationPlaceholder": "場所を選択",
+        "dayRate": "日額料金（円）",
+        "label": "ラベル（任意）",
+        "labelPlaceholder": "例: 軽自動車クラス割引 — 難波",
+        "labelHint": "このプランの内部名です。お客様には表示されません。",
+        "active": "有効",
+        "activeHint": "無効なプランはリストに残りますが、お客様には提供されません。",
+        "save": "プランを保存",
+        "saving": "保存中...",
+        "cancel": "キャンセル"
+      },
+      "error": {
+        "invalidClass": "その車両クラスはこの事業者では無効です。有効なクラスを選択してください。",
+        "invalidLocation": "その受取場所はこの事業者では無効です。有効な場所を選択してください。",
+        "duplicate": "このクラスと受取場所のプランは既に存在します。"
       }
     },
     "addOns": {
@@ -1888,7 +1937,12 @@
       "errorConflict": "この車両は他のお客様に予約されました。前に戻って別の車両をお選びください。",
       "errorGeneric": "予約を作成できませんでした。内容をご確認のうえ、もう一度お試しください。",
       "errorDocs": "ご予約の前に本人確認書類の確認が必要です。先に書類をアップロードしてください。",
-      "errorAuth": "セッションの有効期限が切れました。予約を完了するには再度サインインしてください。"
+      "errorAuth": "セッションの有効期限が切れました。予約を完了するには再度サインインしてください。",
+      "termsChanged": "運営者がレンタル規約を更新しました。予約する前に最新版をご確認ください。"
+    },
+    "operatorTerms": {
+      "description": "運営者のレンタル規約をご確認ください。予約するには同意が必要です。",
+      "cancel": "キャンセル"
     },
     "disclaimer": {
       "label": "受け取り時に有効な運転免許証および国際運転免許証を提示し、レンタルの責任条件に同意します。",
@@ -1988,5 +2042,10 @@
       "errorBody": "申請ステータスの読み込み中にエラーが発生しました。ページを更新するか、しばらくしてから再度お試しください。",
       "loading": "申請ステータスを読み込んでいます…"
     }
+  },
+  "locationCombobox": {
+    "clear": "クリア",
+    "open": "選択肢を開く",
+    "noMatches": "該当する地域がありません"
   }
 }

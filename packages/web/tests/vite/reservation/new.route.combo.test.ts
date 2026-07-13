@@ -60,7 +60,8 @@ describe('new booking route loader — class-combo subject (#464)', () => {
     vi.mocked(fetchStorefrontDetail).mockResolvedValue({
       vehicles: [],
       classOfferings: [offering],
-      // biome-ignore lint/suspicious/noExplicitAny: partial detail fixture; loader reads only classOfferings
+      storefront: { operatorId: 'op-1' },
+      // biome-ignore lint/suspicious/noExplicitAny: partial detail fixture; loader reads classOfferings + storefront.operatorId
     } as any)
     const result = await loader({
       params: { locale: 'en' },
@@ -89,6 +90,7 @@ describe('new booking route loader — class-combo subject (#464)', () => {
     vi.mocked(fetchStorefrontDetail).mockResolvedValue({
       vehicles: [{ id: 'veh-1' }],
       classOfferings: [],
+      storefront: { operatorId: 'op-1' },
       // biome-ignore lint/suspicious/noExplicitAny: partial detail fixture
     } as any)
     const result = await loader({
