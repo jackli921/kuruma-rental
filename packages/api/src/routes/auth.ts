@@ -20,8 +20,10 @@ import {
 import {
   SESSION_COOKIE,
   type UserRole,
+  isOperatorRole,
   isOperatorSessionRevoked,
   mintSessionToken,
+  resolveCurrentIdentity,
   verifySessionCookie,
 } from '../middleware/auth'
 import type { OperatorGrantService } from '../services/operator-grant'
@@ -34,6 +36,14 @@ export type FindOperatorSlug = (operatorId: string) => Promise<string | undefine
 
 // 7-day lifetime, matching the Auth.js session today (design spec §5.3).
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+
+/** True when the DB-authoritative identity diverges from the token's claims. */
+function identityChanged(
+  claim: { role: UserRole; operatorId?: string },
+  current: { role: UserRole; operatorId?: string },
+): boolean {
+  return claim.role !== current.role || claim.operatorId !== current.operatorId
+}
 
 // HttpOnly so JS can't read it (web learns its session via GET /auth/session);
 // Secure + SameSite=Lax because web and API are same-origin behind the CF Pages
@@ -260,6 +270,51 @@ export function createAuthRoutes(
       // instead of leaving them on a broken portal where every call 401s.
       if (await isOperatorSessionRevoked(c, session.user)) return fail(c, 'Unauthorized', 401)
 
+      // Reconcile-and-remint (§5.1). Operators never reconcile: the revoke check
+      // above 401s any operator token whose projection diverged, so a token that
+      // reaches here with an operator role provably still matches the DB — zero
+      // extra reads for operators. Non-operator tokens (a just-promoted renter) get
+      // one indexed read and a re-mint when their role/operatorId changed.
+      if (!isOperatorRole(session.user.role)) {
+        const current = await resolveCurrentIdentity(c, session.user)
+        if (current && identityChanged(session.user, current)) {
+          const secret = process.env.AUTH_SECRET
+          if (!secret) return fail(c, 'Server auth is not configured', 500)
+          const slug =
+            current.operatorId !== undefined && findOperatorSlug
+              ? await findOperatorSlug(current.operatorId)
+              : undefined
+          const csrf = randomToken()
+          const reminted = await mintSessionToken(
+            {
+              sub: session.user.id,
+              role: current.role,
+              csrf,
+              ...(current.operatorId !== undefined ? { operatorId: current.operatorId } : {}),
+              ...(slug !== undefined ? { operatorSlug: slug } : {}),
+              // C1: carry the EXISTING display profile forward — the DB read has none.
+              ...(session.profile ?? {}),
+            },
+            secret,
+          )
+          setSessionCookie(c, reminted)
+          // Set-Cookie on a GET → forbid any edge/browser cache from serving a stale
+          // identity/cookie pair (M3).
+          c.header('Cache-Control', 'no-store')
+          return ok(c, {
+            user: {
+              id: session.user.id,
+              role: current.role,
+              ...(current.operatorId !== undefined ? { operatorId: current.operatorId } : {}),
+              ...(slug !== undefined ? { operatorSlug: slug } : {}),
+              ...session.profile,
+            },
+            csrfToken: csrf,
+          })
+        }
+      }
+
+      // No change (or operator token): return the token identity unchanged.
       // Spread the display-only profile (name/email/image) the token carries.
       // `profile` holds only the keys actually present, so the user object never
       // gains a stray `name: undefined` (exactOptionalPropertyTypes).

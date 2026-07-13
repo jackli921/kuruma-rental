@@ -4,7 +4,7 @@ import { getCookie } from 'hono/cookie'
 import { toCallerContext } from '../auth/context'
 import { requirePlatformRead } from '../auth/guards'
 import { SESSION_COOKIE, verifyApiKey, verifyJwt } from '../auth/jwt'
-import { type AuthUser, isAuthUser, isOperatorRole } from '../auth/roles'
+import { type AuthUser, type UserRole, isAuthUser, isOperatorRole } from '../auth/roles'
 import { fail } from '../routes/helpers'
 
 // The auth concerns are split across cohesive auth/ modules (#724); this file is
@@ -99,6 +99,37 @@ export async function isOperatorSessionRevoked(
   if (!isOperatorRole(user.role)) return false
   const check = c.get(OPERATOR_REVOCATION_CHECK)
   return typeof check === 'function' ? Boolean(await check(user)) : false
+}
+
+const IDENTITY_RESOLVER = 'currentIdentityResolver'
+
+/** The DB-authoritative identity for a user id: current role + operator tenant.
+ *  operatorId is omitted for non-operator roles (mirrors AuthUser). */
+export interface CurrentIdentity {
+  readonly role: UserRole
+  readonly operatorId?: string
+}
+
+/** Injected DB read for the session reconcile (§5.1). Returns undefined when the
+ *  user id no longer resolves (deleted). Registered app-wide in the composition
+ *  root next to provideOperatorSessionRevocation. */
+export type CurrentIdentityResolver = (user: AuthUser) => Promise<CurrentIdentity | undefined>
+
+export function provideIdentityResolver(resolve: CurrentIdentityResolver): MiddlewareHandler {
+  return async (c: Context, next) => {
+    c.set(IDENTITY_RESOLVER, resolve)
+    return next()
+  }
+}
+
+/** Read the context-supplied identity resolver. Fail-open (undefined) when none is
+ *  registered — unit apps that don't wire it fall through to a no-op reconcile. */
+export async function resolveCurrentIdentity(
+  c: { get: (key: string) => unknown },
+  user: AuthUser,
+): Promise<CurrentIdentity | undefined> {
+  const resolve = c.get(IDENTITY_RESOLVER)
+  return typeof resolve === 'function' ? resolve(user) : undefined
 }
 
 async function resolveCaller(c: Context): Promise<AuthUser | null> {

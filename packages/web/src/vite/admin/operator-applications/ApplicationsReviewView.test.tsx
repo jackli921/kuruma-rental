@@ -1,5 +1,4 @@
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../../messages/en.json'
@@ -70,43 +69,23 @@ describe('ApplicationsReviewView', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(en.admin.applications.approveFailed)
   })
 
-  it('reveals every approved invite link, so approving a second row never drops the first', () => {
+  it('shows the plain Approved confirmation for every approved id, so approving a second row never drops the first', () => {
     renderView([app('a1', 'Osaka Cars'), app('a2', 'Kyoto Wheels')], {
-      approvedInvites: { a1: '/provider/invite/tok_a1', a2: '/provider/invite/tok_a2' },
+      approvedIds: new Set(['a1', 'a2']),
     })
-    expect(screen.getByDisplayValue('/provider/invite/tok_a1')).not.toBeNull()
-    expect(screen.getByDisplayValue('/provider/invite/tok_a2')).not.toBeNull()
+    // Both cards show the approved confirmation text
+    expect(screen.getAllByText(en.admin.applications.approved)).toHaveLength(2)
+    // No invite link inputs anywhere
+    expect(screen.queryByRole('textbox')).toBeNull()
   })
 
-  it('calls onRemint with the row id when its Regenerate button is clicked', async () => {
-    const onRemint = vi.fn()
-    renderView([app('a1', 'Osaka Cars')], {
-      approvedInvites: { a1: '/provider/invite/tok_a1' },
-      onRemint,
-    })
-    await userEvent.click(screen.getByRole('button', { name: en.admin.applications.regenerate }))
-    expect(onRemint).toHaveBeenCalledWith('a1')
-  })
-
-  it('shows the generic retry remint error only on the matching row', () => {
+  it('a card whose id is NOT in approvedIds still shows normal controls', () => {
     renderView([app('a1', 'Osaka Cars'), app('a2', 'Kyoto Wheels')], {
-      approvedInvites: { a1: '/provider/invite/tok_a1', a2: '/provider/invite/tok_a2' },
-      onRemint: vi.fn(),
-      remintError: { id: 'a2', terminal: false },
+      approvedIds: new Set(['a1']),
     })
-    const alerts = screen.getAllByRole('alert')
-    expect(alerts).toHaveLength(1)
-    expect(alerts[0]).toHaveTextContent(en.admin.applications.regenerateFailed)
-  })
-
-  it('shows the terminal "no longer available" message for a 404/409 remint error', () => {
-    renderView([app('a1', 'Osaka Cars')], {
-      approvedInvites: { a1: '/provider/invite/tok_a1' },
-      onRemint: vi.fn(),
-      remintError: { id: 'a1', terminal: true },
-    })
-    const alert = screen.getByRole('alert')
-    expect(alert).toHaveTextContent(en.admin.applications.regenerateUnavailable)
-    expect(alert).not.toHaveTextContent(en.admin.applications.regenerateFailed)
+    // a1 approved, a2 not
+    expect(screen.getAllByText(en.admin.applications.approved)).toHaveLength(1)
+    // a2 still has an Approve button
+    expect(screen.getAllByRole('button', { name: en.admin.applications.approve })).toHaveLength(1)
   })
 })

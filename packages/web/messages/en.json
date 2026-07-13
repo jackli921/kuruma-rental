@@ -1011,7 +1011,8 @@
       "form": {
         "businessName": "Business name",
         "contactName": "Contact name",
-        "contactEmail": "Email",
+        "accountEmail": "Account email",
+        "accountEmailHint": "We'll use your signed-in account's email.",
         "contactPhone": "Phone",
         "serviceArea": "Service area (city/prefecture)",
         "fleetSize": "Estimated fleet size",
@@ -1029,7 +1030,6 @@
         "errors": {
           "businessName": "Please enter your business name.",
           "contactName": "Please enter a contact name.",
-          "contactEmail": "Please enter a valid email address.",
           "contactPhone": "Please enter a valid phone number.",
           "serviceArea": "Please enter your service area.",
           "estimatedFleetSize": "Please select a fleet size.",
@@ -1516,15 +1516,7 @@
       "error": "Couldn't record the rejection. Try again.",
       "approve": "Approve",
       "approving": "Approving…",
-      "inviteReadyLabel": "Invitation link",
-      "inviteReadyHint": "Send this one-time link to the operator to finish onboarding.",
-      "copy": "Copy",
-      "copied": "Copied",
       "approved": "Approved",
-      "regenerate": "Regenerate link",
-      "regenerating": "Regenerating…",
-      "regenerateFailed": "Couldn't regenerate the invite link. Try again.",
-      "regenerateUnavailable": "This invite can no longer be regenerated. The owner may already be onboarded.",
       "alreadyReviewed": "This application was already reviewed, or the email already belongs to an operator.",
       "approveFailed": "Couldn't approve the application. Try again.",
       "loadError": "Couldn't load the applications queue.",
@@ -2027,6 +2019,29 @@
     "approximately": "approximately",
     "disclaimer": "Indicative only — you're charged in JPY",
     "asOf": "Rates as of {date}"
+  },
+  "operator": {
+    "welcome": {
+      "title": "Your application is under review",
+      "body": "We've received your operator application and our team is reviewing it. You'll receive an email once a decision has been made.",
+      "hint": "Already approved? Try refreshing the page."
+    },
+    "applicationStatus": {
+      "title": "Application status",
+      "noApplication": "You haven't submitted an operator application yet.",
+      "applyNow": "Apply now",
+      "pendingTitle": "Your application is under review",
+      "pendingBody": "We've received your application and our team is reviewing it. You'll hear from us by email once a decision has been made.",
+      "approvedTitle": "Application approved",
+      "approvedBody": "Congratulations — your operator account is ready.",
+      "goToPortal": "Go to your portal",
+      "rejectedTitle": "Application not approved",
+      "rejectedBody": "Unfortunately your application was not approved.",
+      "rejectionReason": "Reason: {reason}",
+      "errorTitle": "We couldn't load your application",
+      "errorBody": "Something went wrong loading your application status. Please refresh the page or try again in a moment.",
+      "loading": "Loading your application status…"
+    }
   },
   "locationCombobox": {
     "clear": "Clear",

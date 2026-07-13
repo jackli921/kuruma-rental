@@ -10,14 +10,9 @@ const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v)
 export const operatorApplicationSchema = z.object({
   businessName: z.string().trim().min(1).max(120),
   contactName: z.string().trim().min(1).max(100),
-  // Email is lowercased so stored value and comparison always use one form.
-  // Mirrors the same pattern in provider-invite.ts.
-  contactEmail: z
-    .string()
-    .trim()
-    .min(1, 'Email is required')
-    .email('Must be a valid email')
-    .transform((v) => v.toLowerCase()),
+  // Sign-in-first (#877): contactEmail is NOT a client field. The API derives the
+  // authoritative applicant email from the authenticated account server-side, so a
+  // caller can never spoof it in the request body.
   contactPhone: z.string().trim().min(3).max(40),
   serviceArea: z.string().trim().min(1).max(120),
   estimatedFleetSize: z.enum(OPERATOR_APPLICATION_FLEET_SIZES),

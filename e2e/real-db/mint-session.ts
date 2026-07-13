@@ -130,6 +130,19 @@ export function mintRenterSessionToken(): Promise<string> {
   return mintSession(RENTER)
 }
 
+/**
+ * Session cookie value for an ARBITRARY RENTER email — used by the sign-in-first
+ * onboarding spec, which inserts a throwaway RENTER applicant at runtime (not in
+ * the seed) and needs a stale RENTER token for it. Mirrors mintOperatorSessionTokenFor
+ * but with role RENTER: findUser resolves the id off the freshly-inserted `users`
+ * row (operatorId null for a renter, so the token omits the tenant claim), so the
+ * SAME token string can later be re-presented AFTER server-side promotion to prove
+ * the stale session reconciles. Insert the applicant row BEFORE calling this.
+ */
+export function mintRenterSessionTokenFor(email: string, name = 'E2E Applicant'): Promise<string> {
+  return mintSession({ email, name, role: 'RENTER' })
+}
+
 /** Session cookie value for the seeded PLATFORM_ADMIN persona (#462 revenue tab). */
 export function mintAdminSessionToken(): Promise<string> {
   return mintSession(ADMIN)

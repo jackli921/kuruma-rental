@@ -771,6 +771,13 @@
       "when": 1783885383845,
       "tag": "0109_class_rate_plans_location_composite_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1783904776960,
+      "tag": "0110_link_operator_application_to_applicant",
+      "breakpoints": true
     }
   ]
 }

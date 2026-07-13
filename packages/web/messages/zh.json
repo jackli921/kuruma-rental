@@ -1011,7 +1011,8 @@
       "form": {
         "businessName": "企业名称",
         "contactName": "联系人姓名",
-        "contactEmail": "电子邮箱",
+        "accountEmail": "账户邮箱",
+        "accountEmailHint": "我们将使用您已登录账户的邮箱。",
         "contactPhone": "联系电话",
         "serviceArea": "服务区域（城市/都道府县）",
         "fleetSize": "预估车队规模",
@@ -1029,7 +1030,6 @@
         "errors": {
           "businessName": "请输入企业名称。",
           "contactName": "请输入联系人姓名。",
-          "contactEmail": "请输入有效的电子邮箱地址。",
           "contactPhone": "请输入有效的电话号码。",
           "serviceArea": "请输入服务区域。",
           "estimatedFleetSize": "请选择车队规模。",
@@ -1516,15 +1516,7 @@
       "error": "无法记录拒绝操作，请重试。",
       "approve": "批准",
       "approving": "批准中…",
-      "inviteReadyLabel": "邀请链接",
-      "inviteReadyHint": "将此一次性链接发送给运营商以完成入驻。",
-      "copy": "复制",
-      "copied": "已复制",
       "approved": "已批准",
-      "regenerate": "重新生成链接",
-      "regenerating": "重新生成中…",
-      "regenerateFailed": "无法重新生成邀请链接。请重试。",
-      "regenerateUnavailable": "此邀请无法再重新生成。负责人可能已完成入驻。",
       "alreadyReviewed": "该申请已被审核，或该邮箱已归属某运营商。",
       "approveFailed": "无法批准该申请，请重试。",
       "loadError": "无法加载申请队列。",
@@ -2027,6 +2019,29 @@
     "approximately": "约",
     "disclaimer": "仅供参考 — 实际以日元（JPY）结算",
     "asOf": "汇率基准日 {date}"
+  },
+  "operator": {
+    "welcome": {
+      "title": "您的申请正在审核中",
+      "body": "我们已收到您的运营商申请，团队正在审核中。审核完成后，您将收到电子邮件通知。",
+      "hint": "已获批准？请刷新页面重试。"
+    },
+    "applicationStatus": {
+      "title": "申请状态",
+      "noApplication": "您尚未提交运营商申请。",
+      "applyNow": "立即申请",
+      "pendingTitle": "您的申请正在审核中",
+      "pendingBody": "我们已收到您的申请，团队正在审核中。审核完成后，您将收到电子邮件通知。",
+      "approvedTitle": "申请已批准",
+      "approvedBody": "恭喜您，您的运营商账户已准备就绪。",
+      "goToPortal": "前往运营商门户",
+      "rejectedTitle": "申请未获批准",
+      "rejectedBody": "很遗憾，您的申请未获批准。",
+      "rejectionReason": "原因：{reason}",
+      "errorTitle": "无法加载您的申请信息",
+      "errorBody": "加载申请状态时出现错误。请刷新页面或稍后再试。",
+      "loading": "正在加载申请状态…"
+    }
   },
   "locationCombobox": {
     "clear": "清除",

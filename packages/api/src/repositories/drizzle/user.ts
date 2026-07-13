@@ -40,6 +40,15 @@ export class DrizzleUserRepository implements UserRepository {
     return rows.map(maskPlaceholderEmail) as User[]
   }
 
+  async findById(id: string): Promise<User | undefined> {
+    const [row] = await this.db
+      .select(userColumns)
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1)
+    return row ? (maskPlaceholderEmail(row) as User) : undefined
+  }
+
   async search(query: string): Promise<User[]> {
     const pattern = `%${query}%`
     const rows = await this.db

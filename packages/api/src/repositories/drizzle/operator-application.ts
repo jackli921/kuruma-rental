@@ -53,4 +53,14 @@ export class DrizzleOperatorApplicationRepository implements OperatorApplication
       .returning()
     return row ? toOperatorApplication(row) : undefined
   }
+
+  async findByApplicantUserId(userId: string): Promise<OperatorApplication | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(operatorApplications)
+      .where(eq(operatorApplications.applicantUserId, userId))
+      .orderBy(desc(operatorApplications.createdAt))
+      .limit(1)
+    return row ? toOperatorApplication(row) : undefined
+  }
 }
