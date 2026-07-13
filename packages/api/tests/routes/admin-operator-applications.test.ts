@@ -3,8 +3,12 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createApp } from '../../src/index'
 import {
   InMemoryOperatorApplicationRepository,
+  InMemoryOperatorMembershipRepository,
+  InMemoryOperatorRepository,
   InMemoryProviderInviteRepository,
+  InMemoryUserRepository,
 } from '../../src/repositories/in-memory'
+import type { OperatorApplication, User } from '../../src/stores'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 
 async function bearer(payload: Record<string, unknown>): Promise<Record<string, string>> {
@@ -39,30 +43,103 @@ function makeApp(extra: Parameters<typeof createApp>[0] = {}) {
   return { app, operatorApplicationRepo }
 }
 
+// Sign-in-first (§6.2): approval promotes the application's linked applicant
+// account, so a PENDING row must carry `applicantUserId` and that user must exist
+// (setOperatorAccess is a no-op if absent). This harness pre-seeds a linked
+// applicant + PENDING application through injected in-memory repos so the approve
+// route exercises the real promotion path. The membership/user stores are shared
+// with the default runOperatorApproval wiring (same singletons), so the OWNER
+// membership + projection writes land where the test can read them.
+function makeApprovableApp(overrides: Partial<typeof validApplication> = {}) {
+  setupAuthEnv()
+  const applicationStore = new Map<string, OperatorApplication>()
+  const userStore = new Map<string, User>()
+  const operatorApplicationRepo = new InMemoryOperatorApplicationRepository(applicationStore)
+  const userRepo = new InMemoryUserRepository(userStore)
+  const operatorMembershipRepo = new InMemoryOperatorMembershipRepository()
+  const operatorRepo = new InMemoryOperatorRepository()
+  const providerInviteRepo = new InMemoryProviderInviteRepository()
+  const fields = { ...validApplication, ...overrides }
+  return {
+    async seed(): Promise<{ id: string; applicantUserId: string }> {
+      const applicant = await userRepo.quickCreate({
+        name: fields.contactName,
+        email: fields.contactEmail,
+        phone: fields.contactPhone,
+        language: 'en',
+      })
+      const created = await operatorApplicationRepo.create({
+        businessName: fields.businessName,
+        contactName: fields.contactName,
+        contactEmail: fields.contactEmail,
+        contactPhone: fields.contactPhone,
+        serviceArea: fields.serviceArea,
+        estimatedFleetSize: fields.estimatedFleetSize as OperatorApplication['estimatedFleetSize'],
+        website: null,
+        businessLicenseNumber: null,
+        businessType: null,
+        message: null,
+        submittedLocale: fields.submittedLocale,
+        applicantUserId: applicant.id,
+      })
+      return { id: created.id, applicantUserId: applicant.id }
+    },
+    app: createApp({
+      operatorApplicationRepo,
+      userRepo,
+      operatorMembershipRepo,
+      operatorRepo,
+      providerInviteRepo,
+    }),
+    operatorApplicationRepo,
+    userRepo,
+    operatorMembershipRepo,
+    operatorRepo,
+    providerInviteRepo,
+  }
+}
+
+// Sign-in-first (#877): POST /operator-applications now requires a session and
+// derives the email server-side, so these admin-queue tests seed PENDING rows
+// straight through the repo (the submit auth path is covered in the dedicated
+// operator-applications route test). The contactEmail override still distinguishes
+// rows for the list/order/filter assertions.
 async function seedApplication(
-  app: ReturnType<typeof makeApp>['app'],
-  overrides: Partial<typeof validApplication> = {},
+  harness: ReturnType<typeof makeApp>,
+  overrides: Partial<typeof validApplication> & { applicantUserId?: string | null } = {},
 ): Promise<{ id: string; status: string }> {
-  const res = await app.request('/operator-applications', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...validApplication, ...overrides }),
+  const { applicantUserId, ...rest } = overrides
+  const fields = { ...validApplication, ...rest }
+  const created = await harness.operatorApplicationRepo.create({
+    businessName: fields.businessName,
+    contactName: fields.contactName,
+    contactEmail: fields.contactEmail,
+    contactPhone: fields.contactPhone,
+    serviceArea: fields.serviceArea,
+    estimatedFleetSize: fields.estimatedFleetSize as OperatorApplication['estimatedFleetSize'],
+    website: null,
+    businessLicenseNumber: null,
+    businessType: null,
+    message: null,
+    submittedLocale: fields.submittedLocale,
+    // Sign-in-first rows always carry an applicant; pass `applicantUserId: null` to
+    // seed a legacy/anonymous row for the manual-invite-refusal path.
+    applicantUserId: applicantUserId === undefined ? crypto.randomUUID() : applicantUserId,
   })
-  const body = (await res.json()) as { data: { id: string; status: string } }
-  return body.data
+  return { id: created.id, status: created.status }
 }
 
 // Seeds two applications with distinct createdAt (fake timers) so newest-first
 // ordering is deterministic — same-ms stamps otherwise fall back to the random
 // UUID tie-break (mirrors the in-memory repo's own list unit test).
 async function seedFirstThenSecond(
-  app: ReturnType<typeof makeApp>['app'],
+  harness: ReturnType<typeof makeApp>,
 ): Promise<{ first: { id: string }; second: { id: string } }> {
   vi.useFakeTimers()
   vi.setSystemTime(new Date(2024, 0, 1, 0, 0, 0))
-  const first = await seedApplication(app)
+  const first = await seedApplication(harness)
   vi.setSystemTime(new Date(2024, 0, 1, 0, 0, 1))
-  const second = await seedApplication(app, {
+  const second = await seedApplication(harness, {
     contactEmail: 'second@example.com',
     businessName: 'Second Rentals',
   })
@@ -78,7 +155,7 @@ describe('GET /admin/operator-applications', () => {
   })
 
   test('PLATFORM_ADMIN with ?status=PENDING sees all PENDING apps (newest-first)', async () => {
-    const { first, second } = await seedFirstThenSecond(harness.app)
+    const { first, second } = await seedFirstThenSecond(harness)
 
     const res = await harness.app.request('/admin/operator-applications?status=PENDING', {
       headers: await bearer(ADMIN),
@@ -107,8 +184,8 @@ describe('GET /admin/operator-applications', () => {
   })
 
   test('PLATFORM_ADMIN with no status filter returns all applications', async () => {
-    await seedApplication(harness.app)
-    await seedApplication(harness.app, { contactEmail: 'other@example.com' })
+    await seedApplication(harness)
+    await seedApplication(harness, { contactEmail: 'other@example.com' })
 
     const res = await harness.app.request('/admin/operator-applications', {
       headers: await bearer(ADMIN),
@@ -120,8 +197,8 @@ describe('GET /admin/operator-applications', () => {
   })
 
   test('?status filter excludes non-matching rows', async () => {
-    const toReject = await seedApplication(harness.app)
-    const staysPending = await seedApplication(harness.app, {
+    const toReject = await seedApplication(harness)
+    const staysPending = await seedApplication(harness, {
       contactEmail: 'pending@example.com',
       businessName: 'Pending Rentals',
     })
@@ -180,7 +257,7 @@ describe('GET /admin/operator-applications', () => {
   })
 
   test('?limit caps the returned page and ?offset walks to the next one', async () => {
-    const { first, second } = await seedFirstThenSecond(harness.app)
+    const { first, second } = await seedFirstThenSecond(harness)
 
     const capped = await harness.app.request('/admin/operator-applications?limit=1', {
       headers: await bearer(ADMIN),
@@ -207,7 +284,7 @@ describe('POST /admin/operator-applications/:id/reject', () => {
   })
 
   test('PLATFORM_ADMIN rejects a PENDING application (200)', async () => {
-    const { id } = await seedApplication(harness.app)
+    const { id } = await seedApplication(harness)
 
     const res = await harness.app.request(`/admin/operator-applications/${id}/reject`, {
       method: 'POST',
@@ -231,7 +308,7 @@ describe('POST /admin/operator-applications/:id/reject', () => {
   })
 
   test('non-admin (RENTER) cannot reject (403)', async () => {
-    const { id } = await seedApplication(harness.app)
+    const { id } = await seedApplication(harness)
 
     const res = await harness.app.request(`/admin/operator-applications/${id}/reject`, {
       method: 'POST',
@@ -252,7 +329,7 @@ describe('POST /admin/operator-applications/:id/reject', () => {
   })
 
   test('rejecting an already-rejected (non-PENDING) application → 404', async () => {
-    const { id } = await seedApplication(harness.app)
+    const { id } = await seedApplication(harness)
     const headers = await bearer(ADMIN)
     const body = JSON.stringify({ rejectionReason: 'not eligible' })
     const reject = () =>
@@ -268,7 +345,7 @@ describe('POST /admin/operator-applications/:id/reject', () => {
   })
 
   test('empty rejectionReason → 400 (schema min(1))', async () => {
-    const { id } = await seedApplication(harness.app)
+    const { id } = await seedApplication(harness)
 
     const res = await harness.app.request(`/admin/operator-applications/${id}/reject`, {
       method: 'POST',
@@ -280,9 +357,9 @@ describe('POST /admin/operator-applications/:id/reject', () => {
 })
 
 describe('POST /admin/operator-applications/:id/approve', () => {
-  test('PLATFORM_ADMIN approves a PENDING application (200) and gets {operatorId, inviteUrl, expiresAt}', async () => {
-    const harness = makeApp()
-    const { id } = await seedApplication(harness.app)
+  test('PLATFORM_ADMIN approves a linked PENDING application (200) → promotes the applicant, returns {operatorId, operatorSlug}', async () => {
+    const harness = makeApprovableApp()
+    const { id, applicantUserId } = await harness.seed()
 
     const res = await harness.app.request(`/admin/operator-applications/${id}/approve`, {
       method: 'POST',
@@ -291,22 +368,31 @@ describe('POST /admin/operator-applications/:id/approve', () => {
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
       success: boolean
-      data: { operatorId: string; inviteUrl: string; expiresAt: string }
+      data: { operatorId: string; operatorSlug: string }
     }
     expect(body.success).toBe(true)
     const { data } = body
-    expect(typeof data.operatorId).toBe('string')
     expect(data.operatorId.length).toBeGreaterThan(0)
-    // WEB_ORIGIN is unset in tests so the base is '' → path-only URL
-    expect(data.inviteUrl).toMatch(/\/provider\/invite\//)
-    expect(typeof data.expiresAt).toBe('string')
-    // The route projects to exactly 3 fields — the internal operatorSlug is not leaked.
-    expect(data).not.toHaveProperty('operatorSlug')
+    expect(data.operatorSlug).toBe('osaka-rentals')
+    // Sign-in-first: no invite link is issued on the promotion path.
+    expect(data).not.toHaveProperty('inviteUrl')
+    expect(data).not.toHaveProperty('expiresAt')
+
+    // The applicant's own account is now the OPERATOR_OWNER of the new operator.
+    const membership = await harness.operatorMembershipRepo.findActiveByUserId(applicantUserId)
+    expect(membership).toMatchObject({
+      operatorId: data.operatorId,
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+    })
+    // And the application is claimed + linked to the operator.
+    const reloaded = await harness.operatorApplicationRepo.findById(id)
+    expect(reloaded).toMatchObject({ status: 'APPROVED', operatorId: data.operatorId })
   })
 
   test('second approve on the same id → 409 (already reviewed)', async () => {
-    const harness = makeApp()
-    const { id } = await seedApplication(harness.app)
+    const harness = makeApprovableApp()
+    const { id } = await harness.seed()
     const headers = await bearer(ADMIN)
 
     const approve = () =>
@@ -317,6 +403,19 @@ describe('POST /admin/operator-applications/:id/approve', () => {
 
     expect((await approve()).status).toBe(200)
     expect((await approve()).status).toBe(409)
+  })
+
+  test('approving a legacy application with no linked account → 409 (use the manual invite)', async () => {
+    // A legacy/anonymous row predates sign-in-first submit and carries no
+    // applicantUserId, so approval refuses it and directs the admin to the manual invite.
+    const harness = makeApp()
+    const { id } = await seedApplication(harness, { applicantUserId: null })
+
+    const res = await harness.app.request(`/admin/operator-applications/${id}/approve`, {
+      method: 'POST',
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(409)
   })
 
   test('unknown application id → 404 (distinct from the 409 already-reviewed path)', async () => {
@@ -340,7 +439,7 @@ describe('POST /admin/operator-applications/:id/approve', () => {
 
   test('non-admin (RENTER) cannot approve (403)', async () => {
     const harness = makeApp()
-    const { id } = await seedApplication(harness.app)
+    const { id } = await seedApplication(harness)
 
     const res = await harness.app.request(`/admin/operator-applications/${id}/approve`, {
       method: 'POST',
@@ -349,9 +448,11 @@ describe('POST /admin/operator-applications/:id/approve', () => {
     expect(res.status).toBe(403)
   })
 
-  test('C1 — approving an email that already has a live pending invite → 409', async () => {
-    const providerInviteRepo = new InMemoryProviderInviteRepository()
-    await providerInviteRepo.create({
+  test('C1 — approving a linked email that already has a live pending invite → 409', async () => {
+    const harness = makeApprovableApp()
+    const { id } = await harness.seed()
+    // The same email already holds a live PENDING invite at another operator.
+    await harness.providerInviteRepo.create({
       email: validApplication.contactEmail,
       operatorId: 'op-existing',
       role: 'OPERATOR_OWNER',
@@ -361,80 +462,11 @@ describe('POST /admin/operator-applications/:id/approve', () => {
       invitedByUserId: 'seed-admin',
       acceptedByUserId: null,
     })
-    const harness = makeApp({ providerInviteRepo })
-    const { id } = await seedApplication(harness.app)
 
     const res = await harness.app.request(`/admin/operator-applications/${id}/approve`, {
       method: 'POST',
       headers: await bearer(ADMIN),
     })
     expect(res.status).toBe(409)
-  })
-})
-
-describe('POST /admin/operator-applications/:id/remint-invite', () => {
-  async function approve(
-    app: ReturnType<typeof makeApp>['app'],
-    id: string,
-  ): Promise<{ inviteUrl: string }> {
-    const res = await app.request(`/admin/operator-applications/${id}/approve`, {
-      method: 'POST',
-      headers: await bearer(ADMIN),
-    })
-    const body = (await res.json()) as { data: { inviteUrl: string } }
-    return body.data
-  }
-
-  test('PLATFORM_ADMIN re-mints an approved application (200) with a fresh invite link', async () => {
-    const harness = makeApp()
-    const { id } = await seedApplication(harness.app)
-    const approved = await approve(harness.app, id)
-
-    const res = await harness.app.request(`/admin/operator-applications/${id}/remint-invite`, {
-      method: 'POST',
-      headers: await bearer(ADMIN),
-    })
-    expect(res.status).toBe(200)
-    const body = (await res.json()) as {
-      success: boolean
-      data: { inviteUrl: string; expiresAt: string }
-    }
-    expect(body.success).toBe(true)
-    expect(body.data.inviteUrl).toMatch(/\/provider\/invite\//)
-    // A brand-new link, not the one the approval issued.
-    expect(body.data.inviteUrl).not.toBe(approved.inviteUrl)
-    expect(typeof body.data.expiresAt).toBe('string')
-  })
-
-  test('re-minting an unapproved (PENDING) application → 409', async () => {
-    const harness = makeApp()
-    const { id } = await seedApplication(harness.app)
-
-    const res = await harness.app.request(`/admin/operator-applications/${id}/remint-invite`, {
-      method: 'POST',
-      headers: await bearer(ADMIN),
-    })
-    expect(res.status).toBe(409)
-  })
-
-  test('unknown application id → 404', async () => {
-    const harness = makeApp()
-    const randomId = '00000000-0000-0000-0000-000000000000'
-    const res = await harness.app.request(
-      `/admin/operator-applications/${randomId}/remint-invite`,
-      { method: 'POST', headers: await bearer(ADMIN) },
-    )
-    expect(res.status).toBe(404)
-  })
-
-  test('non-admin (RENTER) cannot re-mint (403)', async () => {
-    const harness = makeApp()
-    const { id } = await seedApplication(harness.app)
-
-    const res = await harness.app.request(`/admin/operator-applications/${id}/remint-invite`, {
-      method: 'POST',
-      headers: await bearer({ sub: 'u1', role: 'RENTER' }),
-    })
-    expect(res.status).toBe(403)
   })
 })

@@ -15,6 +15,10 @@ export class InMemoryUserRepository implements UserRepository {
     })
   }
 
+  async findById(id: string): Promise<User | undefined> {
+    return this.store.get(id)
+  }
+
   async search(query: string): Promise<User[]> {
     const lower = query.toLowerCase()
     return [...this.store.values()]

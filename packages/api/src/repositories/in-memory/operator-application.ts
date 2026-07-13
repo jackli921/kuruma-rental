@@ -32,6 +32,7 @@ export class InMemoryOperatorApplicationRepository implements OperatorApplicatio
       ...data,
       id: crypto.randomUUID(),
       status: 'PENDING',
+      applicantUserId: data.applicantUserId ?? null,
       operatorId: null,
       reviewedByUserId: null,
       reviewedAt: null,
@@ -97,5 +98,12 @@ export class InMemoryOperatorApplicationRepository implements OperatorApplicatio
     }
     this.store.set(id, next)
     return next
+  }
+
+  async findByApplicantUserId(userId: string): Promise<OperatorApplication | undefined> {
+    return [...this.store.values()]
+      .filter((a) => a.applicantUserId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .at(0)
   }
 }

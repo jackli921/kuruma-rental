@@ -403,6 +403,10 @@ export interface VehicleRepository {
  */
 export interface UserRepository {
   findByIds(ids: string[]): Promise<User[]>
+  // #877 sign-in-first: resolve the AUTHORITATIVE account (role/email) for a single
+  // user id — the operator-application submit reads the applicant's real email from
+  // here rather than trusting the session token's display email or a body field.
+  findById(id: string): Promise<User | undefined>
   search(query: string): Promise<User[]>
   quickCreate(data: {
     name: string

@@ -4,7 +4,6 @@ import {
   OPERATORS_SLUG_CONSTRAINT,
   OPERATOR_APPLICATION_EMAIL_CONSTRAINT,
   PG_ERROR,
-  PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT,
   pgConstraintName,
   pgErrorCode,
 } from '../pg-errors'
@@ -12,12 +11,14 @@ import type {
   OperatorApplicationListParams,
   OperatorApplicationRepository,
   OperatorApprovalRepos,
+  OperatorMembershipRepository,
   RunOperatorApproval,
+  UserRepository,
 } from '../repositories/types'
 import type { OperatorApplication } from '../stores'
-import { type MintedInvite, mintInvite } from './invite-mint'
-import type { ProviderInviteAuditEvent } from './provider-invite'
-import { buildProviderInviteRecord } from './provider-invite-record'
+import type { EmailSender } from './email/email-sender'
+import { renderOperatorApplicationApproved } from './email/templates/operator-application-approved'
+import { renderOperatorApplicationRejected } from './email/templates/operator-application-rejected'
 import { resolveUniqueSlug, slugify } from './slug'
 
 // A concurrent slug race (two similarly-named businesses approved at once) is
@@ -42,28 +43,44 @@ export interface OperatorApplicationRejectedAuditEvent {
   readonly applicationId: string
 }
 
-// Widened to include ProviderInviteAuditEvent because approve() also mints the
-// OPERATOR_OWNER invite and emits PROVIDER_INVITE_CREATED through the same sink.
+// Sign-in-first (§6.2): approval promotes the applicant account directly and emits
+// no invite event, so the union carries only this service's two review events.
 export type OperatorApplicationAuditEvent =
   | OperatorApplicationApprovedAuditEvent
   | OperatorApplicationRejectedAuditEvent
-  | ProviderInviteAuditEvent
 
 // Narrow per-service audit port (mirrors RecordOperatorProfileAudit in operator.ts):
 // the injected sink accepts only THIS service's events, so the compiler rejects an
 // accidental emit of a foreign kind. The composition root's wider RecordAuditEvent
-// sink stays assignable to it (parameter contravariance). Also accepts
-// PROVIDER_INVITE_CREATED because approve() emits it when minting the OWNER invite.
+// sink stays assignable to it (parameter contravariance).
 export type RecordOperatorApplicationAudit = (event: OperatorApplicationAuditEvent) => void
 
 export interface OperatorApplicationServiceConfig {
-  /** Public web origin; the minted OWNER invite link is `${webBaseUrl}/provider/invite/<token>`. */
+  /** Public web origin; used to build the applicant-facing welcome/status URL in the
+   *  approved/rejected emails (Task 12). */
   readonly webBaseUrl: string
+  /** From address for outbound applicant notification emails. */
+  readonly fromAddress: string
+  /** Optional reply-to address for outbound notification emails. */
+  readonly replyTo?: string
 }
 
 // The honeypot/consent fields are validated + stripped at the route boundary; the
-// service persists only the domain fields (contactEmail already lowercased by zod).
-type SubmitInput = Omit<OperatorApplicationInput, 'honeypot' | 'consent'>
+// service persists only the domain fields. Sign-in-first (#877): contactEmail is no
+// longer a client field (already removed from the schema) — the service resolves the
+// authoritative email from the users repo — and the route injects applicantUserId
+// derived from the authenticated session.
+type SubmitInput = Omit<OperatorApplicationInput, 'honeypot' | 'consent'> & {
+  applicantUserId: string
+}
+
+// Applicant-facing projection of their own application (GET /operator-applications/me).
+// Strips internal review metadata the self-read must not leak; keeps operatorId +
+// rejectionReason, which the applicant status UI (welcome link + rejection reason) needs.
+export type ApplicantApplicationView = Omit<
+  OperatorApplication,
+  'reviewedByUserId' | 'reviewerNotes'
+>
 
 // Collected inside the approval tx, emitted only after commit (fire-and-forget).
 interface ApprovalOutcome {
@@ -91,10 +108,26 @@ export class OperatorApplicationService {
     private readonly recordAudit: RecordOperatorApplicationAudit,
     private readonly runApproval: RunOperatorApproval,
     private readonly config: OperatorApplicationServiceConfig,
+    // Sign-in-first (#877): the already-operator guard reads the membership ledger,
+    // and the authoritative applicant email is resolved from the users projection —
+    // never the token's display email. Narrowed to the two reads submit() needs.
+    private readonly members: Pick<OperatorMembershipRepository, 'findActiveByUserId'>,
+    private readonly users: Pick<UserRepository, 'findById'>,
+    private readonly emailSender: EmailSender,
   ) {}
 
   async list(params: OperatorApplicationListParams): Promise<OperatorApplication[]> {
     return this.repo.list(params)
+  }
+
+  async findMine(userId: string): Promise<ApplicantApplicationView | undefined> {
+    const application = await this.repo.findByApplicantUserId(userId)
+    if (!application) return undefined
+    // Applicant self-read must not leak internal review metadata. Keep operatorId +
+    // rejectionReason (the status UI shows the portal link + the rejection reason);
+    // drop reviewedByUserId + reviewerNotes (admin-only commentary).
+    const { reviewedByUserId: _reviewedBy, reviewerNotes: _notes, ...view } = application
+    return view
   }
 
   async reject(
@@ -114,15 +147,16 @@ export class OperatorApplicationService {
       actorUserId: reviewerUserId,
       applicationId: id,
     })
+    await this.notifyRejected(row)
     return row
   }
 
   async approve(
     id: string,
     reviewerUserId: string,
-  ): Promise<{ operatorId: string; operatorSlug: string; inviteUrl: string; expiresAt: Date }> {
+  ): Promise<{ operatorId: string; operatorSlug: string }> {
     // Idempotency-first: a re-approve of a non-PENDING row must read as "already
-    // reviewed", not trip the C1 guard on the OWNER invite the first approval minted.
+    // reviewed", not trip the C1 guard on the operator the first approval created.
     // The atomic markApprovedIfPending below is still the race fence for concurrent
     // approvals that both pass this read. Email/name are immutable once PENDING, so
     // reading here (outside the tx) is safe.
@@ -131,15 +165,15 @@ export class OperatorApplicationService {
     if (application.status !== 'PENDING') {
       throw new ConflictError('application already reviewed')
     }
-    const minted = mintInvite({ webBaseUrl: this.config.webBaseUrl })
-    const outcome = await this.provisionApproval(id, application, minted, reviewerUserId)
-    for (const e of outcome.events) this.recordAudit(e)
-    return {
-      operatorId: outcome.operatorId,
-      operatorSlug: outcome.operatorSlug,
-      inviteUrl: minted.inviteUrl,
-      expiresAt: minted.expiresAt,
+    if (!application.applicantUserId) {
+      // Sign-in-first invariant (§8): a PENDING row always carries its applicant.
+      // A legacy anonymous row is handled via the admin escape hatch, not this path.
+      throw new ConflictError('application is not linked to an account; use the manual invite')
     }
+    const outcome = await this.provisionApproval(id, application, reviewerUserId)
+    for (const e of outcome.events) this.recordAudit(e)
+    await this.notifyApproved(application, outcome)
+    return { operatorId: outcome.operatorId, operatorSlug: outcome.operatorSlug }
   }
 
   /** Run the approval tx, retrying once on a concurrent slug race. Maps in-tx
@@ -149,13 +183,12 @@ export class OperatorApplicationService {
   private async provisionApproval(
     id: string,
     application: OperatorApplication,
-    minted: MintedInvite,
     reviewerUserId: string,
   ): Promise<ApprovalOutcome> {
     for (let attempt = 1; attempt <= SLUG_ATTEMPTS; attempt++) {
       try {
         return await this.runApproval((repos) =>
-          this.provision(repos, id, application, minted, reviewerUserId),
+          this.provision(repos, id, application, reviewerUserId),
         )
       } catch (err) {
         if (pgErrorCode(err) !== PG_ERROR.UNIQUE_VIOLATION) throw err
@@ -163,9 +196,6 @@ export class OperatorApplicationService {
         if (constraint === OPERATORS_SLUG_CONSTRAINT) {
           if (attempt < SLUG_ATTEMPTS) continue
           throw new ConflictError('could not allocate a unique operator slug, please retry')
-        }
-        if (constraint === PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT) {
-          throw new ConflictError('this email is already invited to an operator')
         }
         throw err
       }
@@ -178,7 +208,6 @@ export class OperatorApplicationService {
     repos: OperatorApprovalRepos,
     id: string,
     application: OperatorApplication,
-    minted: MintedInvite,
     reviewerUserId: string,
   ): Promise<ApprovalOutcome> {
     await assertEmailUnclaimed(repos, application.contactEmail)
@@ -190,15 +219,22 @@ export class OperatorApplicationService {
       slug,
       preAuthHandoffUrl: null,
     })
-    const invite = buildProviderInviteRecord(minted, {
-      email: application.contactEmail,
+    // Direct promotion (§6.2): the same membership-ledger + users-projection writes
+    // operator-grant.resolve() does, minus the invite token lookup + email match.
+    // applicantUserId is non-null (guarded in approve()).
+    const applicantUserId = application.applicantUserId as string
+    await repos.memberships.create({
+      userId: applicantUserId,
       operatorId: operator.id,
       role: 'OPERATOR_OWNER',
-      invitedByUserId: reviewerUserId,
+      status: 'ACTIVE',
     })
-    await repos.invites.create(invite.row)
+    await repos.users.setOperatorAccess(applicantUserId, {
+      role: 'OPERATOR_OWNER',
+      operatorId: operator.id,
+    })
     // Atomic claim+link + race fence: undefined => another approval won; the throw
-    // rolls back the operator + invite created above (no orphan).
+    // rolls back the operator + membership + projection created above (no orphan).
     const claimed = await repos.applications.markApprovedIfPending(
       id,
       operator.id,
@@ -210,7 +246,6 @@ export class OperatorApplicationService {
       operatorId: operator.id,
       operatorSlug: slug,
       events: [
-        invite.event,
         {
           type: 'OPERATOR_APPLICATION_APPROVED',
           actorUserId: reviewerUserId,
@@ -221,75 +256,73 @@ export class OperatorApplicationService {
     }
   }
 
-  /** Re-mint the OWNER invite for an already-APPROVED application (#1370): the
-   *  original link expired or was lost before the owner accepted. Revokes any live
-   *  PENDING invite for the email and issues a fresh one, atomically. Refuses if
-   *  the application is not APPROVED (404/409) or the owner already onboarded (409)
-   *  — a re-invite must never open a second OWNER path onto a live operator. */
-  async remintInvite(
-    id: string,
-    reviewerUserId: string,
-  ): Promise<{ inviteUrl: string; expiresAt: Date }> {
-    const application = await this.repo.findById(id)
-    if (!application) throw new NotFoundError('no application with that id')
-    if (application.status !== 'APPROVED' || !application.operatorId) {
-      throw new ConflictError('only an approved application can be re-invited')
-    }
-    const operatorId = application.operatorId
-    const email = application.contactEmail
-    const minted = mintInvite({ webBaseUrl: this.config.webBaseUrl })
-
+  private async notifyApproved(
+    application: OperatorApplication,
+    _outcome: ApprovalOutcome,
+  ): Promise<void> {
     try {
-      const event = await this.runApproval(async (repos) => {
-        // An already-onboarded owner (active membership) must not be re-invited: a
-        // fresh OWNER link accepted by someone else would grant a second owner.
-        const existingUser = await repos.users.findByEmail(email)
-        if (existingUser && (await repos.memberships.findActiveByUserId(existingUser.id))) {
-          throw new ConflictError('this email already has an operator')
-        }
-        // Revoke the stale PENDING invite so the partial-unique (operatorId,email)
-        // index admits the replacement; then mint the new one. findPendingByEmail is
-        // cross-operator (the C1 guard), but revoke is operator-scoped — so a pending
-        // invite owned by ANOTHER operator must block here (mirroring approve()'s C1),
-        // not silently no-op the revoke and leave two live invites for the email (#1277).
-        const pending = await repos.invites.findPendingByEmail(email)
-        if (pending) {
-          if (pending.operatorId !== operatorId) {
-            throw new ConflictError('this email is already invited to an operator')
-          }
-          await repos.invites.revoke(pending.id, operatorId)
-        }
-        const invite = buildProviderInviteRecord(minted, {
-          email,
-          operatorId,
-          role: 'OPERATOR_OWNER',
-          invitedByUserId: reviewerUserId,
-        })
-        await repos.invites.create(invite.row)
-        return invite.event
+      const welcomeUrl = `${this.config.webBaseUrl}/${application.submittedLocale}/operator/welcome`
+      const email = renderOperatorApplicationApproved(
+        { businessName: application.businessName, welcomeUrl },
+        application.submittedLocale,
+      )
+      await this.emailSender.send({
+        to: application.contactEmail,
+        from: this.config.fromAddress,
+        ...(this.config.replyTo ? { replyTo: this.config.replyTo } : {}),
+        subject: email.subject,
+        html: email.html,
+        text: email.text,
       })
-      this.recordAudit(event)
-      return { inviteUrl: minted.inviteUrl, expiresAt: minted.expiresAt }
     } catch (err) {
-      // A concurrent remint won the (operatorId,email) pending slot between our
-      // revoke and insert — the whole tx rolled back. Report a retryable 409, not
-      // a 500, mirroring submit()/provisionApproval()'s constraint handling.
-      if (
-        pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION &&
-        pgConstraintName(err) === PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT
-      ) {
-        throw new ConflictError('a re-invite is already in progress, please retry')
-      }
-      throw err
+      // Best-effort (§6.4): the decision already committed; a failed notice must
+      // not roll it back. Log so a chronically-failing send is visible.
+      console.error('[operator-application] approved email failed', {
+        applicationId: application.id,
+        err,
+      })
+    }
+  }
+
+  private async notifyRejected(row: OperatorApplication): Promise<void> {
+    try {
+      const email = renderOperatorApplicationRejected(
+        { businessName: row.businessName, reason: row.rejectionReason ?? '' },
+        row.submittedLocale,
+      )
+      await this.emailSender.send({
+        to: row.contactEmail,
+        from: this.config.fromAddress,
+        ...(this.config.replyTo ? { replyTo: this.config.replyTo } : {}),
+        subject: email.subject,
+        html: email.html,
+        text: email.text,
+      })
+    } catch (err) {
+      // Best-effort (§6.4): the decision already committed; a failed notice must
+      // not roll it back. Log so a chronically-failing send is visible.
+      console.error('[operator-application] rejected email failed', { applicationId: row.id, err })
     }
   }
 
   async submit(input: SubmitInput): Promise<Pick<OperatorApplication, 'id' | 'status'>> {
+    // Already-operator guard: a signed-in caller who already owns or staffs an
+    // operator can't apply again (the ledger is the revocation-aware source of truth,
+    // not the users.role projection).
+    if (await this.members.findActiveByUserId(input.applicantUserId)) {
+      throw new ConflictError('you already belong to an operator')
+    }
+    // Server-authoritative email: resolve the applicant's real account email from the
+    // users repo. Never trust a client-supplied email or the token's display email.
+    const account = await this.users.findById(input.applicantUserId)
+    if (!account?.email) {
+      throw new ConflictError('your account has no email on file')
+    }
     try {
       const app = await this.repo.create({
         businessName: input.businessName,
         contactName: input.contactName,
-        contactEmail: input.contactEmail,
+        contactEmail: account.email,
         contactPhone: input.contactPhone,
         serviceArea: input.serviceArea,
         estimatedFleetSize: input.estimatedFleetSize,
@@ -298,6 +331,7 @@ export class OperatorApplicationService {
         businessType: input.businessType ?? null,
         message: input.message ?? null,
         submittedLocale: input.submittedLocale,
+        applicantUserId: input.applicantUserId,
       })
       return { id: app.id, status: app.status }
     } catch (err) {

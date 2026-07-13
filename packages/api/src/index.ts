@@ -5,6 +5,7 @@ import { cors } from 'hono/cors'
 import type { AppOverrides } from './app-overrides'
 import { isStaleOperatorSession } from './auth/session-freshness'
 import { buildFxRateProvider } from './composition/fx'
+import { buildOperatorApplicationService } from './composition/operator-application-service'
 import { type Repos, buildRepos } from './composition/repositories'
 import {
   resolveAllowedOrigins,
@@ -12,12 +13,14 @@ import {
   resolveEmailSender,
   resolveGeocoder,
   resolveGoogleOAuthConfig,
-  resolveOperatorAlertEmail,
+  resolveNotificationDispatcher,
   resolvePaymentGateway,
 } from './composition/services'
+import { buildReconcileIdentityResolver } from './composition/session-reconcile'
 import { setupGlobalHandlers } from './error-handlers'
 import { parseBoolFlag } from './lib/parse-bool-flag'
 import {
+  provideIdentityResolver,
   provideOperatorSessionRevocation,
   requireAuth,
   requirePlatformMember,
@@ -97,7 +100,6 @@ import { resolveSigningKey } from './services/consent-signing'
 import { CustomerService } from './services/customer'
 import { MachineDescriptionTranslator } from './services/description-translation'
 import { documentVerificationGate } from './services/document-verification-gate'
-import type { EmailSender } from './services/email/email-sender'
 import { makeEnsureThread } from './services/ensure-thread'
 import { FeatureFlagsService } from './services/feature-flags'
 import { FeeScheduleService } from './services/fee-schedule'
@@ -109,15 +111,10 @@ import { MaintenanceService } from './services/maintenance'
 import { MessageService } from './services/message'
 import { MessageTranslationService } from './services/message-translation'
 import { NotificationService } from './services/notification'
-import { NotificationDispatcher } from './services/notification-dispatcher'
 import { NotificationRetryService } from './services/notification-retry'
 import { OperatorService } from './services/operator'
-import { OperatorApplicationService } from './services/operator-application'
 import { createOperatorGrantService } from './services/operator-grant'
-import {
-  makeResolveOperatorRecipients,
-  makeResolveOperatorRecipientsBatch,
-} from './services/operator-recipients'
+import { makeResolveOperatorRecipientsBatch } from './services/operator-recipients'
 import { OperatorSummaryService } from './services/operator-summary'
 import { OperatorTeamService } from './services/operator-team'
 import { OperatorTermsService } from './services/operator-terms'
@@ -268,12 +265,15 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     { webBaseUrl },
     recordAudit,
   )
-  const operatorApplicationService = new OperatorApplicationService(
-    operatorApplicationRepo,
+  const operatorApplicationService = buildOperatorApplicationService({
+    repo: operatorApplicationRepo,
     recordAudit,
-    runOperatorApproval,
-    { webBaseUrl },
-  )
+    runApproval: runOperatorApproval,
+    webBaseUrl,
+    members: operatorMembershipRepo,
+    users: userRepo,
+    emailSender,
+  })
   // #904: operator self-service team page. Reuses providerInviteService to mint
   // (so the audit trail + TTL stay single-sourced); reads invites + members
   // scoped to the caller's own operatorId.
@@ -369,6 +369,11 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
       )
     }),
   )
+
+  // §5.1 session reconcile: expose the DB-authoritative identity so GET /auth/session
+  // can re-mint a promoted (RENTER->OWNER) token without re-login (resolver in
+  // composition/session-reconcile.ts).
+  app.use('*', provideIdentityResolver(buildReconcileIdentityResolver(userRepo)))
 
   // Auth middleware on all protected paths.
   // vehicle-classes: public GETs for renter catalog (list, by-slug, availability)
@@ -669,42 +674,6 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createOperatorRoutes(operatorService))
     .route('/', createOperatorTeamRoutes(operatorTeamService))
     .route('/', createDocumentRoutes(renterDocumentService))
-}
-
-/**
- * The notification dispatcher wiring, shared by createApp's post-commit seam and
- * the #1125 retry-sweep cron so the two never drift on recipient resolution,
- * fallback inbox, or deep-link base. Caller passes the already-resolved email
- * sender + web origin so createApp reuses its locals (no double-construction).
- */
-function resolveNotificationDispatcher(
-  repos: Repos,
-  emailSender: EmailSender,
-  webBaseUrl: string,
-): NotificationDispatcher {
-  const {
-    notificationLogRepo,
-    operatorRepo,
-    vehicleRepo,
-    userRepo,
-    operatorMembershipRepo,
-    locationRepo,
-  } = repos
-  return new NotificationDispatcher(
-    notificationLogRepo,
-    operatorRepo,
-    vehicleRepo,
-    userRepo,
-    makeResolveOperatorRecipients({ membershipRepo: operatorMembershipRepo, userRepo }),
-    locationRepo,
-    emailSender,
-    {
-      ...resolveEmailConfig(),
-      fallbackOperatorEmail: resolveOperatorAlertEmail(),
-      // #960: empty string (WEB_ORIGIN unset) -> the dispatcher omits the deep link.
-      webBaseUrl,
-    },
-  )
 }
 
 /**

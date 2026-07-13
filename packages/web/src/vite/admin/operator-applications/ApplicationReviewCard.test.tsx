@@ -128,15 +128,18 @@ describe('ApplicationReviewCard', () => {
     expect(onApprove).toHaveBeenCalledTimes(1)
   })
 
-  it('when inviteUrl is set, renders the readonly invite input and copy button, hides Approve/Reject', () => {
-    renderCard({ inviteUrl: '/provider/invite/tok_abc' })
-    // Readonly invite input is visible
-    const input = screen.getByRole('textbox')
-    expect(input).toHaveAttribute('readonly')
-    expect(input).toHaveValue('/provider/invite/tok_abc')
-    // Copy button present
-    expect(screen.getByRole('button', { name: en.admin.applications.copy })).not.toBeNull()
-    // Approve and Reject buttons must not be rendered in the terminal state
+  it('when approved is true, renders plain Approved confirmation and hides invite input, copy, regenerate, and Approve/Reject controls', () => {
+    renderCard({ approved: true })
+    // The approved confirmation is announced to assistive tech via role=status (an
+    // <output> live region), since the Approve button that held focus unmounts on
+    // success. Asserting the role — not just the text — locks that a11y contract so
+    // a refactor back to a bare <span> fails here instead of silently regressing.
+    expect(screen.getByRole('status')).toHaveTextContent(en.admin.applications.approved)
+    // No invite input or copy/regenerate buttons (keys deleted from messages)
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: /copy/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /regenerate/i })).toBeNull()
+    // Approve and Reject controls must not be rendered in the terminal state
     expect(screen.queryByRole('button', { name: en.admin.applications.approve })).toBeNull()
     expect(screen.queryByRole('button', { name: en.admin.applications.reject })).toBeNull()
   })
@@ -148,59 +151,9 @@ describe('ApplicationReviewCard', () => {
     expect(texts.some((t) => t?.includes(en.admin.applications.alreadyReviewed))).toBe(true)
   })
 
-  it('in the reveal state, renders a Regenerate button that calls onRemint when clicked', async () => {
-    const onRemint = vi.fn()
-    renderCard({ inviteUrl: '/provider/invite/tok_abc', onRemint })
-    const button = screen.getByRole('button', { name: en.admin.applications.regenerate })
-    await userEvent.click(button)
-    expect(onRemint).toHaveBeenCalledTimes(1)
-  })
-
-  it('disables the Regenerate button and shows a pending label while reminting', () => {
-    renderCard({ inviteUrl: '/provider/invite/tok_abc', onRemint: vi.fn(), isReminting: true })
-    const button = screen.getByRole('button', { name: en.admin.applications.regenerating })
-    expect(button).toBeDisabled()
-  })
-
-  it('announces a remint error via role=alert in the reveal state', () => {
-    renderCard({
-      inviteUrl: '/provider/invite/tok_abc',
-      onRemint: vi.fn(),
-      remintError: en.admin.applications.regenerateFailed,
-    })
-    const alerts = screen.getAllByRole('alert')
-    expect(
-      alerts.some((el) => el.textContent?.includes(en.admin.applications.regenerateFailed)),
-    ).toBe(true)
-  })
-
-  it('omits the Regenerate button when no onRemint handler is provided', () => {
-    renderCard({ inviteUrl: '/provider/invite/tok_abc' })
-    expect(screen.queryByRole('button', { name: en.admin.applications.regenerate })).toBeNull()
-  })
-
-  it('resets Copied and focuses the fresh link when the invite is regenerated in place', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
-    const props = { application, onReject: vi.fn(), onApprove: vi.fn(), onRemint: vi.fn() }
-    const { rerender } = render(
-      <IntlProvider locale="en" messages={en}>
-        <ApplicationReviewCard {...props} inviteUrl="/provider/invite/tok_old" />
-      </IntlProvider>,
-    )
-    await userEvent.click(screen.getByRole('button', { name: en.admin.applications.copy }))
-    expect(screen.getByRole('button', { name: en.admin.applications.copied })).not.toBeNull()
-
-    // Regenerate swaps the link A -> B. Copied must revert (it must not keep vouching
-    // for the stale, possibly-revoked link), and focus moves to the fresh link so the
-    // in-place <input value> change is announced to assistive tech.
-    rerender(
-      <IntlProvider locale="en" messages={en}>
-        <ApplicationReviewCard {...props} inviteUrl="/provider/invite/tok_new" />
-      </IntlProvider>,
-    )
-    expect(screen.getByRole('button', { name: en.admin.applications.copy })).not.toBeNull()
-    expect(screen.queryByRole('button', { name: en.admin.applications.copied })).toBeNull()
-    expect(document.activeElement).toBe(screen.getByDisplayValue('/provider/invite/tok_new'))
+  it('normal (not approved) state still shows both Approve and Reject controls', () => {
+    renderCard()
+    expect(screen.queryByRole('button', { name: en.admin.applications.approve })).not.toBeNull()
+    expect(screen.queryByRole('button', { name: en.admin.applications.reject })).not.toBeNull()
   })
 })

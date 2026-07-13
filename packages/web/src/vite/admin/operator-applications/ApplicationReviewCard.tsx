@@ -1,11 +1,8 @@
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import type {
   OperatorApplicationBusinessType,
   OperatorApplicationFleetSize,
 } from '@kuruma/shared/enums'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 import type { OperatorApplicationDto } from './api'
 
@@ -41,27 +38,19 @@ interface ApplicationReviewCardProps {
   onApprove: () => void | Promise<void>
   isApproving?: boolean
   approveError?: string | null
-  /** When set, the card is in a terminal approved state: hide controls, show the invite link. */
-  inviteUrl?: string | null
-  /**
-   * Re-mint the OWNER invite (#1370) — reachable only in the reveal state, for
-   * when the shown link is lost or expiring. Optional: cards rendered without it
-   * simply omit the Regenerate control.
-   */
-  onRemint?: () => void | Promise<void>
-  isReminting?: boolean
-  remintError?: string | null
+  /** When true, the card is in a terminal approved state: hide controls, show plain confirmation. */
+  approved?: boolean
 }
 
 // Presentational review card (#1277): business details plus reject and approve
-// controls. Owns only the draft rejection reason and clipboard-copied state;
-// the route wires the mutations and passes callbacks. Keeping it router/query-free
-// is what makes the approve/reject behaviour unit-testable in isolation.
+// controls. Owns only the draft rejection reason; the route wires the mutations
+// and passes callbacks. Keeping it router/query-free is what makes the
+// approve/reject behaviour unit-testable in isolation.
 //
-// Terminal state: when `inviteUrl` is set the admin has just approved this row.
+// Terminal state: when `approved` is true the admin has just approved this row.
 // We do NOT invalidate the pending query on approve (doing so would drop the row
-// before the admin can copy the invite link). Instead the parent stores the invite
-// and passes it down; the card renders a copyable reveal and hides the controls.
+// before the admin sees the confirmation). The card renders a plain "Approved"
+// message and hides the controls until the admin refreshes.
 export function ApplicationReviewCard({
   application,
   onReject,
@@ -70,43 +59,13 @@ export function ApplicationReviewCard({
   onApprove,
   isApproving = false,
   approveError = null,
-  inviteUrl = null,
-  onRemint,
-  isReminting = false,
-  remintError = null,
+  approved = false,
 }: ApplicationReviewCardProps) {
   const t = useTranslations('admin.applications')
   const [rejectionReason, setRejectionReason] = useState('')
-  const [copied, setCopied] = useState(false)
 
   const reasonId = `reason-${application.id}`
-  const inviteInputId = `invite-url-${application.id}`
   const canReject = rejectionReason.trim() !== '' && !isSubmitting
-
-  // Regenerate swaps the shown link in place (A -> B). Reset the copied flag so the
-  // button can't keep vouching "Copied" while the clipboard still holds the old,
-  // possibly-revoked link. On a genuine swap (both non-null) also move focus to the
-  // fresh link: a readonly <input value> change isn't reliably announced to screen
-  // readers, and the Regenerate button still holds focus.
-  const shownInviteUrl = useRef(inviteUrl)
-  useEffect(() => {
-    if (inviteUrl === shownInviteUrl.current) return
-    const wasReplaced = inviteUrl !== null && shownInviteUrl.current !== null
-    shownInviteUrl.current = inviteUrl
-    setCopied(false)
-    if (wasReplaced) document.getElementById(inviteInputId)?.focus()
-  }, [inviteUrl, inviteInputId])
-
-  const handleCopy = async () => {
-    if (!inviteUrl) return
-    try {
-      await navigator.clipboard.writeText(inviteUrl)
-      setCopied(true)
-    } catch {
-      // Clipboard can reject on an insecure context or denied permission; the URL
-      // stays visible in the readonly input as the fallback.
-    }
-  }
 
   return (
     <article className="space-y-4 rounded-lg border border-border p-4">
@@ -159,43 +118,13 @@ export function ApplicationReviewCard({
         </dl>
       </header>
 
-      {inviteUrl !== null ? (
-        // Terminal approved state: show the one-time invite link for the admin to
-        // copy and forward. The row stays visible until the admin refreshes.
-        // <output> (implicit role=status) announces the newly-available invite link
-        // to assistive tech, since the Approve control that had focus unmounts on success.
-        <output className="block space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor={inviteInputId}>{t('inviteReadyLabel')}</Label>
-            <p className="text-sm text-muted-foreground">{t('inviteReadyHint')}</p>
-            <Input
-              id={inviteInputId}
-              readOnly
-              value={inviteUrl}
-              onFocus={(e) => e.currentTarget.select()}
-            />
-          </div>
-          {remintError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {remintError}
-            </p>
-          ) : null}
-          <div className="flex items-center gap-3">
-            <Button type="button" variant="outline" onClick={() => void handleCopy()}>
-              {copied ? t('copied') : t('copy')}
-            </Button>
-            {onRemint ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isReminting}
-                onClick={() => void onRemint()}
-              >
-                {isReminting ? t('regenerating') : t('regenerate')}
-              </Button>
-            ) : null}
-            <span className="text-sm font-medium text-green-700">{t('approved')}</span>
-          </div>
+      {approved ? (
+        // Terminal approved state: the applicant's account was promoted directly to
+        // OPERATOR_OWNER. No invite link is issued. The <output> (implicit role=status)
+        // announces the confirmation to assistive tech since the Approve button that
+        // had focus unmounts on success.
+        <output className="block">
+          <span className="text-sm font-medium text-green-700">{t('approved')}</span>
         </output>
       ) : (
         // Normal state: show approve/reject controls.
