@@ -315,11 +315,12 @@ describe('invite acceptance survives approval-mint removal (P1a)', () => {
       body: JSON.stringify({ email: STAFF_USER.email }),
     })
     expect(mintRes.status).toBe(201)
-    const mintData = (await mintRes.json()).data as { inviteUrl: string; expiresAt: string }
+    const mintData = (await mintRes.json()).data as { inviteUrl: string }
 
-    // Extract the token from the invite URL (last path segment).
+    // The team route returns only the URL (no bare token), so extract it from the
+    // last path segment. Same token shape the admin route asserts (file line 84).
     const token = mintData.inviteUrl.split('/').at(-1) ?? ''
-    expect(token.length).toBeGreaterThan(10)
+    expect(token).toMatch(/^[A-Za-z0-9_-]{20,}$/)
 
     // Step 2: The staff user redeems the invite.
     const result = await ctx.grantService.resolve({
@@ -349,10 +350,9 @@ describe('invite acceptance survives approval-mint removal (P1a)', () => {
     const [user] = await ctx.userRepo.findByIds([STAFF_USER.id])
     expect(user).toMatchObject({ role: 'OPERATOR_STAFF', operatorId: GUARD_OPERATOR.id })
 
-    // Invite consumed.
-    const { createHash: nodeHash } = await import('node:crypto')
-    const tokenHash = nodeHash('sha256').update(token).digest('hex')
-    const consumed = await ctx.providerInviteRepo.findByTokenHash(tokenHash)
+    // Invite consumed — hashed with the file's shared sha256Hex, the same helper
+    // production resolve() uses, so this is a true round-trip not a private copy.
+    const consumed = await ctx.providerInviteRepo.findByTokenHash(sha256Hex(token))
     expect(consumed).toMatchObject({ status: 'ACCEPTED', acceptedByUserId: STAFF_USER.id })
   })
 
@@ -368,11 +368,7 @@ describe('invite acceptance survives approval-mint removal (P1a)', () => {
       }),
     })
     expect(mintRes.status).toBe(201)
-    const mintData = (await mintRes.json()).data as {
-      token: string
-      inviteUrl: string
-      expiresAt: string
-    }
+    const mintData = (await mintRes.json()).data as { token: string }
     const { token } = mintData
     expect(token).toMatch(/^[A-Za-z0-9_-]{20,}$/)
 
@@ -404,10 +400,8 @@ describe('invite acceptance survives approval-mint removal (P1a)', () => {
     const [user] = await ctx.userRepo.findByIds([OWNER_USER.id])
     expect(user).toMatchObject({ role: 'OPERATOR_OWNER', operatorId: GUARD_OPERATOR.id })
 
-    // Invite consumed.
-    const { createHash: nodeHash } = await import('node:crypto')
-    const tokenHash = nodeHash('sha256').update(token).digest('hex')
-    const consumed = await ctx.providerInviteRepo.findByTokenHash(tokenHash)
+    // Invite consumed — shared sha256Hex round-trip (see STAFF path note).
+    const consumed = await ctx.providerInviteRepo.findByTokenHash(sha256Hex(token))
     expect(consumed).toMatchObject({ status: 'ACCEPTED', acceptedByUserId: OWNER_USER.id })
   })
 })
