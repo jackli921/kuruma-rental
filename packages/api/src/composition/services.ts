@@ -65,19 +65,31 @@ export function resolveGoogleOAuthConfig(): GoogleOAuthConfig | undefined {
 
 /**
  * Resolve the outbound email port (#916 DRY): an injected override wins (tests),
- * else real Resend when RESEND_API_KEY is set, else a throwing sentinel in
- * production and a console stub in dev — so flows work end-to-end without a
- * vendor account. Shared by createApp's dispatcher and buildComplianceDigestService.
+ * else real Resend when BOTH RESEND_API_KEY and EMAIL_FROM are set, else a
+ * throwing sentinel in production and a console stub in dev — so flows work
+ * end-to-end without a vendor account. Shared by createApp's dispatcher and
+ * buildComplianceDigestService.
+ *
+ * #1561: a key WITHOUT EMAIL_FROM is a misconfiguration, not a working sender —
+ * every EmailMessage.from is sourced from EMAIL_FROM (notification-dispatcher,
+ * compliance-digest, operator-application), so an empty from makes Resend reject
+ * every send with an opaque 4xx that the best-effort callers swallow, silently
+ * dropping applicant mail. Treat it like a missing key: fail loud with a clear
+ * reason instead of shipping a sender that can never succeed. Mirrors
+ * resolvePaymentGateway's both-secrets-or-sentinel policy.
  */
 export function resolveEmailSender(overrides?: AppOverrides): EmailSender {
   if (overrides?.emailSender) return overrides.emailSender
   const key = process.env.RESEND_API_KEY
   const from = process.env.EMAIL_FROM ?? ''
-  if (key) return new ResendEmailSender(key, from)
+  if (key && from) return new ResendEmailSender(key, from)
   if (process.env.NODE_ENV === 'production') {
+    const reason = key
+      ? 'EMAIL_FROM not configured (RESEND_API_KEY is set)'
+      : 'RESEND_API_KEY not configured'
     return {
       send: async () => {
-        throw new Error('RESEND_API_KEY not configured')
+        throw new Error(reason)
       },
     }
   }

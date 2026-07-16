@@ -114,11 +114,29 @@ describe('resolveEmailSender', () => {
     await expect(sender.send({} as never)).rejects.toThrow('RESEND_API_KEY not configured')
   })
 
+  test('production with a key but no EMAIL_FROM yields a sentinel naming the missing from (#1561)', async () => {
+    process.env.NODE_ENV = 'production'
+    process.env.RESEND_API_KEY = 're_test'
+    // EMAIL_FROM unset: Resend would reject every send with an opaque 4xx that the
+    // best-effort callers swallow, so fail loud with a clear reason instead.
+    const sender = resolveEmailSender()
+    expect(sender).not.toBeInstanceOf(ResendEmailSender)
+    await expect(sender.send({} as never)).rejects.toThrow('EMAIL_FROM not configured')
+  })
+
   test('dev without a key yields a console stub returning the dev id', async () => {
     process.env.NODE_ENV = 'test'
     await expect(resolveEmailSender().send({} as never)).resolves.toEqual({
       providerMessageId: 'dev',
     })
+  })
+
+  test('dev with a key but no EMAIL_FROM falls to the dev stub, not a broken Resend sender (#1561)', async () => {
+    process.env.NODE_ENV = 'test'
+    process.env.RESEND_API_KEY = 're_test'
+    const sender = resolveEmailSender()
+    expect(sender).not.toBeInstanceOf(ResendEmailSender)
+    await expect(sender.send({} as never)).resolves.toEqual({ providerMessageId: 'dev' })
   })
 })
 
