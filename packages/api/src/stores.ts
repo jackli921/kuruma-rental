@@ -603,6 +603,10 @@ export interface OperatorApplication {
   businessType: OperatorApplicationBusinessType | null
   message: string | null
   submittedLocale: string
+  // Sign-in-first onboarding (§8): the authenticated applicant this application
+  // belongs to. Approval promotes THIS user id directly to OPERATOR_OWNER. Legacy
+  // anonymous rows carry null and take the manual-invite escape hatch.
+  applicantUserId: string | null
   operatorId: string | null
   reviewedByUserId: string | null
   reviewedAt: Date | null

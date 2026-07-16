@@ -35,7 +35,6 @@ type FormOutput = OperatorApplicationInput
 type ErrorableField =
   | 'businessName'
   | 'contactName'
-  | 'contactEmail'
   | 'contactPhone'
   | 'serviceArea'
   | 'estimatedFleetSize'
@@ -48,11 +47,16 @@ const errorDomId = (field: ErrorableField) => `reg-${field}-error`
 
 interface OperatorRegistrationFormProps {
   onSubmit: (data: OperatorApplicationInput) => void | Promise<void>
+  // The signed-in account's email — shown read-only (sign-in-first, #877). It is
+  // NOT a form field: the server derives the authoritative applicant email from the
+  // session, so it never rides in the submit payload.
+  accountEmail: string
   isSubmitting?: boolean
 }
 
 export function OperatorRegistrationForm({
   onSubmit,
+  accountEmail,
   isSubmitting = false,
 }: OperatorRegistrationFormProps) {
   const t = useTranslations('business.register.form')
@@ -68,7 +72,6 @@ export function OperatorRegistrationForm({
     defaultValues: {
       businessName: '',
       contactName: '',
-      contactEmail: '',
       contactPhone: '',
       serviceArea: '',
       website: '',
@@ -134,16 +137,24 @@ export function OperatorRegistrationForm({
         {fieldError('contactName', errors.contactName)}
       </div>
 
+      {/* Sign-in-first (#877): the applicant email is the signed-in account's email,
+          shown read-only. It is NOT registered with RHF and never enters the submit
+          payload — the server derives it authoritatively from the session. */}
       <div>
-        <Label htmlFor="reg-contactEmail">{t('contactEmail')}</Label>
+        <Label htmlFor="reg-accountEmail">{t('accountEmail')}</Label>
+        {/* readOnly (not disabled): the field is never RHF-registered, so it stays
+            out of the payload regardless, and readOnly keeps it in the a11y tree so
+            the label + hint are announced (a disabled input is skipped by most SRs). */}
         <Input
-          id="reg-contactEmail"
+          id="reg-accountEmail"
           type="email"
-          aria-required
-          {...invalidProps('contactEmail', errors.contactEmail)}
-          {...register('contactEmail')}
+          value={accountEmail}
+          readOnly
+          aria-describedby="reg-accountEmail-hint"
         />
-        {fieldError('contactEmail', errors.contactEmail)}
+        <p id="reg-accountEmail-hint" className="text-sm text-muted-foreground mt-1">
+          {t('accountEmailHint')}
+        </p>
       </div>
 
       <div>

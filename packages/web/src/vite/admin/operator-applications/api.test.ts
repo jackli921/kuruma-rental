@@ -7,7 +7,6 @@ import {
   fetchPendingOperatorApplications,
   pendingOperatorApplicationsQueryOptions,
   rejectOperatorApplication,
-  remintInvite,
 } from './api'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -107,11 +106,9 @@ describe('rejectOperatorApplication', () => {
 
 describe('approveApplication', () => {
   it('POSTs to the id-encoded URL with X-CSRF-Token header and no body, returns unwrapped DTO', async () => {
-    const approveResult = {
-      operatorId: 'op_abc',
-      inviteUrl: '/provider/invite/tok_xyz',
-      expiresAt: '2026-08-01T00:00:00.000Z',
-    }
+    // The server now returns only operatorId (no invite link — the applicant is
+    // promoted directly to OPERATOR_OWNER, no invite flow required).
+    const approveResult = { operatorId: 'op_abc' }
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: approveResult }))
 
     const result = await approveApplication({ id: 'app_1', csrfToken: 'csrf-1' })
@@ -126,40 +123,6 @@ describe('approveApplication', () => {
     })
     // No request body: approval takes no reviewer input
     expect(opts.body).toBeUndefined()
-    expect(result).toEqual(approveResult)
-  })
-})
-
-describe('remintInvite', () => {
-  it('POSTs to the id-encoded remint-invite URL with X-CSRF-Token and no body, returns the fresh link', async () => {
-    const remintResult = {
-      inviteUrl: '/provider/invite/tok_fresh',
-      expiresAt: '2026-09-01T00:00:00.000Z',
-    }
-    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: remintResult }))
-
-    const result = await remintInvite({ id: 'app 1', csrfToken: 'csrf-1' })
-
-    const [url, opts] = fetchMock.mock.calls[0]!
-    // The id is URL-encoded so a value with a space can't split the path.
-    expect(url).toBe('/api/admin/operator-applications/app%201/remint-invite')
-    expect(opts.method).toBe('POST')
-    expect(opts.credentials).toBe('include')
-    expect(opts.headers).toMatchObject({
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': 'csrf-1',
-    })
-    // No request body: the applicant/operator are immutable.
-    expect(opts.body).toBeUndefined()
-    expect(result).toEqual(remintResult)
-  })
-
-  it('rejects with a ParseError when the response omits inviteUrl', async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ success: true, data: { expiresAt: '2026-09-01T00:00:00.000Z' } }),
-    )
-    await expect(remintInvite({ id: 'app_1', csrfToken: 'csrf-1' })).rejects.toBeInstanceOf(
-      ParseError,
-    )
+    expect(result).toEqual({ operatorId: 'op_abc' })
   })
 })

@@ -1,6 +1,9 @@
+import { Hono } from 'hono'
 import { SignJWT } from 'jose'
 import { beforeAll, describe, expect, test } from 'vitest'
 import { createApp } from '../../src/index'
+import { type CurrentIdentity, provideIdentityResolver } from '../../src/middleware/auth'
+import { createAuthRoutes } from '../../src/routes/auth'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 
 const SESSION_COOKIE = 'kuruma_session'
@@ -108,6 +111,87 @@ describe('GET /auth/session', () => {
     )
     const res = await app.request('/auth/session', { headers: cookie(token) })
     expect(res.status).toBe(401)
+  })
+
+  // Reconcile-and-remint (§5.1). These build a bespoke app wiring a fake identity
+  // resolver via provideIdentityResolver (the shared createApp() does NOT wire one
+  // until Task 4), then mount the real createAuthRoutes with a stub slug lookup.
+  function appWithIdentity(identity: (id: string) => CurrentIdentity | undefined) {
+    const inner = new Hono()
+    inner.use(
+      '*',
+      provideIdentityResolver(async (u) => identity(u.id)),
+    )
+    inner.route(
+      '/',
+      createAuthRoutes(undefined, undefined, undefined, async () => 'acme'),
+    )
+    return inner
+  }
+
+  test('re-mints RENTER→OWNER: returns fresh operatorId/slug + a new Set-Cookie', async () => {
+    const token = await signSession({ sub: 'user_1', role: 'RENTER', csrf: 'csrf-a' })
+    const app = appWithIdentity((id) =>
+      id === 'user_1' ? { role: 'OPERATOR_OWNER', operatorId: 'op_9' } : undefined,
+    )
+    const res = await app.request('/auth/session', { headers: cookie(token) })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data.user).toMatchObject({
+      id: 'user_1',
+      role: 'OPERATOR_OWNER',
+      operatorId: 'op_9',
+      operatorSlug: 'acme',
+    })
+    expect(res.headers.get('set-cookie')).toContain('kuruma_session=')
+    expect(res.headers.get('cache-control')).toBe('no-store')
+  })
+
+  test('re-mint preserves the display profile (C1)', async () => {
+    const token = await signSession({
+      sub: 'user_1',
+      role: 'RENTER',
+      csrf: 'csrf-a',
+      name: 'Ada',
+      email: 'ada@x.io',
+      image: 'https://img/a.png',
+    })
+    const app = appWithIdentity(() => ({ role: 'OPERATOR_OWNER', operatorId: 'op_9' }))
+    const res = await app.request('/auth/session', { headers: cookie(token) })
+    const body = await res.json()
+    expect(body.data.user).toMatchObject({
+      name: 'Ada',
+      email: 'ada@x.io',
+      image: 'https://img/a.png',
+    })
+  })
+
+  test('no change → no re-mint, same csrf, no Set-Cookie', async () => {
+    const token = await signSession({ sub: 'user_1', role: 'RENTER', csrf: 'csrf-a' })
+    const app = appWithIdentity(() => ({ role: 'RENTER' }))
+    const res = await app.request('/auth/session', { headers: cookie(token) })
+    const body = await res.json()
+    expect(body.data.user.role).toBe('RENTER')
+    expect(body.data.csrfToken).toBe('csrf-a')
+    expect(res.headers.get('set-cookie')).toBeNull()
+  })
+
+  test('operator token skips reconcile: resolver never runs, no Set-Cookie', async () => {
+    const token = await signSession({
+      sub: 'op_user',
+      role: 'OPERATOR_OWNER',
+      csrf: 'csrf-op',
+      operatorId: 'op_9',
+      operatorSlug: 'acme',
+    })
+    const app = appWithIdentity(() => {
+      throw new Error('resolver must not run for operator tokens')
+    })
+    const res = await app.request('/auth/session', { headers: cookie(token) })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data.user.role).toBe('OPERATOR_OWNER')
+    expect(res.headers.get('set-cookie')).toBeNull()
   })
 })
 

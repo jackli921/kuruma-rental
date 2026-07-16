@@ -13,7 +13,7 @@ import {
 import {
   COMBO_QUERY_KEY,
   type ClassRatePlanData,
-  type CreateClassRatePlanInput,
+  type UpdateClassRatePlanInput,
   updateComboDeal,
 } from '@/vite/operator-combo-deals/api'
 import { comboErrorMessage } from '@/vite/operator-combo-deals/combo-errors'
@@ -43,7 +43,7 @@ export function EditComboDialog({
   const csrfToken = useSession().data?.csrfToken ?? ''
 
   const { mutateAsync, isPending, error, reset } = useMutation({
-    mutationFn: (data: CreateClassRatePlanInput) =>
+    mutationFn: (data: UpdateClassRatePlanInput) =>
       updateComboDeal(deal?.id ?? '', data, csrfToken, pickedOperatorId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: COMBO_QUERY_KEY })

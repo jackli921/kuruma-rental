@@ -1,6 +1,7 @@
 import { SignJWT } from 'jose'
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { verifySessionCookie } from '../../src/auth/jwt'
 import { createApp } from '../../src/index'
 import { InMemoryAvailabilityRepository } from '../../src/repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
@@ -83,10 +84,15 @@ describe('createApp wires operator-session revocation (#939)', () => {
   let app: ReturnType<typeof createApp>
   let userRepo: InMemoryUserRepository
   let operatorRepo: InMemoryOperatorRepository
+  // Hold the backing maps so tests can seed rows after construction — the repos
+  // close over these exact references, so a later `.set` is visible to findByIds.
+  let userStore: Map<string, User>
+  let operatorStore: Map<string, Operator>
 
   beforeEach(() => {
     setupAuthEnv()
-    userRepo = new InMemoryUserRepository(new Map([[SELF_ID, activeOperatorRow()]]))
+    userStore = new Map([[SELF_ID, activeOperatorRow()]])
+    userRepo = new InMemoryUserRepository(userStore)
     const vehicleRepo = new InMemoryVehicleRepository()
     const bookingRepo = new InMemoryBookingRepository()
     const availabilityRepo = new InMemoryAvailabilityRepository(
@@ -98,7 +104,8 @@ describe('createApp wires operator-session revocation (#939)', () => {
     // operatorRepo backs /operators AND the #1088 operator-active freshness source.
     // Seeded with the member's operator (active) so the operator-deactivation cascade
     // test has a row to toggle; the active row is a no-op for the projection-clear cases.
-    operatorRepo = new InMemoryOperatorRepository(new Map([[OPERATOR_ID, activeOperator()]]))
+    operatorStore = new Map([[OPERATOR_ID, activeOperator()]])
+    operatorRepo = new InMemoryOperatorRepository(operatorStore)
     app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, userRepo, operatorRepo })
   })
 
@@ -181,5 +188,60 @@ describe('createApp wires operator-session revocation (#939)', () => {
     // Clearing an operator must never sweep up renter sessions.
     await userRepo.clearOperatorAccess(SELF_ID)
     expect((await app.request('/auth/session', { headers })).status).toBe(200)
+  })
+
+  // §5.1 promotion reconcile: after admin approval flips a renter's users row to
+  // OPERATOR_OWNER, GET /auth/session must re-mint the token to the new identity on
+  // the next read — without a re-login. This pins the createApp-level wiring of the
+  // identity resolver end-to-end: drop `app.use(provideIdentityResolver(...))` and the
+  // resolver fail-opens (undefined), the reconcile is a no-op, and the promoted user
+  // is stuck on a RENTER token for the whole <=7d TTL.
+  it('re-mints a RENTER session to OWNER once the users projection flips (promotion)', async () => {
+    const userId = 'user_promote'
+    userStore.set(userId, {
+      id: userId,
+      name: 'Promoted Renter',
+      email: 'promote@renter.local',
+      phone: null,
+      language: 'en',
+      country: null,
+      role: 'RENTER',
+      operatorId: null,
+    })
+    const cookie = await sessionCookie({ sub: userId, role: 'RENTER', csrf: 'csrf-p' })
+
+    const before = await app.request('/auth/session', { headers: cookie })
+    expect((await before.json()).data.user).toMatchObject({ id: userId, role: 'RENTER' })
+
+    // Admin approval elsewhere promotes the row (users.setOperatorAccess) and seeds
+    // the tenant operator the reconcile reads the slug from.
+    await userRepo.setOperatorAccess(userId, { role: 'OPERATOR_OWNER', operatorId: 'op_x' })
+    operatorStore.set('op_x', {
+      id: 'op_x',
+      name: 'Promoted Co',
+      slug: 'promoted-co',
+      preAuthHandoffUrl: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deactivatedAt: null,
+    })
+
+    const after = await app.request('/auth/session', { headers: cookie })
+    const body = await after.json()
+    expect(body.data.user).toMatchObject({
+      id: userId,
+      role: 'OPERATOR_OWNER',
+      operatorId: 'op_x',
+      operatorSlug: 'promoted-co',
+    })
+    const setCookieHeader = after.headers.get('set-cookie')
+    expect(setCookieHeader).toContain('kuruma_session=')
+    // Fix A: verify the minted TOKEN itself carries the promoted identity — a bug
+    // that built the response body from `current` but re-minted a stale token would
+    // pass the body assertion above while this one fails.
+    const rawToken = (setCookieHeader ?? '').split(';')[0]?.replace('kuruma_session=', '') ?? ''
+    const verified = await verifySessionCookie(rawToken)
+    expect(verified?.user.role).toBe('OPERATOR_OWNER')
+    expect(verified?.user.operatorId).toBe('op_x')
   })
 })

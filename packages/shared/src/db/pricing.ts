@@ -210,7 +210,10 @@ export const feeSchedules = pgTable(
 // volatile and per-location, while the class taxonomy is stable and
 // operator-wide — a column would lie about its grain (colleague P2). The table
 // also absorbs deferred axes (validFrom/validUntil, minDays, channel) when a
-// second pricing dimension is genuinely needed, without a re-shape.
+// second pricing dimension is genuinely needed: the COLUMNS are additive, but
+// the plain UNIQUE below is NOT — the date-range slice (#1560) drops it for a
+// range-aware exclusion constraint (see the UNIQUE comment). Additive columns,
+// breaking constraint.
 //
 // The combo total is therefore final + deterministic at book time
 // (composeBookingTotal off dayRateJpy) — no representative-car quote, no
@@ -257,8 +260,11 @@ export const classRatePlans = pgTable(
     index('idx_class_rate_plans_class').on(table.classId),
     index('idx_class_rate_plans_pickup_location').on(table.pickupLocationId),
     // ONE rate plan per (operator, class, location). Plain UNIQUE — isActive
-    // toggles the single row in place, so there is never a second row to dedupe
-    // (until date ranges arrive, which the deferred columns will scope).
+    // toggles the single row in place, so there is never a second row to dedupe.
+    // When date ranges arrive (#1560) this constraint is DROPPED and REPLACED
+    // with a range-aware GiST EXCLUDE (the triple + a tstzrange), because
+    // multiple dated rows per triple then coexist — a breaking constraint
+    // migration, not a widened UNIQUE.
     unique('class_rate_plans_operator_class_location_unique').on(
       table.operatorId,
       table.classId,

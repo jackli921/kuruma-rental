@@ -112,13 +112,10 @@ export class ClassRatePlanService {
     const denial = assertPublishable(cls, loc, data.operatorId)
     if (denial) return denial
 
-    const existing = await this.repo.findByScope(
-      data.operatorId,
-      data.classId,
-      data.pickupLocationId,
-    )
-    if (existing) return { ok: false, error: DUPLICATE_SCOPE_MESSAGE, status: 409 }
-
+    // A duplicate (operator, class, location) trips the DB UNIQUE and is mapped
+    // to 409 in the catch below — the in-memory twin throws the same code. A
+    // pre-read would only add a query and a check-then-act race for a verdict the
+    // catch already produces (#1558 M3).
     try {
       const plan = await this.repo.create(data)
       return { ok: true, plan }
@@ -160,7 +157,6 @@ export class ClassRatePlanService {
 
     const mergedClassId = patch.classId ?? existing.classId
     const mergedLocationId = patch.pickupLocationId ?? existing.pickupLocationId
-    const targetChanged = retargetingClass || retargetingLocation
 
     if (needsPublishabilityCheck) {
       const [cls, loc] = await Promise.all([
@@ -171,16 +167,10 @@ export class ClassRatePlanService {
       if (publishDenial) return publishDenial
     }
 
-    if (targetChanged) {
-      const clash = await this.repo.findByScope(
-        existing.operatorId,
-        mergedClassId,
-        mergedLocationId,
-      )
-      if (clash && clash.id !== id)
-        return { ok: false, error: DUPLICATE_SCOPE_MESSAGE, status: 409 }
-    }
-
+    // A retarget that collides with another plan's (operator, class, location)
+    // trips the DB UNIQUE and is mapped to 409 in the catch below — the in-memory
+    // twin throws the same code on a foreign-row clash. No pre-read needed
+    // (#1558 M3).
     try {
       const updated = await this.repo.update(ctx, id, patch)
       if (!updated) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }

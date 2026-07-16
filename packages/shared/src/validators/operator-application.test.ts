@@ -4,7 +4,6 @@ import { operatorApplicationSchema } from './operator-application'
 const valid = {
   businessName: 'Osaka Rentals',
   contactName: 'Aiko Tanaka',
-  contactEmail: 'AIKO@Example.com',
   contactPhone: '+81 90-1234-5678',
   serviceArea: 'Osaka',
   estimatedFleetSize: '6-20',
@@ -14,10 +13,17 @@ const valid = {
 }
 
 describe('operatorApplicationSchema', () => {
-  it('accepts a valid application and lowercases the email', () => {
+  it('accepts a valid application', () => {
     const r = operatorApplicationSchema.safeParse(valid)
     expect(r.success).toBe(true)
-    if (r.success) expect(r.data.contactEmail).toBe('aiko@example.com')
+    if (r.success) expect(r.data.businessName).toBe('Osaka Rentals')
+  })
+  it('drops any client-supplied contactEmail (sign-in-first: email is server-derived)', () => {
+    // The schema no longer declares contactEmail, so Zod strips it from the parsed
+    // output — a caller can never seed the applicant email through the request body.
+    const r = operatorApplicationSchema.safeParse({ ...valid, contactEmail: 'attacker@evil.io' })
+    expect(r.success).toBe(true)
+    if (r.success) expect(r.data).not.toHaveProperty('contactEmail')
   })
   it('rejects when consent is false', () => {
     const r = operatorApplicationSchema.safeParse({ ...valid, consent: false })
