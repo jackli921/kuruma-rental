@@ -778,6 +778,13 @@
       "when": 1783904776960,
       "tag": "0110_link_operator_application_to_applicant",
       "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1784243216799,
+      "tag": "0111_consent_acceptances_append_only_role",
+      "breakpoints": true
     }
   ]
 }
