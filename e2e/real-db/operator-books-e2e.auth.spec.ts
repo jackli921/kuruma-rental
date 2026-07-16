@@ -35,12 +35,23 @@ const LOCATION_NAME = `${MARKER} Namba depot`
 const VEHICLE_NAME = `${MARKER} Aqua`
 const LOCATION_ADDRESS = '2-1-1 Namba, Chuo-ku, Osaka'
 
-// Far-future window, clear of the seed's demo-relative (~-5..+7d) and every other
-// real-DB spec's window (Jul/Aug 2026, Aug 2027). The vehicle we mint carries far-
-// future compliance dates (below) so it is road-legal through this window.
-const FROM = '2027-03-16T10:00'
-const TO = '2027-03-18T10:00'
-const OPERATOR_MONTH = '2027-03-16'
+// A window 6 months out, computed relative to today so it can never rot into the
+// past and 4xx the booking POST - the class of failure fixed for region-search in
+// #1567. The +6mo offset keeps this window distinct from every other real-DB spec's
+// so parallel specs never contend for the same KIX vehicle, and clear of the demo-
+// relative seed (~-5..+7d). The vehicle we mint carries far-future compliance dates
+// (below) so it is road-legal through this window. `datetime-local` wall-clock
+// (parsed as JST); OPERATOR_MONTH must match FROM's date so the operator calendar
+// lands on the booking's month.
+const pad = (n: number) => String(n).padStart(2, '0')
+const isoDate = (d: Date) =>
+  `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
+const NOW = new Date()
+// Date.UTC normalises a month index past 11 into the next year, so +6 stays year-safe.
+const BOOK_DAY = new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth() + 6, 16))
+const FROM = `${isoDate(BOOK_DAY)}T10:00`
+const TO = `${isoDate(new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth() + 6, 18)))}T10:00`
+const OPERATOR_MONTH = isoDate(BOOK_DAY)
 
 // Compliance dates must be future-dated at create time (createVehicleSchema, #916)
 // and stay valid through the booking window — a fixed far-future date satisfies both.
