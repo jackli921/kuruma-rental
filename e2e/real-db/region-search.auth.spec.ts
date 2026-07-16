@@ -23,9 +23,17 @@ const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 
 // Far-future window, clear of the demo-relative seeded bookings (~-5..+7d): every
 // store keeps a free fleet, so the region filter — not availability — drives the
-// result set. `datetime-local` wall-clock (parsed as JST).
-const FROM = '2026-07-15T10:00'
-const TO = '2026-07-17T10:00'
+// result set. `datetime-local` wall-clock (parsed as JST). Computed relative to
+// today (not a fixed date) so the window can never drift into the past and make
+// the real booking POST 4xx — a hardcoded '2026-07-15' silently rotted here once
+// wall-clock passed it, failing every PR's e2e-real-db lane.
+const bookingDay = (offsetDays: number): string => {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() + offsetDays)
+  return d.toISOString().slice(0, 10) // YYYY-MM-DD
+}
+const FROM = `${bookingDay(30)}T10:00`
+const TO = `${bookingDay(32)}T10:00`
 
 // The KIX area (slug `kix`) is a leaf: its subtree is one store, Best Car Rental's
 // "Kansai Airport (KIX)". Its region centre == that store's coords, so the store
