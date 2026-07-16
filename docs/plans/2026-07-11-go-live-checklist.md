@@ -57,6 +57,13 @@ not exist yet — this checklist builds it.
       `STRIPE_SECRET_KEY/WEBHOOK_SECRET` (live), `SENTRY_DSN`, `CONSENT_SIGNING_KEY(_ID)`,
       `GOOGLE_TRANSLATE_API_KEY`. Optional (fail closed if unset): `STATS_API_KEY` (the
       `/stats` dashboard), `PARTNER_API_KEY` (Trip.com partner API).
+  - [ ] **Email `from` is a var, not a secret (#1561)** — `EMAIL_FROM` already ships as a
+        `[vars]` value in `wrangler.toml` (beta + `[env.production.vars]`, both
+        `noreply@mail.jack-li.dev`), so there's nothing to `secret put`. It must stay
+        non-empty and on the Resend-verified sending domain: with `RESEND_API_KEY` set but
+        `EMAIL_FROM` empty, `resolveEmailSender` now returns a throwing sentinel — every
+        approval/rejection + booking + compliance email fails loud instead of silently
+        4xx-ing. `RESEND_API_KEY` is the only email secret.
   - [ ] **Do NOT reuse the beta secret `PROD_DATABASE_URL`** — it holds the **beta** DB
         connection string (feeds beta's `DATABASE_URL` + migrations). Create a NEW,
         distinctly-named GitHub secret (e.g. `PRODUCTION_LIVE_DATABASE_URL`) = the
@@ -77,8 +84,13 @@ not exist yet — this checklist builds it.
 - [ ] **Prod web Pages deploy** — `deploy.yml` is beta-only; add a `kuruma-web-production`
       deploy path once that Pages project exists.
 - [ ] **Prod secret rotation** — a `rotate-secrets.yml` variant that targets `--env production`.
-- [ ] **`deploy.yml` presence check** — add Stripe / Sentry / Consent / Translate to the
-      required-secret gate once prod genuinely depends on them.
+- [ ] **`deploy.yml` presence check** — add Stripe / Sentry / Consent / Translate /
+      **`RESEND_API_KEY` (#1561)** to the required-secret gate once prod genuinely depends
+      on them. Deferred until then on purpose: the gate reads `wrangler secret list` and
+      hard-fails the deploy for any listed-but-unset secret, so adding a not-yet-provisioned
+      key would block beta (same reason Stripe is still out). NOTE: `EMAIL_FROM` is a
+      `[vars]` value (ships with code), NOT a secret — it can't appear in `secret list`, so
+      it's validated by living in `wrangler.toml`, not by this gate.
 
 ---
 
