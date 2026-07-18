@@ -34,13 +34,24 @@ const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 const STOREFRONT_NAME = 'Kansai Airport (KIX)'
 const OPERATOR_NAME = 'Best Car Rental'
 
-// An AUGUST window — distinct from the desktop spec's July window so the two
-// never contend for the same KIX vehicle and each cleans up only its own rows.
-// `datetime-local` wall-clock (parsed as JST).
-const FROM = '2026-08-15T10:00'
-const TO = '2026-08-17T10:00'
-const WINDOW_START = '2026-08-01'
-const WINDOW_END = '2026-09-01'
+// A window 4 months out, computed relative to today so it can never rot into the
+// past and 4xx the booking POST - a hardcoded '2026-08-15' would once wall-clock
+// passed it (the class of failure fixed for region-search in #1567). The +4mo
+// offset keeps this window distinct from every other real-DB spec's (region +1mo,
+// marketplace +2mo, messaging +3mo, booking-extras +5mo, operator-books +6mo) so
+// parallel specs never contend for the same KIX vehicle, and clear of the demo-
+// relative seed (~-5..+7d). `datetime-local` wall-clock (parsed as JST).
+const pad = (n: number) => String(n).padStart(2, '0')
+const isoDate = (d: Date) =>
+  `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
+const NOW = new Date()
+// Date.UTC normalises a month index past 11 into the next year, so +N stays year-safe.
+const BOOK_MONTH = NOW.getUTCMonth() + 4
+const FROM = `${isoDate(new Date(Date.UTC(NOW.getUTCFullYear(), BOOK_MONTH, 15)))}T10:00`
+const TO = `${isoDate(new Date(Date.UTC(NOW.getUTCFullYear(), BOOK_MONTH, 17)))}T10:00`
+// Month bracket [1st .. next 1st) for the FK-ordered date-window cleanup below.
+const WINDOW_START = isoDate(new Date(Date.UTC(NOW.getUTCFullYear(), BOOK_MONTH, 1)))
+const WINDOW_END = isoDate(new Date(Date.UTC(NOW.getUTCFullYear(), BOOK_MONTH + 1, 1)))
 
 const PHONE_VIEWPORT = { width: 390, height: 844 }
 

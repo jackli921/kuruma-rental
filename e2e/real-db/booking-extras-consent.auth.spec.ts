@@ -24,11 +24,23 @@ const ADD_ON_NAME = 'Child seat'
 const ADD_ON_PRICE_JPY = 1100
 const INSURANCE_NAME = 'Normal'
 
-// A far-future window distinct from the happy-path's 2026-07 window, so the two
-// specs never contend for KIX's 4 vehicles in the same window. `datetime-local`
-// wall-clock (parsed as JST).
-const FROM = '2026-09-10T10:00'
-const TO = '2026-09-12T10:00'
+// A window 5 months out, computed relative to today so it can never rot into the
+// past and 4xx the booking POST - the class of failure fixed for region-search in
+// #1567. The +5mo offset keeps this window distinct from every other real-DB spec's
+// so parallel specs never contend for KIX's 4 vehicles, and clear of the demo-
+// relative seed (~-5..+7d). `datetime-local` wall-clock (parsed as JST). MONTH_FLOOR
+// and NEXT_MONTH_FLOOR (1st of this/next month) bracket the date-window cleanup below
+// so it deletes exactly this spec's month, never a further-future shared-renter row.
+const pad = (n: number) => String(n).padStart(2, '0')
+const isoDate = (d: Date) =>
+  `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
+const NOW = new Date()
+// Date.UTC normalises a month index past 11 into the next year, so +N stays year-safe.
+const BOOK_MONTH = NOW.getUTCMonth() + 5
+const FROM = `${isoDate(new Date(Date.UTC(NOW.getUTCFullYear(), BOOK_MONTH, 10)))}T10:00`
+const TO = `${isoDate(new Date(Date.UTC(NOW.getUTCFullYear(), BOOK_MONTH, 12)))}T10:00`
+const MONTH_FLOOR = isoDate(new Date(Date.UTC(NOW.getUTCFullYear(), BOOK_MONTH, 1)))
+const NEXT_MONTH_FLOOR = isoDate(new Date(Date.UTC(NOW.getUTCFullYear(), BOOK_MONTH + 1, 1)))
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
 
@@ -208,7 +220,8 @@ async function cleanupFutureSarahBookings(): Promise<void> {
     const ids = await sql<{ id: string }[]>`
       SELECT b.id FROM bookings b
       JOIN users u ON u.id = b."renterId"
-      WHERE u.email = ${RENTER_EMAIL} AND b."startAt" >= '2026-09-01'
+      WHERE u.email = ${RENTER_EMAIL}
+        AND b."startAt" >= ${MONTH_FLOOR} AND b."startAt" < ${NEXT_MONTH_FLOOR}
     `
     if (ids.length === 0) return
     const bookingIds = ids.map((r) => r.id)
