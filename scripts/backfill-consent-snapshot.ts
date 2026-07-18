@@ -12,7 +12,11 @@ import { decideBackfill } from './consent-backfill-decide'
 const dryRun = process.argv.includes('--dry-run')
 
 async function main() {
-  const db = getDb()
+  // Pin the OWNER url explicitly (not the DATABASE_URL_RUNTIME the app prefers):
+  // this is a break-glass correction tool that UPDATEs consent_acceptances (:96),
+  // which the reduced-privilege runtime role is forbidden to do (#1553 append-only
+  // seal). Owner-only, so resolve DATABASE_URL directly.
+  const db = getDb(process.env.DATABASE_URL)
   const signingKey = resolveSigningKey()
   const getKey = (keyId: string) =>
     signingKey && signingKey.keyId === keyId ? signingKey : undefined

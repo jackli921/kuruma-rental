@@ -21,8 +21,13 @@
  *     the effective-end trigger + CHECK, and the idempotency unique index live
  *     only in raw SQL (no drizzle snapshot), so the count checks above cannot see
  *     them. Assert each exists by name. See issue #702.
+ *  6. Consent ledger append-only seal — the `kuruma_runtime` role must exist and
+ *     must NOT hold UPDATE/DELETE on `consent_acceptances` (it may INSERT). This
+ *     REVOKE (drizzle/0109) is snapshot-invisible like Check 5's objects; a bad
+ *     restore or an accidental re-GRANT would silently reopen a legal ledger to
+ *     tampering. See ADR-0001 (#1553) compliance clause.
  *
- * Checks 4 and 5 need a DB; both are skipped cleanly when DATABASE_URL is unset
+ * Checks 4, 5, and 6 need a DB; all are skipped cleanly when DATABASE_URL is unset
  * so the three static checks still gate local commits.
  */
 
@@ -289,6 +294,68 @@ re-running \`bun run db:migrate\` against a clean DB, or re-applying the object 
   } catch (err) {
     fail(
       'critical DB objects',
+      `Failed to query DB: ${(err as Error).message}
+If the DB is intentionally unavailable, unset DATABASE_URL to skip this check.`,
+    )
+  }
+}
+
+// ---- Check 6: consent ledger append-only seal (only if DATABASE_URL set) ----
+//
+// consent_acceptances is a legal evidence ledger. In place of the dropped HMAC
+// record signature (#1553), row integrity is enforced by role separation: the
+// application runtime connects as the non-owner `kuruma_runtime` role, which may
+// INSERT/SELECT but never UPDATE/DELETE this table (REVOKE in drizzle/0109). That
+// REVOKE is snapshot-invisible — Checks 1-5 cannot see it — so a bad restore, an
+// out-of-order migration, or an accidental `GRANT UPDATE` could silently reopen
+// the ledger to tampering while every count check stays green. Assert the seal by
+// querying the live privilege, not the migration text. See ADR-0001 (#1553).
+const RUNTIME_ROLE = 'kuruma_runtime'
+const LEDGER_TABLE = 'public.consent_acceptances'
+
+if (!process.env.DATABASE_URL) {
+  console.log('• consent append-only seal — skipped (no DATABASE_URL)')
+} else {
+  try {
+    const postgres = (await import('postgres')).default
+    const sql = postgres(process.env.DATABASE_URL, { max: 1 })
+    try {
+      // has_table_privilege throws if the role or table is absent, so guard first.
+      const [pre] = await sql<{ role_exists: boolean; table_exists: boolean }[]>`
+        SELECT
+          EXISTS(SELECT 1 FROM pg_roles WHERE rolname = ${RUNTIME_ROLE}) AS role_exists,
+          to_regclass(${LEDGER_TABLE}) IS NOT NULL AS table_exists`
+      if (!pre?.role_exists || !pre?.table_exists) {
+        fail(
+          'consent append-only seal',
+          `The ${RUNTIME_ROLE} role or ${LEDGER_TABLE} table is missing (role_exists=${pre?.role_exists}, table_exists=${pre?.table_exists}).
+The append-only seal from drizzle/0109 is not in place. Re-run \`bun run db:migrate\` against a clean DB.`,
+        )
+      } else {
+        const [priv] = await sql<
+          { can_update: boolean; can_delete: boolean; can_insert: boolean }[]
+        >`
+          SELECT
+            has_table_privilege(${RUNTIME_ROLE}, ${LEDGER_TABLE}, 'UPDATE') AS can_update,
+            has_table_privilege(${RUNTIME_ROLE}, ${LEDGER_TABLE}, 'DELETE') AS can_delete,
+            has_table_privilege(${RUNTIME_ROLE}, ${LEDGER_TABLE}, 'INSERT') AS can_insert`
+        if (priv?.can_update || priv?.can_delete || !priv?.can_insert) {
+          fail(
+            'consent append-only seal',
+            `The ${RUNTIME_ROLE} role has the WRONG privileges on ${LEDGER_TABLE} (UPDATE=${priv?.can_update}, DELETE=${priv?.can_delete}, INSERT=${priv?.can_insert}).
+Expected UPDATE=false, DELETE=false, INSERT=true. A legal ledger is append-only; corrections run through the owner (break-glass) role, never the app runtime.
+Re-apply the REVOKE from drizzle/0109 (\`REVOKE UPDATE, DELETE ON consent_acceptances FROM ${RUNTIME_ROLE}\`).`,
+          )
+        } else {
+          pass('consent append-only seal', `${RUNTIME_ROLE} INSERT-only on consent_acceptances`)
+        }
+      }
+    } finally {
+      await sql.end()
+    }
+  } catch (err) {
+    fail(
+      'consent append-only seal',
       `Failed to query DB: ${(err as Error).message}
 If the DB is intentionally unavailable, unset DATABASE_URL to skip this check.`,
     )
