@@ -253,15 +253,15 @@ describe('OperatorApplicationService.approve', () => {
       }
     }
 
-    const service = new OperatorApplicationService(
-      applications,
-      audit,
-      runOperatorApproval,
-      { webBaseUrl: 'https://app.example.com', fromAddress: 'noreply@test.io' },
-      memberships,
+    const service = new OperatorApplicationService({
+      repo: applications,
+      recordAudit: audit,
+      runApproval: runOperatorApproval,
+      config: { webBaseUrl: 'https://app.example.com', fromAddress: 'noreply@test.io' },
+      members: memberships,
       users,
-      noopEmailSender,
-    )
+      emailSender: noopEmailSender,
+    })
     return {
       service,
       repos: {
@@ -559,15 +559,15 @@ describe('OperatorApplicationService.approve', () => {
       })
     }
 
-    const service = new OperatorApplicationService(
-      applications,
-      vi.fn(),
+    const service = new OperatorApplicationService({
+      repo: applications,
+      recordAudit: vi.fn(),
       runApproval,
-      { webBaseUrl: 'https://app.example.com', fromAddress: 'noreply@test.io' },
-      membershipsRepo,
-      usersRepo,
-      opts.emailSender ?? noopEmailSender,
-    )
+      config: { webBaseUrl: 'https://app.example.com', fromAddress: 'noreply@test.io' },
+      members: membershipsRepo,
+      users: usersRepo,
+      emailSender: opts.emailSender ?? noopEmailSender,
+    })
     return { service, applicationId: app.id }
   }
 
@@ -636,13 +636,13 @@ function makeService(
   }
   const memberships = deps.memberships ?? new InMemoryOperatorMembershipRepository()
   const users = deps.users ?? new InMemoryUserRepository()
-  return new OperatorApplicationService(
+  return new OperatorApplicationService({
     repo,
     recordAudit,
-    stubRunApproval,
-    { webBaseUrl: '', fromAddress: 'noreply@test.io' },
-    memberships,
+    runApproval: stubRunApproval,
+    config: { webBaseUrl: '', fromAddress: 'noreply@test.io' },
+    members: memberships,
     users,
-    deps.emailSender ?? noopEmailSender,
-  )
+    emailSender: deps.emailSender ?? noopEmailSender,
+  })
 }

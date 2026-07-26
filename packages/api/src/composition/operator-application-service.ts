@@ -12,11 +12,12 @@ import {
 import { resolveEmailConfig } from './services'
 
 /**
- * Collaborators for the sign-in-first onboarding service (#877). A deps object
- * rather than positional args — the constructor takes seven collaborators and a
- * positional call at the composition root is easy to mis-order.
+ * Composition-root wiring inputs for the onboarding service (#877). Distinct from
+ * the service's own `OperatorApplicationServiceDeps` (which carries a resolved
+ * `config`): this shape takes a flat `webBaseUrl`, and the builder folds in the
+ * shared email envelope (from/reply-to) to produce the service `config`.
  */
-export interface OperatorApplicationServiceDeps {
+export interface OperatorApplicationServiceWiring {
   repo: OperatorApplicationRepository
   recordAudit: RecordOperatorApplicationAudit
   runApproval: RunOperatorApproval
@@ -32,20 +33,20 @@ export interface OperatorApplicationServiceDeps {
  * cap. Mirrors buildReconcileIdentityResolver (composition/session-reconcile.ts).
  */
 export function buildOperatorApplicationService(
-  deps: OperatorApplicationServiceDeps,
+  wiring: OperatorApplicationServiceWiring,
 ): OperatorApplicationService {
   const emailConfig = resolveEmailConfig()
-  return new OperatorApplicationService(
-    deps.repo,
-    deps.recordAudit,
-    deps.runApproval,
-    {
-      webBaseUrl: deps.webBaseUrl,
+  return new OperatorApplicationService({
+    repo: wiring.repo,
+    recordAudit: wiring.recordAudit,
+    runApproval: wiring.runApproval,
+    config: {
+      webBaseUrl: wiring.webBaseUrl,
       fromAddress: emailConfig.emailFrom,
       ...(emailConfig.emailReplyTo ? { replyTo: emailConfig.emailReplyTo } : {}),
     },
-    deps.members,
-    deps.users,
-    deps.emailSender,
-  )
+    members: wiring.members,
+    users: wiring.users,
+    emailSender: wiring.emailSender,
+  })
 }
