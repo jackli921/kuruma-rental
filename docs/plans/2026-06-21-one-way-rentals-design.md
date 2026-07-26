@@ -1,5 +1,7 @@
 # Same-operator one-way rentals — design
 
+> **⚠️ SUPERSEDED (2026-07-26) by `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md`.** The derived-location fold below is abandoned: the new design forbids advance bookings at a not-yet-arrived location, which makes a present-tense `currentLocationId` correct and removes the need for the fold. Kept for history and for its still-valid read/write-parity idea.
+
 > **Status:** DRAFT for review — rev.3 (movement-history status set, lock-all-mutations, parity-all-surfaces, dropoff turnaround; post-maintainability-review) · **Issue:** #882 · **Date:** 2026-06-21
 > **Supersedes the placeholder:** `2026-06-15-search-map-list-redesign.md` §6 (forward-compat note only)
 > **Scope note (authoritative):** #882 comment 2026-06-20 — *same-operator* one-way is in scope; *cross-operator* returns are a separate, blocked initiative ("multi-operator return network").
