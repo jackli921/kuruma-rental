@@ -1,6 +1,6 @@
 # Same-operator one-way rentals — design
 
-> **⚠️ SUPERSEDED (2026-07-26) by `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md`.** The derived-location fold below is abandoned: the new design forbids advance bookings at a not-yet-arrived location, which makes a present-tense `currentLocationId` correct and removes the need for the fold. Kept for history and for its still-valid read/write-parity idea.
+> **⚠️ SUPERSEDED (2026-07-26) by `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md`.** What is replaced: using the derived fold as the source of *current* location — the new design forbids advance bookings at a not-yet-arrived location, so a *materialized* present-tense location is a correct fact + first-listing gate. **What is RETAINED: §3.1's timeline-feasibility predicate (`locationAt` + pickup/dropoff continuity).** A car validly present at B can still take a future booking that relocates it, so future-window search/checkout still needs this fold (see the new spec §2). Do not delete §3–3.1: the new design's Slice 0 depends on it.
 
 > **Status:** DRAFT for review — rev.3 (movement-history status set, lock-all-mutations, parity-all-surfaces, dropoff turnaround; post-maintainability-review) · **Issue:** #882 · **Date:** 2026-06-21
 > **Supersedes the placeholder:** `2026-06-15-search-map-list-redesign.md` §6 (forward-compat note only)
