@@ -69,3 +69,4 @@ docs/meeting_notes/
 # archived under docs/archive/. Keeps top-level docs/ to source-of-truth only.
 docs/handoffs/
 docs/*-handoff.md
+STATE.md
