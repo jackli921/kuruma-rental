@@ -1,9 +1,9 @@
 # One-way custody network — design
 
-> **Status:** DRAFT for review · rev.4 (third-round P1 blockers folded) · **Date:** 2026-07-26
+> **Status:** DRAFT for review · rev.5 (plan-review blockers folded) · **Date:** 2026-07-26
 > **Supersedes:** `docs/plans/2026-06-21-one-way-rentals-design.md` (#882) — but **retains** its timeline-feasibility predicate + per-vehicle lock (see §2). The derived-location model is *not* fully abandoned; only its use as the source of *current* location is replaced.
 > **Confirmed with owner (kaku):** four business decisions, recorded in §14. **Owner-signed-off:** the `AT_STATION|IN_TRANSIT` state shape; deferring displaced `CLASS_COMBO`.
-> **Review history:** rev.2 folded six findings; rev.3 folded five second-round blockers; rev.4 folds four third-round P1s (one leg per traversal with departure+arrival facts, handoff/receipt DB seals, active-cancellation recovery, `locations.status`-correct homeward predicate + archival rule) + the one-open-period DB constraint. Parts that open a *business* decision (settlement numbers, host-receipt scope, class-combo deferral) are flagged in §13.
+> **Review history:** rev.2 folded six findings; rev.3 folded five second-round blockers; rev.4 folded four third-round P1s + the one-open-period DB constraint. rev.5 folds the eight plan-review blockers: state-dependent homeward policy (§7), displaced cars vs the class capacity gate (§11), substitution/assignment leg semantics (§5), ferry depart-through-the-one-transition + no-pending rule (§8), full custody conditions at checkout + physical-location display mapping (§11), receipt ordering/idempotency/no-re-target (§5/§6), flag + kill-switch semantics (§12.1), archival atomicity + origin endpoints + mandatory photos + five added DB seals (§6/§7). One refined policy point is flagged for the owner in §14 Q1.
 
 ---
 
@@ -58,7 +58,8 @@ A leg's **planned projection is replaced by its actual arrival exactly once**: s
 An `IN_TRANSIT` car's baseline is therefore its *last arrived leg* (never `NULL`), with the in-flight leg (departed, not yet arrived) as the projection that will next relocate it.
 This is exactly #882 §5.1's anticipated `vehicle_movements` source — now made concrete.
 
-**One lock guards the whole stream.** Every operation that mutates the timeline — booking **create / cancel / substitution** (already locked, #882 §5.3) **plus leg departure (rental/ferry start) and arrival receipt** — takes the *same* per-vehicle advisory xact-lock (`pg_advisory_xact_lock(hashtext(vehicleId))`), so the check-then-act over the stream is race-free. A receipt that lands between a create's read and its commit must not slip past the feasibility check.
+**One lock guards the whole stream.** Every operation that mutates the timeline — booking **create / cancel / substitution / class-assignment** (create/cancel already locked, #882 §5.3) **plus leg departure (rental/ferry start) and arrival receipt** — takes the *same* per-vehicle advisory xact-lock (`pg_advisory_xact_lock(hashtext(vehicleId))`), so the check-then-act over the stream is race-free. A receipt that lands between a create's read and its commit must not slip past the feasibility check.
+**Two-vehicle operations lock in sorted order.** Substitution mutates *two* cars' timelines (the old car's leg is voided or becomes a recovery leg; the replacement gains one). Both per-vehicle locks are taken, always in ascending `vehicleId` order, so two concurrent substitutions can never deadlock. Where the class-capacity lock is also held (booking create), the order is: combo lock first, then vehicle lock(s) — one documented order everywhere.
 
 ```
 Learn: Movement Event Identity
@@ -132,9 +133,14 @@ A car is **ON** in search when **all** hold:
 Transitions (all under the §2.1 per-vehicle lock):
 
 - **Departure** — a leg (rental or ferry) starts → set the leg's `departedAt`, `custodyState := IN_TRANSIT`, `physicalHostOperatorId := NULL`, `physicalLocationId := NULL`, **and the open custody period closes** (`departedAt := now`, §10). The host stops accruing the moment the car leaves it.
-- **Arrival receipt** (§6) at host `H`, location `L` → set the leg's `receivedAt`, `custodyState := AT_STATION`, `physicalHostOperatorId := H`, `physicalLocationId := L`, **and a new custody period opens** (`receivedAt := now`, §10); then, per the owner's per-car setting, either listable (**ON**) or **`HELD_OFFLINE`**. Home vs foreign is derived (§4), not branched here.
+- **Arrival receipt** (§6) at host `H`, location `L` → set the leg's `receivedAt`, `custodyState := AT_STATION`, `physicalHostOperatorId := H`, `physicalLocationId := L`, **and a new custody period opens** (`receivedAt := now`, §10); then, per the owner's per-car setting, either listable (**ON**) or **`HELD_OFFLINE`**. Home vs foreign is derived (§4), not branched here. Two receipt preconditions:
+  - **Ordering (rental legs):** the receipt is accepted only once the booking is **terminal** — `COMPLETED` (normal return) or `CANCELLED` (recovery). Receiving a car whose booking is still `ACTIVE` is a 409: the flow is *return → complete → receive*, matching §11 ("`COMPLETED` + the receipt gate drives the host change"). Ferry/transfer legs have no booking and need only be in flight.
+  - **No re-targeting on a normal arrival:** `L` must equal the leg's planned `toLocation`. Only a **recovery** receipt (the leg's booking is `CANCELLED`, §5 active-cancel) may land at a different location and re-set the leg's `to*` pair. Condition-data mistakes are fixed by supersession corrections (§6.2), never by moving the arrival.
 - **Pre-start cancellation** (`CONFIRMED → CANCELLED`, car never left) → **void the planned leg**; it drops out of the projection. Physical state and the open custody period are untouched — the car never moved.
 - **Active cancellation** (`ACTIVE → CANCELLED`, car already departed — operator-only, no fee, #679) → the car is **physically out and cannot be teleported home**. The in-flight rental leg becomes a **recovery leg**: the car **stays `IN_TRANSIT` until a receipt** confirms where it actually landed (which may not be the original drop-off). Only that recovery receipt returns it to `AT_STATION`. (This is the `booking-lifecycle.ts` `updateStatus(→CANCELLED)` path, not renter self-cancel, which is `CONFIRMED`-only.)
+- **Class-assignment** (a `CLASS_COMBO` float gets its car — `assignVehicle`) → a float has no car, hence no leg at create; **the booking's `RENTAL` leg is created at assignment**, planned over the booking's window, under the assigned car's timeline lock and the same feasibility check as a SPECIFIC create.
+- **Substitution, pre-departure** (booking `CONFIRMED`) → **void the old car's leg, create a planned leg for the replacement** — one transaction, both timeline locks in sorted order (§2.1), replacement feasibility checked like a create.
+- **Substitution while `ACTIVE`** → the old car is physically out: its leg **stays in flight as a recovery leg** (a receipt lands it wherever it actually returns, as in active-cancel); the replacement's leg is created **already departed** at the substitution instant. The booking's remaining window rides the new car; the old car's recovery is independent of the booking.
 - Auto-relist vs wait-for-owner on receipt is a **per-car owner setting** — default *wait for owner*, one-flip *auto-relist on receipt*.
 
 ---
@@ -158,14 +164,19 @@ movement_legs { id, vehicleId, kind (RENTAL|FERRY|TRANSFER),
                 fromOperatorId, fromLocationId, toOperatorId, toLocationId,
                 plannedStartAt, plannedEndAt,          -- projection window (§2.1)
                 departedAt (NULL until departure), receivedAt (NULL until arrival receipt),
+                voidedAt (NULL — set only by a pre-start cancel/substitution, §5),
                 idempotencyKey, createdAt }
 ```
 
-This is the **same movement the §2.1 feasibility stream folds** and the boundary the §10 custody period opens/closes on — one concept, three consumers. `toOperatorId`/`toLocationId` may be **re-set on receipt** when the actual arrival differs from the plan (active-cancel recovery, §5).
+This is the **same movement the §2.1 feasibility stream folds** and the boundary the §10 custody period opens/closes on — one concept, three consumers. A **voided** leg (pre-start cancel or pre-departure substitution, §5) stays as an audit row but drops out of every fold. `toOperatorId`/`toLocationId` may be **re-set on receipt only for a recovery leg** (its booking `CANCELLED`, §5) — a normal arrival never re-targets.
 
 **DB seals:**
 - **`UNIQUE(idempotencyKey)`** — a retried create-leg command never duplicates a movement.
 - **`UNIQUE(bookingId) WHERE bookingId IS NOT NULL`** — exactly one leg per booking (a booking is one traversal).
+- **`CHECK ((kind = 'RENTAL') = (bookingId IS NOT NULL))`** — a rental leg always names its booking; a ferry/transfer never does.
+- **`UNIQUE(vehicleId) WHERE departedAt IS NOT NULL AND receivedAt IS NULL AND voidedAt IS NULL`** — at most **one in-flight leg per vehicle**; the "at most one, by process invariant" claim becomes a constraint.
+- **Timestamp coherence** — `CHECK (receivedAt IS NULL OR (departedAt IS NOT NULL AND receivedAt >= departedAt))` (an arrival needs a departure and never precedes it) and `CHECK (voidedAt IS NULL OR departedAt IS NULL)` (a departed leg can never be voided — it becomes a recovery leg instead).
+- **`UNIQUE(id, vehicleId)`** — the target that lets receipts pin their vehicle to their leg's vehicle (§6.2).
 
 ### 6.2 The receipt record — immutable evidence
 
@@ -188,9 +199,13 @@ A leg has two ends: the **`ARRIVAL`** receipt is location-authoritative (it sets
 - **One canonical receipt per leg-end** — `UNIQUE(legId, phase) WHERE supersedesReceiptId IS NULL`.
 - **`UNIQUE(supersedesReceiptId) WHERE supersedesReceiptId IS NOT NULL`** — a receipt is superseded by at most one correction, so the chain stays linear (no branching heads).
 - **A correction stays on the same leg-end** — composite FK `(supersedesReceiptId, legId, phase) → handoff_receipts(id, legId, phase)` (backed by a `UNIQUE(id, legId, phase)`), so a correction can never re-point to a different leg or end.
-- **Immutable / append-only** — a receipt is never edited; a correction is a new row (never delete/update). The current view is the head of the supersession chain.
+- **A receipt names its leg's vehicle** — composite FK `(legId, vehicleId) → movement_legs(id, vehicleId)` (backed by §6.1's `UNIQUE(id, vehicleId)`), so evidence can never cite a different car than the traversal it documents.
+- **Immutable / append-only, DB-enforced** — a receipt is never edited; a correction is a new row. The repository exposing no update/delete is *not* the enforcement: the table is sealed at the database boundary with the #1556 consent-ledger mechanism (role separation — the app role holds INSERT/SELECT only, no UPDATE/DELETE). The current view is the head of the supersession chain.
 - **Private access** — reuse the R2 *infra* but a **private** bucket/prefix (never the public catalog base); served only to the booking's parties + the handling host + platform.
 - **Structured condition data**, not just photos — the evidence trail for damage attribution (§13 liability).
+- **Photos are mandatory at `ARRIVAL`** — the §6 procedure says *photograph*; the server enforces ≥ 1 evidence photo on every arrival receipt (dev/test use the in-memory storage; an environment without the private bucket cannot run custody, by configuration).
+
+**Replay semantics (normative).** A retried receipt command is resolved by **checking `idempotencyKey` first, inside the per-vehicle lock, before any state precondition** — a full replay returns the prior receipt even though the leg is no longer in flight. The unique seal is the backstop for true races only: a 23505 aborts the enclosing transaction (nothing can be queried after it inside the same tx), so check-first ordering is required, not optional. Photo uploads happen before the transaction (object storage is not transactional); a failed tx may orphan private keys — accepted, invisible, and reaped later if ever needed.
 
 ```
 Learn: Evidence model vs asset model
@@ -203,24 +218,31 @@ Heuristic: don't route evidence through a public-asset pipeline — evidence nee
 ## 7. Phase 1 policy: homeward-only leash (§14 Q1)
 
 A car is **displaced** when `physicalLocationId != homeBase` — this includes a **same-operator non-home branch**, not just a foreign host.
-While displaced, the only listable trips are those whose **drop-off is one of the owner's *active* locations**, formalized against the **real columns** (`locations.status`, `operators.deactivatedAt` — locations carry `status`, *not* `deactivatedAt`):
+The building block is the **active-owner-location set**, formalized against the **real columns** (`locations.status`, `operators.deactivatedAt` — locations carry `status`, *not* `deactivatedAt`):
 
-> `homewardDropoffSet(V) = { L ∈ locations : L.operatorId == V.operatorId ∧ L.status = 'ACTIVE' ∧ owner(V).deactivatedAt IS NULL }`
+> `ownerActiveLocations(V) = { L ∈ locations : L.operatorId == V.operatorId ∧ L.status = 'ACTIVE' ∧ owner(V).deactivatedAt IS NULL }`
 
-(An "active owner location" — location `status = 'ACTIVE'` (not `ARCHIVED`), owned by the car's owner, whose operator is itself not deactivated. Not prose; this is the exact predicate search and checkout share, §11.)
-No onward B→C in v1: a displaced car's drop-off cannot be another non-home location.
+The permitted drop-offs are **state-dependent** — rev.4 stated one location-set for all cars, which contradicted its own "no onward B→C" rule (the set contained every branch). The v1 policy, exactly (this is the predicate search and checkout share, §11):
 
-**Location archival guard.** A location that is any car's **home base**, any car's **current `physicalLocationId`**, or the endpoint of a **pending (not-yet-arrived) leg** cannot be archived out from under the fleet: archival is **blocked** (409, mirroring the existing service-level 409 behind `locations_operatorId_active_name_unique`) until those references are moved. This stops a displaced car's `homewardDropoffSet` from emptying mid-flight.
+> `allowedDropoffs(V, pickupAtP) =`
+> — **pickup at home** (`P == homeBase`): `ownerActiveLocations(V)` — the one permitted hop out (a one-way A→B, or the A→A round trip);
+> — **pickup displaced** (`P != homeBase`): `{ homeBase(V), P } ∩ ownerActiveLocations(V)` — **return home, or a round trip in place (P→P)**. Nothing else.
+
+(`P` is the *projected* pickup of the window under evaluation, so a chained future booking is leashed by where the car will then be, not where it is now.)
+**No onward B→C, ever, in v1** — a displaced car cannot drop at another non-home branch, so drift is impossible: after one hop out, every permitted trip either stays put or lands home. The `P→P` round-trip branch keeps a displaced car earning while it waits for a homeward renter; **if the owner prefers the strictest reading (displaced ⇒ home-only, no P→P), delete that one member — flagged in §14 Q1.**
+
+**Location archival guard.** A location that is any car's **home base**, any car's **current `physicalLocationId`**, or an **endpoint (origin *or* destination) of a pending (not-yet-arrived, not-voided) leg** cannot be archived out from under the fleet: archival is **blocked** (409, mirroring the existing service-level 409 behind `locations_operatorId_active_name_unique`) until those references are moved. Origins matter too: a pending leg departs from its `fromLocation` — archiving it strands a planned pickup. This stops a displaced car's homeward set from emptying mid-flight.
+**Enforcement is atomic, not check-then-act:** the archive write is a **single conditional `UPDATE … WHERE NOT EXISTS(each reference class)`** — one statement, one snapshot; zero rows updated ⇒ 409. The reference counts are fetched separately only to word the error. The reverse race (a booking created while an archive commits) is accepted as the same operator-recoverable residual already documented for the block-vs-checkout window, and the checkout-side predicate re-reads `status` inside its own locked transaction.
 
 Consequence: **a car is at most one hop from home at a time, then it returns — no multi-hop drift, bounded inventory.**
-Free-roam onward is a later phase behind the *same* model; the leash is one policy flag (widen `homewardDropoffSet`), not an architecture.
+Free-roam onward is a later phase behind the *same* model; the leash is one policy function (widen `allowedDropoffs`), not an architecture.
 
 ---
 
 ## 8. Getting a car home (owner tools)
 
-- **Ferry (B1)** — owner marks "bring it home"; car goes `HELD_OFFLINE`; the owner's own staff drives it back; on receipt at home, normal. No customer, no charge.
-- **Promo-home (B2)** — owner lists a **discounted one-way** with drop-off locked to the owner's branches + a cutoff date. Whoever books it repositions the car home cheaply. A promo layer on a normal one-way booking.
+- **Ferry (B1)** — owner marks "bring it home"; car goes `HELD_OFFLINE`; the owner's own staff drives it back; on receipt at home, normal. No customer, no charge. Mechanics: the ferry leg is **created planned and then departed through the one §5 departure transition** (no leg is ever born departed — one definition of "depart" closes the custody period and flips `IN_TRANSIT`, for rentals and ferries alike). **v1 continuity rule: a ferry may start only when the car has no pending legs** — a future booking's pickup would be stranded by the reposition; substitute or cancel those bookings first (409 `CUSTODY_CONFLICT` otherwise). Scheduling a *future* ferry is out of v1.
+- **Promo-home (B2)** — owner lists a **discounted one-way** with drop-off locked per §7 + a cutoff date. Whoever books it repositions the car home cheaply. A promo layer on a normal one-way booking. The promo applies iff the trip **lands the car at its home base by the cutoff** — the comparison is against the booking's *arrival* (`effectiveEndAt <= cutoffAt`), never the booking-creation clock: a promo is "home by the 30th", not "booked by the 30th".
 - **Reset home base** — owner re-labels the car's home to where it landed (e.g., opens/uses a branch there). **No physical move** (§4) — it changes pricing / search region only, and fires region reassignment + geocode (§13.5).
 
 ---
@@ -284,7 +306,11 @@ Heuristic: when a cost accrues from many sources over time, store the events and
   - Add a **narrowly-scoped host-receipt capability.** Existing booking reads/writes are **owner-tenant row-scoped** (`booking-authz.md:9`) — a host is *not* the owner tenant and today cannot see the booking at all. The host needs a **receipt-only** capability on cars it physically holds (confirm receipt, write the §6 record, advance custody) — **never** general booking read/write, and never cross-tenant enumeration. Model it like the existing correct-actor gates (booking-authz: "a feeder-read inherits its write's gate"), scoped by **physical custody**, not owner tenancy.
 - **`movement_legs` / `custody_periods` / settlement / `handoff_receipts`** — new tables (§6.1, §10, §6.2). `movement_legs` is the shared traversal (§2.1 fold, §10 period boundaries, §6.2 receipt parent), one row per rental/ferry/transfer with departure + arrival facts.
 - **`locations`** — no schema change, but **archival is guarded** (§7): a location that is a home base / current `physicalLocationId` / pending-leg endpoint cannot be archived (409) until unreferenced.
-- **Search / availability — one locked predicate on *every* renter surface.** The feasibility predicate (§2, folding the §2.1 movement stream and applying `homewardDropoffSet` §7) replaces the static `pickupLocationId = X` filter (`availability.ts:78`) and must **compose with the existing conditions**: booking overlap (exclusion constraint), scheduled `vehicle_blocks`, road-legality (shaken/insurance valid *through return*), and operator-deactivation (`availability.ts:49-88`). It must apply on **all** renter surfaces — `/availability`, class-availability, storefront, **and** checkout — not just the map search. Search and checkout share the **one** predicate (no read/write drift — #882's still-valid idea).
+- **Search / availability — one locked predicate on *every* renter surface.** The feasibility predicate (§2, folding the §2.1 movement stream and applying `allowedDropoffs` §7) replaces the static `pickupLocationId = X` filter (`availability.ts:78`) and must **compose with the existing conditions**: booking overlap (exclusion constraint), scheduled `vehicle_blocks`, road-legality (shaken/insurance valid *through return*), and operator-deactivation (`availability.ts:49-88`). It must apply on **all** renter surfaces — `/availability`, class-availability, storefront, **and** checkout — not just the map search. Search and checkout share the **one** predicate (no read/write drift — #882's still-valid idea). Concretely, four rules keep the surfaces honest:
+  - **Checkout runs the FULL condition set, not just the timeline fold**: the §5 custody conditions on the car's *current* state (owner `AVAILABLE`, `custodyState != IN_TRANSIT`, not `HELD_OFFLINE`) **plus** the window predicate. An `IN_TRANSIT` car takes **no** new bookings — even for windows after its projected arrival — because Q3 requires the receipt to exist first. An `AT_STATION` car *may* be booked at a **projected** future pickup (the retained #882 continuity, §2 item 2); search advertises exactly the same, so neither surface drifts.
+  - **A SQL prefilter cannot express the fold — widen, then post-filter.** The location prefilter admits a car whose *current* `physicalLocationId` **or** a pending leg's destination matches the requested location; the shared pure predicate then applies the **exact** projection per candidate. Narrow-prefilter-plus-exact-post-filter — never a prefilter that silently drops the continuity case (a car at B whose pending B→A leg settles before the window must match a search at A, and must NOT match one at B).
+  - **Every renter-facing *display* of a station uses the physical/projected location, never the home base.** The flat-search SPECIFIC mapping and storefront card grouping currently key off `pickupLocationId` (`flat-search.ts:181`, `storefront-search.ts:157`) — under custody that shows a displaced car at the wrong station. Home base remains pricing/search-*region* input only.
+  - **Displaced cars and the class capacity gate.** A displaced car belongs to **no** combo pool (below), so the class `demand >= capacity` gate (`booking-creation.ts:435`) **does not apply** to a SPECIFIC booking of a displaced car — otherwise its capacity is 0 by construction and every displaced booking is rejected. Its guards are the per-car exclusion constraint plus the pending-leg overlap (R1). At-home SPECIFIC bookings keep the gate unchanged.
   - **`CLASS_COMBO` for displaced cars is explicitly deferred.** A car is **displaced** whenever `physicalLocationId != homeBase` — this is *not* only cross-operator: a **same-operator car parked at a non-home branch is displaced too**, and must also drop out of the combo pool. Class-combo counts *unassigned* inventory by owner/location/class; a displaced car has no settled answer for which physical-inventory pool + price it joins. **Phase 1: displaced cars do not participate in `CLASS_COMBO`** — they are bookable only as `SPECIFIC` vehicles. Designing combo for displaced inventory is a later slice (§13.9).
 - **Booking lifecycle** — `CONFIRMED → ACTIVE → COMPLETED` drives `IN_TRANSIT`; `COMPLETED` + the receipt gate drives the host change (now via the explicit state model §5).
 
@@ -292,13 +318,23 @@ Heuristic: when a cost accrues from many sources over time, store the events and
 
 ## 12. Build order (each a vertical, shippable slice)
 
-- **Slice 0 — pure core.** Custody state machine (§4/§5) **+ the timeline-feasibility predicate (`locationAt` over the §2.1 movement stream + `homewardDropoffSet` continuity)**. Pure, exhaustively unit-tested (FC/IS). **No cost fold** — its day-count + rounding inputs are open (§13.7), so it moves to Slice 2 with settlement rather than being written against undecided rules. **The P0 predicate lives here — it is not optional.**
+- **Slice 0 — pure core.** Custody state machine (§4/§5) **+ the timeline-feasibility predicate (`locationAt` over the §2.1 movement stream + `allowedDropoffs` §7 continuity)**. Pure, exhaustively unit-tested (FC/IS). **No cost fold** — its day-count + rounding inputs are open (§13.7), so it moves to Slice 2 with settlement rather than being written against undecided rules. **The P0 predicate lives here — it is not optional.**
 - **Slice 1 — same-operator homeward.** Home base + `custodyState`/`physicalHostOperatorId`/`physicalLocationId` + `movement_legs` (§6.1) + receipt gate + immutable receipt record (§6.2) + **custody-period open/close lifecycle at rate 0** (§10 — exercises the close-on-departure path with no money) + **cancellation recovery** (pre-start void vs active-cancel recovery leg, §5) + location archival guard (§7) + ferry (B1) + promo-home (B2). Search **and checkout** move to the shared predicate. **No cross-company money.**
 - **Slice 2 — cross-operator.** Host opt-in, the stronger booking-leg relation + host-receipt capability (§11), **the cost fold + non-zero rates + multi-party settlement** (§10) — the slice where day-count/rounding (§13.7) is decided. Behind a flag.
-- **Later — free-roam onward + `CLASS_COMBO` for displaced cars.** Flip the leash (widen `homewardDropoffSet`); design the combo physical-inventory/price model. The ledger and model already support the rest.
+- **Later — free-roam onward + `CLASS_COMBO` for displaced cars.** Flip the leash (widen `allowedDropoffs`); design the combo physical-inventory/price model. The ledger and model already support the rest.
 
 Slices 0–1 deliver real value with zero cross-company money (custody periods exist but accrue nothing).
 Slice 2 is the multi-party custody + settlement network and should be gated behind a flag.
+
+### 12.1 Flag + kill-switch semantics (rev.5)
+
+Slice 1 itself ships dark behind **one runtime flag, `ONE_WAY_CUSTODY`** (repo dark-ship convention; rev.4 only flagged Slice 2). "Dark" and "killed" are defined precisely — a flag that gates *behavior* must not gate *facts*:
+
+- **Flag OFF stops new movement:** no legs are created, the renter wizard shows no drop-off picker, the homeward-dropoffs read is 404, and the **ferry / promo-home mutations are server-side 404-gated** (not merely hidden in the UI).
+- **State-driven operations ignore the flag:** the **arrival receipt** (whenever an in-flight leg exists) and the **listing-hold toggle** stay available. A kill-switch that strands `IN_TRANSIT` cars — receivable by no one — is not a kill-switch; recovery is driven by the state that exists, not by the feature that created it.
+- **Facts are always honored:** search reads the custody columns unconditionally. An `IN_TRANSIT` or `HELD_OFFLINE` car stays unlistable even while dark — the alternative advertises phantom cars. While the flag has never been ON this is byte-identical to today (backfill: `physicalLocationId ≡ pickupLocationId`, no legs exist).
+- **The OFF booking path is kill-safe, not merely legacy:** besides today's `pickupLocationId` equality it requires the car custody-listable and **at home** (`physicalLocationId == pickupLocationId` when tracked). Equivalent while never-flipped (the backfill makes them equal); after a kill-switch, displaced cars are simply unbookable until received/ferried home rather than bookable at a station they are not at.
+- **Flip runbook (both directions):** the movement-leg backfill script (idempotent, print-first) synthesizes legs for pre-flag `CONFIRMED`/`ACTIVE` bookings, **and synthesizes departed recovery legs (kind `TRANSFER`) for cars whose dark-era `COMPLETED` one-way left them physically away from their materialized location** — staff then receive those cars through the normal §6 receipt flow (evidence intact; no silent teleport). Because bookings created between a script run and the flip get no legs, the script runs **immediately before the flip and again immediately after** — the second run closes the race window.
 
 ---
 
@@ -318,7 +354,7 @@ Slice 2 is the multi-party custody + settlement network and should be gated behi
 
 ## 14. Owner (kaku) decisions — record
 
-- **Q1 — Roam vs homeward.** Phase 1 is **homeward-only**: a car that has left A may only be rented back toward A's locations. Prevents runaway drift / inventory loss.
+- **Q1 — Roam vs homeward.** Phase 1 is **homeward-only**: a car that has left A may only be rented back toward A's locations. Prevents runaway drift / inventory loss. (Note rev.5: formalized *state-dependently* in §7 — from home, any active owner branch is the one permitted hop; once displaced at P, only `{home, P}` (return, or a round trip in place). **Owner to confirm the `P→P` round-trip-in-place branch** — it keeps displaced cars earning and cannot drift; the stricter home-only alternative deletes one set member.)
 - **Q2 — Pricing.** Always the **owner's** rate card + formula. The host only adds custody + handoff fees.
 - **Q3 — In-transit booking.** A car in transit **cannot** be pre-booked. It must be physically received, confirmed, photographed, and condition-checked before it appears in search. (Note post-review: Q3 gates the *first foreign listing*; future-window feasibility still needs the §2 predicate.)
 - **Q4 — Fee incidence.** The host's custody fee is **deducted from the owner's payout**; the renter sees only the owner's price.
