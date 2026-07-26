@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Plan rev.2** — regenerated after the 2026-07-26 owner plan review (verdict: request changes). All 8 blockers + 2 corrections are folded; the matching source of truth is **spec rev.5**. The finding→task map is in "rev.2 changes at a glance" below.
+
 **Goal:** Implement Slice 0 (pure custody state machine + timeline-feasibility predicate) and Slice 1 (same-operator homeward one-way rentals: movement legs, receipt gate, custody periods at rate 0, cancellation recovery, archival guard, ferry, promo-home, shared predicate on search + checkout) of the one-way custody network design.
 
-**Spec (source of truth):** `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md` (rev.4).
+**Spec (source of truth):** `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md` (rev.5).
 Retained predecessor: `docs/plans/2026-06-21-one-way-rentals-design.md` §3–3.1 (do not delete those sections).
 
 **Architecture:** Pure Functional Core in `packages/shared/src/lib/` (fold + feasibility + custody transitions), imperative shell in `packages/api` (drizzle tables with full DB seals, repos behind ports, services orchestrating under a per-vehicle advisory lock inside `runInTransaction`), web surfaces in `packages/web` (operator custody actions, renter dropoff picker). Everything behavior-changing is dark behind one runtime flag `ONE_WAY_CUSTODY`.
@@ -17,18 +19,32 @@ Retained predecessor: `docs/plans/2026-06-21-one-way-rentals-design.md` §3–3.
 
 These are decisions the spec left to implementation. Each stays inside the spec's constraints:
 
-1. **One flag, everything dark.** A single registry flag `ONE_WAY_CUSTODY` (web flag with `env: 'VITE_FEATURE_ONE_WAY_CUSTODY'`, `runtimeControlled: true`, read server-side exactly like `OPERATOR_TERMS` — the documented deviation at `packages/api/src/index.ts:433-438`). While OFF: no movement legs are created, booking-create keeps today's exact checks, the wizard shows no dropoff picker. Spec §12 only mandates a flag for Slice 2, but Slice 1 rewires live search/checkout — repo convention (OPERATOR_TERMS, MESSAGING) is dark-ship.
-2. **Flag-off equivalence instead of flag-conditional search SQL.** The availability repo *always* uses the new custody columns; a backfill migration plus a write-path sync rule (Task 12) makes them degenerate to today's behavior while the flag is OFF (physicalLocationId ≡ pickupLocationId, no legs exist, heldOffline=false). This keeps the flag out of the repository layer.
+1. **One flag, everything dark.** A single registry flag `ONE_WAY_CUSTODY` (web flag with `env: 'VITE_FEATURE_ONE_WAY_CUSTODY'`, `runtimeControlled: true`, read server-side exactly like `OPERATOR_TERMS` — the documented deviation at `packages/api/src/index.ts:433-438`). While OFF: no movement legs are created, booking-create keeps today's exact checks, the wizard shows no dropoff picker. Canonicalized as spec §12.1 in rev.5, including the gating split: **ferry + promo mutations are server-side 404-gated while dark; the arrival receipt and listing toggle are state-driven and ignore the flag** (a kill-switch must never strand `IN_TRANSIT` cars).
+2. **Flag-off equivalence instead of flag-conditional search SQL.** The availability repo *always* uses the new custody columns; a backfill migration plus a write-path sync rule (Task 12) makes them degenerate to today's behavior while the flag is OFF (physicalLocationId ≡ pickupLocationId, no legs exist, heldOffline=false). This keeps the flag out of the repository layer. rev.5 (§12.1) additionally makes the OFF booking path **kill-safe**: it requires the car custody-listable and at home when tracked — byte-equivalent while never-flipped, and correct (displaced cars unbookable) after a kill-switch.
 3. **`custodyState` is NULLABLE** (= "custody-untracked"). Spec §4 implies NOT NULL, but `vehicles.pickupLocationId` is nullable today (`fleet.ts:105`, unassigned is legal) and the CHECK ties AT_STATION to a non-null location. NULL custodyState = never placed (unassigned vehicle); first placement happens when a home base is assigned. The CHECK still forbids drift for both non-null states.
-4. **`voidedAt` column on `movement_legs`.** Spec §5 says a pre-start cancel "voids the planned leg"; the §6.1 schema block has no representation for that. A nullable `voidedAt` timestamp (only while un-departed, CHECK-sealed) keeps the table append-only-ish (no deletes) and drops the leg from every fold.
+4. **`voidedAt` column on `movement_legs`.** Now canonical in spec §6.1 (rev.5): a nullable `voidedAt` timestamp (only while un-departed, CHECK-sealed) keeps the table append-only-ish (no deletes) and drops the leg from every fold. Also set by a pre-departure substitution (§5).
 5. **The fold is seeded by the materialized present.** Spec §2 says the scalar "is the fold evaluated at now", so the pure predicate takes `(physicalLocationId, pending legs)` rather than replaying full history — `projectedLocationAt(current, pendingLegs, t)`. Arrived legs stay in the table as the auditable actual baseline; they just aren't re-folded on every search.
 6. **`packages/shared/src/lib/one-way.ts` is superseded and deleted** (with its test). It is dead code (zero production importers — verified 2026-07-26) implementing the booking-only fold; the new `custody-*` modules carry the same R1/R2/R3 + TAIL_ONLY semantics over the heterogeneous stream. The #882 *doc* sections stay.
-7. **Promo-home = two nullable vehicle columns** (`homewardPromoPercent`, `homewardPromoCutoffAt`), not a table. The discount applies only when the booking lands the car at its home base (`dropoffLocationId == vehicles.pickupLocationId`) before the cutoff; cleared automatically on a receipt at home.
-8. **Receipt photos go through a new private `ReceiptStorage` port** mirroring `DocumentStorage` (streamed through the Worker, never a public URL), R2 binding `HANDOFF_RECEIPTS`. Disabled fallback when unbound; photos optional server-side so local/dev works without R2.
-9. **The per-vehicle advisory lock does not exist yet** — `drizzle/0082` *claims* it does but only the per-(operator,class,location) `lockComboCapacity` exists (`drizzle/availability.ts:191-203`). Task 11 adds `lockVehicleTimeline(vehicleId)` and every timeline mutation takes it.
-10. **Every booking gets a movement leg while the flag is ON** — round trips included (a round trip departs and returns; custody must close/reopen or the host would accrue while the renter holds the car, spec §10). Consequence while ON: a car is `IN_TRANSIT` (unlistable, spec §14 Q3) during any active rental, and every return needs a receipt to relist. That is the owner-locked model; the flag keeps it dark until the owner flips it.
+7. **Promo-home = two nullable vehicle columns** (`homewardPromoPercent`, `homewardPromoCutoffAt`), not a table. The discount applies only when the booking lands the car at its home base (`dropoffLocationId == vehicles.pickupLocationId`) **by the cutoff — compared against the booking's arrival (`effectiveEndAt <= cutoffAt`), never the booking-creation clock** (spec §8); cleared automatically on a receipt at home.
+8. **Receipt photos go through a new private `ReceiptStorage` port** mirroring `DocumentStorage` (streamed through the Worker, never a public URL), R2 binding `HANDOFF_RECEIPTS`. Disabled fallback when unbound. **Photos are MANDATORY at ARRIVAL (≥1, spec §6.2 rev.5)** — local/dev uses the in-memory storage; an environment without the bucket cannot run custody, by configuration.
+9. **The per-vehicle advisory lock does not exist yet** — `drizzle/0082` *claims* it does but only the per-(operator,class,location) `lockComboCapacity` exists (`drizzle/availability.ts:191-203`). Task 8 adds `lockVehicleTimeline(vehicleId)` and every timeline mutation takes it. **Two-vehicle operations (substitution) take both locks in ascending `vehicleId` order; where the combo lock is also held, combo first, then vehicle** (spec §2.1 — the one documented order).
+10. **Every booking gets a movement leg while the flag is ON** — round trips included (a round trip departs and returns; custody must close/reopen or the host would accrue while the renter holds the car, spec §10). "Every booking" now includes the paths the first plan missed (spec §5 rev.5): a `CLASS_COMBO` float gets its leg **at assignment**; a pre-departure substitution **voids the old leg and creates the replacement's**; an ACTIVE substitution leaves the old leg in flight as a recovery leg and creates the replacement's leg already departed. Consequence while ON: a car is `IN_TRANSIT` (unlistable, spec §14 Q3) during any active rental, and every return needs a receipt (after the booking is completed) to relist. That is the owner-locked model; the flag keeps it dark until the owner flips it.
 11. **DEPARTURE receipts**: schema, repo, and service accept both phases (§6.2); Slice 1 UI ships only the ARRIVAL flow. Departure-capture UI is a Slice 2 concern (damage attribution matters cross-operator).
 12. **Custody scoping is service-level** (like `ConsentRepository`): the custody ports take explicit ids, not `CallerContext`; routes/services enforce fleet-write + tenant binding before calling them.
+
+## rev.2 changes at a glance (owner-review finding → where it landed)
+
+| # | Finding (2026-07-26 review) | Spec (rev.5) | Plan tasks changed |
+|---|---|---|---|
+| 1 | Homeward policy contradicted itself (formal set permitted B→C) | §7 state-dependent `allowedDropoffs`; `P→P` branch flagged §14 Q1 | 3, 4, 15 |
+| 2 | Displaced B→A failed the class `demand >= capacity` gate (capacity 0) | §11 displaced SPECIFIC skips the gate | 15 |
+| 3 | Assignment/substitution created no legs; no two-vehicle locking; no ACTIVE policy | §5 transitions + §2.1 sorted lock order | 14 |
+| 4 | `startFerry` + `departVehicleInTx` no-op'd (leg born departed); no continuity rule | §8 planned-then-depart + v1 no-pending-legs rule | 13 |
+| 5 | Checkout missed AT_STATION/heldOffline; display mapped via home base; prefilter vs continuity-test contradiction | §11 four surface rules | 15, 16 |
+| 6 | Receipt while ACTIVE; idempotent replay unreachable; query-after-23505 impossible; unconditional re-target | §5 receipt preconditions + §6.2 replay semantics | 7, 13, 21 |
+| 7 | Flag neither fully dark nor a safe kill switch; flip-script races + dark COMPLETED one-ways | §12.1 | 15, 18, 22 |
+| 8 | Archival TOCTOU + destination-only; optional photos; missing DB seals | §6.1/§6.2/§7 | 5, 7, 9, 13, 17, 18 |
+| + | Promo cutoff vs `Date.now()`; Task-8-before-lock/updateCustody ordering | §8 | 13, 15; Phase 3 reordered (7 → 8 lock → 9 drizzle) |
 
 ## Execution context (read once, applies to every task)
 
@@ -40,7 +56,7 @@ These are decisions the spec left to implementation. Each stays inside the spec'
 - **Migration workflow** (CLAUDE.md, mandatory): `bun run db:generate --name <name>` → `bun run db:migrate` → `bun run db:verify` (3 green checks). Hand-written SQL only via `bun run db:generate --custom --name <name>`. Never edit merged migrations; never hand-rename one. Migration numbers below say `01NN` — use whatever `db:generate` assigns (develop may have advanced past 0111).
 - **Commit style:** conventional commits, no co-author, one commit per task step-group as written.
 - **Lints that will bite:** `bun run --filter @kuruma/api lint:boundaries` (routes→services→repositories), `bun run lint:size` (800 hard cap — `repositories/types.ts` is AT 800, `index.ts` at 762: new ports go in `types-custody.ts`, new wiring goes through a `composition/` builder), `lint:fk-indexes` (every FK's leading column needs an index), `lint:tenant-anchor-immutability`, `lint:i18n-parity` (3 locales), `lint:modules` (web barrels), biome (run `bun run lint` before every push, not just husky's staged check).
-- **Key file anchors** (verified 2026-07-26): vehicles table `packages/shared/src/db/fleet.ts:87-192`; locations `db/location.ts:37-98` (`locations_operatorId_id_unique` :91); bookings `db/booking.ts:51-213`; enums `packages/shared/src/enums.ts`; availability predicate `packages/api/src/repositories/drizzle/availability.ts:49-88` (static location filter :78) with in-memory mirror `in-memory/availability.ts`; booking create `packages/api/src/services/booking-creation.ts` (`submitInTx` :253, pickup equality :331, `resolveDropoffEffectiveEnd` :226-246, combo lock :354-375, `submitSpecificInTxLocked` :378); lifecycle `packages/api/src/services/booking-lifecycle.ts` (`updateStatus` :408, renter `cancel` :495); location archive `packages/api/src/services/location.ts:209-240`; tx bundle `packages/api/src/repositories/types-transactions.ts` + `repositories/drizzle/transaction.ts`; composition `packages/api/src/composition/repositories.ts`; flag registry `packages/shared/src/feature-flags/registry.ts`; error codes `packages/shared/src/lib/error-codes.ts` (+ membership test); wizard `packages/web/src/vite/reservation/ReservationWizard.tsx:107-115`; fleet actions `packages/web/src/vite/operator-fleet/FleetRowActions.tsx:106-115`.
+- **Key file anchors** (verified 2026-07-26): vehicles table `packages/shared/src/db/fleet.ts:87-192`; locations `db/location.ts:37-98` (`locations_operatorId_id_unique` :91); bookings `db/booking.ts:51-213`; enums `packages/shared/src/enums.ts`; availability predicate `packages/api/src/repositories/drizzle/availability.ts:49-88` (static location filter :78) with in-memory mirror `in-memory/availability.ts`; booking create `packages/api/src/services/booking-creation.ts` (`submitInTx` :253, pickup equality :331, `resolveDropoffEffectiveEnd` :226-246, combo lock :354-375, `submitSpecificInTxLocked` :378); lifecycle `packages/api/src/services/booking-lifecycle.ts` (`updateStatus` :408, renter `cancel` :495, `substitute` :93, `assignVehicle` :250); search display mapping `packages/api/src/services/flat-search.ts:181` (SPECIFIC `toSpecific` keys off `pickupLocationId`) + `packages/api/src/services/storefront-search.ts:157` (`groupByLocation` same); location archive `packages/api/src/services/location.ts:209-240`; tx bundle `packages/api/src/repositories/types-transactions.ts` + `repositories/drizzle/transaction.ts`; composition `packages/api/src/composition/repositories.ts`; flag registry `packages/shared/src/feature-flags/registry.ts`; error codes `packages/shared/src/lib/error-codes.ts` (+ membership test); wizard `packages/web/src/vite/reservation/ReservationWizard.tsx:107-115`; fleet actions `packages/web/src/vite/operator-fleet/FleetRowActions.tsx:106-115`.
 
 ## File structure (what gets created/modified where)
 
@@ -55,8 +71,9 @@ packages/shared/src/db/custody.ts                     CREATE  movement_legs, cus
 packages/shared/src/db/schema.ts                      MODIFY  export * barrel line
 packages/shared/src/validators/custody.ts             CREATE  zod for custody routes
 packages/shared/src/feature-flags/registry.ts         MODIFY  ONE_WAY_CUSTODY entry
-packages/shared/src/lib/error-codes.ts                MODIFY  5 new codes (+ membership test)
+packages/shared/src/lib/error-codes.ts                MODIFY  6 new codes (+ membership test)
 drizzle/01NN_one_way_custody_schema.sql               GENERATE
+drizzle/01NN_receipts_append_only_grants.sql          CUSTOM  #1556-style role-separation immutability
 drizzle/01NN_backfill_vehicle_custody.sql             CUSTOM  backfill
 packages/api/src/repositories/types-custody.ts        CREATE  3 ports
 packages/api/src/repositories/in-memory/{movement-leg,custody-period,handoff-receipt}.ts  CREATE
@@ -70,8 +87,10 @@ packages/api/src/pg-errors.ts                         MODIFY  named constraint c
 packages/api/src/services/custody.ts                  CREATE  CustodyService (+ .test.ts)
 packages/api/src/services/vehicle.ts                  MODIFY  placement / sync / relabel rule
 packages/api/src/services/booking-creation.ts         MODIFY  predicate + leg insert + promo
-packages/api/src/services/booking-lifecycle.ts        MODIFY  depart / void / recovery hooks
-packages/api/src/services/location.ts                 MODIFY  archival guard
+packages/api/src/services/booking-lifecycle.ts        MODIFY  depart / void / recovery + substitution/assignment leg hooks
+packages/api/src/services/flat-search.ts              MODIFY  SPECIFIC display via physical/projected location
+packages/api/src/services/storefront-search.ts        MODIFY  card grouping via physical/projected location
+packages/api/src/services/location.ts                 MODIFY  archival guard (atomic)
 packages/api/src/routes/custody.ts                    CREATE  custody routes (+ tests)
 packages/api/src/composition/custody-service.ts       CREATE  builder (index.ts cap protection)
 packages/api/src/composition/repositories.ts          MODIFY  wire 3 repos + ReceiptStorage
@@ -367,7 +386,8 @@ git commit -m "feat(custody): pure custody state machine + enums (slice 0)"
 import { describe, expect, it } from 'vitest'
 import {
   type PendingLeg,
-  homewardDropoffIds,
+  allowedDropoffIds,
+  ownerActiveLocationIds,
   pendingLegOverlaps,
   projectedLocationAt,
 } from './custody-timeline'
@@ -425,19 +445,47 @@ describe('pendingLegOverlaps (R1 generalized to non-booking legs)', () => {
   })
 })
 
-describe('homewardDropoffIds (§7 — the exact shared predicate)', () => {
+describe('ownerActiveLocationIds (§7 building block)', () => {
   const locations = [
     { id: 'L1', operatorId: 'owner', status: 'ACTIVE' },
     { id: 'L2', operatorId: 'owner', status: 'ARCHIVED' },
     { id: 'L3', operatorId: 'other', status: 'ACTIVE' },
   ]
   it('active owner locations only', () => {
-    expect(homewardDropoffIds({ ownerOperatorId: 'owner', ownerDeactivatedAt: null, locations })).toEqual(new Set(['L1']))
+    expect(ownerActiveLocationIds({ ownerOperatorId: 'owner', ownerDeactivatedAt: null, locations })).toEqual(new Set(['L1']))
   })
-  it('a deactivated owner has an empty homeward set', () => {
+  it('a deactivated owner has an empty set', () => {
     expect(
-      homewardDropoffIds({ ownerOperatorId: 'owner', ownerDeactivatedAt: d('2026-01-01T00:00:00Z'), locations }),
+      ownerActiveLocationIds({ ownerOperatorId: 'owner', ownerDeactivatedAt: d('2026-01-01T00:00:00Z'), locations }),
     ).toEqual(new Set())
+  })
+})
+
+describe('allowedDropoffIds (§7 rev.5 — the state-dependent v1 leash)', () => {
+  const active = new Set(['HOME', 'B', 'C'])
+  it('pickup at home: any active owner location (the one permitted hop)', () => {
+    expect(
+      allowedDropoffIds({ projectedPickupLocationId: 'HOME', homeBaseLocationId: 'HOME', ownerActiveLocationIds: active }),
+    ).toEqual(new Set(['HOME', 'B', 'C']))
+  })
+  it('displaced at B: return home or a round trip in place — never onward B→C', () => {
+    expect(
+      allowedDropoffIds({ projectedPickupLocationId: 'B', homeBaseLocationId: 'HOME', ownerActiveLocationIds: active }),
+    ).toEqual(new Set(['HOME', 'B']))
+  })
+  it('displaced with an archived home: only the round trip in place remains', () => {
+    expect(
+      allowedDropoffIds({
+        projectedPickupLocationId: 'B',
+        homeBaseLocationId: 'HOME',
+        ownerActiveLocationIds: new Set(['B', 'C']),
+      }),
+    ).toEqual(new Set(['B']))
+  })
+  it('no home base assigned: round trip in place only', () => {
+    expect(
+      allowedDropoffIds({ projectedPickupLocationId: 'B', homeBaseLocationId: null, ownerActiveLocationIds: active }),
+    ).toEqual(new Set(['B']))
   })
 })
 ```
@@ -506,11 +554,10 @@ export function pendingLegOverlaps(
 }
 
 /**
- * §7 homeward-only leash, formalized against the real columns: an ACTIVE
- * location of the (not-deactivated) owner. Search and checkout must share this
- * one function — never re-derive it per caller.
+ * §7 building block, formalized against the real columns: the ACTIVE locations
+ * of a (not-deactivated) owner.
  */
-export function homewardDropoffIds(args: {
+export function ownerActiveLocationIds(args: {
   ownerOperatorId: string
   ownerDeactivatedAt: Date | null
   locations: readonly { id: string; operatorId: string; status: string }[]
@@ -522,12 +569,33 @@ export function homewardDropoffIds(args: {
       .map((l) => l.id),
   )
 }
+
+/**
+ * §7 rev.5 — the state-dependent v1 leash. Pickup at home: any active owner
+ * location (the one permitted hop out). Pickup displaced at P: return home or
+ * a round trip in place ({home, P}) — never onward, so drift is impossible.
+ * The pickup is the PROJECTED pickup of the window under evaluation, so
+ * chained future bookings are leashed by where the car will then be.
+ * Search and checkout must share this one function — never re-derive it.
+ */
+export function allowedDropoffIds(args: {
+  projectedPickupLocationId: string
+  homeBaseLocationId: string | null
+  ownerActiveLocationIds: ReadonlySet<string>
+}): Set<string> {
+  const { projectedPickupLocationId: pickup, homeBaseLocationId: home, ownerActiveLocationIds: active } = args
+  if (home !== null && pickup === home) return new Set(active)
+  const out = new Set<string>()
+  if (home !== null && active.has(home)) out.add(home)
+  if (active.has(pickup)) out.add(pickup)
+  return out
+}
 ```
 
 - [ ] **Step 4: Run to verify pass**
 
 Run: `bun run --filter @kuruma/shared test -- custody-timeline`
-Expected: PASS (10 tests).
+Expected: PASS (14 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -568,16 +636,32 @@ const base = {
   dropoffLocationId: 'A',
   startAt: d('2026-09-01T10:00:00Z'),
   effectiveEndAt: d('2026-09-03T10:00:00Z'),
-  homewardDropoffIds: new Set(['A', 'B']),
+  homeBaseLocationId: 'A' as string | null,
+  ownerActiveLocationIds: new Set(['A', 'B', 'C']),
   policy: 'TAIL_ONLY' as const,
 }
 
 describe('assessOneWayFeasibility', () => {
-  it('round trip at the current location is feasible', () => {
+  it('round trip at home is feasible', () => {
     expect(assessOneWayFeasibility(base)).toEqual({ ok: true })
   })
-  it('one-way to another owner-active location is feasible as the tail', () => {
+  it('from home, a one-way to any owner-active location is feasible as the tail (the one hop out)', () => {
     expect(assessOneWayFeasibility({ ...base, dropoffLocationId: 'B' })).toEqual({ ok: true })
+  })
+  it('displaced at B: the homeward B→A trip is feasible (the headline case)', () => {
+    expect(
+      assessOneWayFeasibility({ ...base, currentLocationId: 'B', pickupLocationId: 'B', dropoffLocationId: 'A' }),
+    ).toEqual({ ok: true })
+  })
+  it('displaced at B: a round trip in place (B→B) is feasible', () => {
+    expect(
+      assessOneWayFeasibility({ ...base, currentLocationId: 'B', pickupLocationId: 'B', dropoffLocationId: 'B' }),
+    ).toEqual({ ok: true })
+  })
+  it('displaced at B: onward B→C is rejected even though C is owner-active (§7 rev.5)', () => {
+    expect(
+      assessOneWayFeasibility({ ...base, currentLocationId: 'B', pickupLocationId: 'B', dropoffLocationId: 'C' }),
+    ).toEqual({ ok: false, reason: 'DROPOFF_NOT_HOMEWARD' })
   })
   it('R1: a window overlapping a pending leg (e.g. a scheduled ferry) is rejected', () => {
     const ferry = leg({ kind: 'FERRY', plannedStartAt: d('2026-09-02T00:00:00Z'), plannedEndAt: d('2026-09-04T00:00:00Z') })
@@ -586,19 +670,24 @@ describe('assessOneWayFeasibility', () => {
       reason: 'WINDOW_OVERLAPS_MOVEMENT',
     })
   })
-  it('homeward leash: a dropoff outside the owner-active set is rejected', () => {
+  it('a dropoff outside the owner-active set is rejected', () => {
     expect(assessOneWayFeasibility({ ...base, dropoffLocationId: 'X' })).toEqual({
       ok: false,
       reason: 'DROPOFF_NOT_HOMEWARD',
     })
   })
-  it('R2: pickup must match the projected location at startAt', () => {
+  it('R2: pickup must match the projected location at startAt; the leash follows the projection', () => {
     const relocates = leg({}) // A -> B settles 08-03, before startAt
     expect(assessOneWayFeasibility({ ...base, pendingLegs: [relocates] })).toEqual({
       ok: false,
       reason: 'PICKUP_NOT_AT_LOCATION',
     })
+    // Projected pickup B (displaced): B→B allowed, B→C onward is not.
     expect(assessOneWayFeasibility({ ...base, pendingLegs: [relocates], pickupLocationId: 'B', dropoffLocationId: 'B' })).toEqual({ ok: true })
+    expect(assessOneWayFeasibility({ ...base, pendingLegs: [relocates], pickupLocationId: 'B', dropoffLocationId: 'C' })).toEqual({
+      ok: false,
+      reason: 'DROPOFF_NOT_HOMEWARD',
+    })
   })
   it('TAIL_ONLY: a one-way inserted before a successor leg is rejected', () => {
     const successor = leg({
@@ -661,9 +750,13 @@ Expected: FAIL — module not found.
 // verbatim by search and checkout (read/write parity: search must never
 // advertise a car checkout would reject). Descends from #882 §3.1 (R1/R2/R3 +
 // the TAIL_ONLY dial), generalized over the heterogeneous movement stream and
-// extended with the §7 homeward-only leash.
+// extended with the §7 rev.5 state-dependent leash. TIMELINE-ONLY by design:
+// the §5 custody conditions on the car's CURRENT state (AT_STATION, not
+// heldOffline, owner AVAILABLE) are a separate gate the caller composes —
+// spec §11 rule 1 (an IN_TRANSIT car takes no new bookings at all, Q3).
 import {
   type PendingLeg,
+  allowedDropoffIds,
   pendingLegOverlaps,
   projectedLocationAt,
 } from './custody-timeline'
@@ -691,21 +784,28 @@ export function assessOneWayFeasibility(args: {
   dropoffLocationId: string
   startAt: Date
   effectiveEndAt: Date
-  homewardDropoffIds: ReadonlySet<string>
+  homeBaseLocationId: string | null
+  ownerActiveLocationIds: ReadonlySet<string>
   policy: OneWayPolicy
 }): CustodyFeasibility {
   // R1 — no leg (booking, ferry, transfer) may occupy any part of the window.
   if (pendingLegOverlaps(args.pendingLegs, args.startAt, args.effectiveEndAt)) {
     return { ok: false, reason: 'WINDOW_OVERLAPS_MOVEMENT' }
   }
-  // §7 — every dropoff must be an active owner location (phase-1 leash; the
-  // same-operator round trip passes because its location is in the set).
-  if (!args.homewardDropoffIds.has(args.dropoffLocationId)) {
-    return { ok: false, reason: 'DROPOFF_NOT_HOMEWARD' }
-  }
   // R2 — the car must actually be at the chosen pickup at startAt.
   if (projectedLocationAt(args.currentLocationId, args.pendingLegs, args.startAt) !== args.pickupLocationId) {
     return { ok: false, reason: 'PICKUP_NOT_AT_LOCATION' }
+  }
+  // §7 rev.5 — the state-dependent leash, evaluated at the PROJECTED pickup
+  // (== pickupLocationId, guaranteed by R2 just above). From home: any active
+  // owner branch. Displaced: {home, here} — onward drift is impossible.
+  const allowed = allowedDropoffIds({
+    projectedPickupLocationId: args.pickupLocationId,
+    homeBaseLocationId: args.homeBaseLocationId,
+    ownerActiveLocationIds: args.ownerActiveLocationIds,
+  })
+  if (!allowed.has(args.dropoffLocationId)) {
+    return { ok: false, reason: 'DROPOFF_NOT_HOMEWARD' }
   }
   // A round trip leaves the car where it was; R2 suffices.
   if (args.dropoffLocationId === args.pickupLocationId) return { ok: true }
@@ -729,7 +829,7 @@ export function assessOneWayFeasibility(args: {
 - [ ] **Step 4: Run to verify pass**
 
 Run: `bun run --filter @kuruma/shared test -- custody-feasibility`
-Expected: PASS (9 tests).
+Expected: PASS (12 tests).
 
 - [ ] **Step 5: Delete the superseded module** (zero production importers — re-verify, then delete):
 
@@ -898,7 +998,7 @@ export const movementLegs = pgTable(
     uniqueIndex('movement_legs_idempotencyKey_unique').on(table.idempotencyKey),
     uniqueIndex('movement_legs_bookingId_unique')
       .on(table.bookingId)
-      .where(sql`${table.bookingId} IS NOT NULL`),
+      .where(sql`${table.bookingId} IS NOT NULL AND ${table.voidedAt} IS NULL`),
     foreignKey({
       columns: [table.fromOperatorId, table.fromLocationId],
       foreignColumns: [locations.operatorId, locations.id],
@@ -909,10 +1009,20 @@ export const movementLegs = pgTable(
       foreignColumns: [locations.operatorId, locations.id],
       name: 'movement_legs_to_location_fk',
     }),
+    // §6.1 rev.5 seals:
+    // A rental leg always names its booking; a ferry/transfer never does.
+    check('movement_legs_kind_booking', sql`(${table.kind}::text = 'RENTAL') = (${table.bookingId} IS NOT NULL)`),
+    // At most ONE in-flight leg per vehicle — the process invariant as a constraint.
+    uniqueIndex('movement_legs_one_in_flight_per_vehicle')
+      .on(table.vehicleId)
+      .where(sql`${table.departedAt} IS NOT NULL AND ${table.receivedAt} IS NULL AND ${table.voidedAt} IS NULL`),
+    // Receipts pin their vehicle to their leg's vehicle through this target (§6.2).
+    unique('movement_legs_id_vehicleId_unique').on(table.id, table.vehicleId),
     check('movement_legs_planned_window', sql`${table.plannedEndAt} > ${table.plannedStartAt}`),
+    // Timestamp coherence: an arrival needs a departure and never precedes it.
     check(
-      'movement_legs_received_requires_departed',
-      sql`${table.receivedAt} IS NULL OR ${table.departedAt} IS NOT NULL`,
+      'movement_legs_received_after_departed',
+      sql`${table.receivedAt} IS NULL OR (${table.departedAt} IS NOT NULL AND ${table.receivedAt} >= ${table.departedAt})`,
     ),
     check('movement_legs_void_only_undeparted', sql`${table.voidedAt} IS NULL OR ${table.departedAt} IS NULL`),
   ],
@@ -1028,6 +1138,12 @@ export const handoffReceipts = pgTable(
       foreignColumns: [table.id, table.legId, table.phase],
       name: 'handoff_receipts_correction_same_end_fk',
     }),
+    // §6.2 rev.5: evidence can never cite a different car than its traversal.
+    foreignKey({
+      columns: [table.legId, table.vehicleId],
+      foreignColumns: [movementLegs.id, movementLegs.vehicleId],
+      name: 'handoff_receipts_leg_vehicle_fk',
+    }),
     foreignKey({
       columns: [table.atOperatorId, table.atLocationId],
       foreignColumns: [locations.operatorId, locations.id],
@@ -1053,7 +1169,15 @@ DATABASE_URL="postgresql://kuruma:kuruma@localhost:5499/kuruma_custody" bun run 
 DATABASE_URL="postgresql://kuruma:kuruma@localhost:5499/kuruma_custody" bun run db:verify
 ```
 
-Expected: one new migration; verify 3 green checks. Inspect the generated SQL: 4 new enum types, 3 new tables with every named constraint above, vehicles gains 7 columns + 1 composite FK + 2 indexes + 3 CHECKs. If drizzle-kit fails on the self-referential composite FK, fall back to `--custom` for that single `ALTER TABLE handoff_receipts ADD CONSTRAINT handoff_receipts_correction_same_end_fk FOREIGN KEY ("supersedesReceiptId","legId","phase") REFERENCES handoff_receipts (id,"legId",phase);` and note it in the migration comment.
+Expected: one new migration; verify 3 green checks. Inspect the generated SQL: 4 new enum types, 3 new tables with every named constraint above (incl. the rev.5 seals: `movement_legs_kind_booking`, `movement_legs_one_in_flight_per_vehicle`, `movement_legs_received_after_departed`, `movement_legs_id_vehicleId_unique`, `handoff_receipts_leg_vehicle_fk`), vehicles gains 7 columns + 1 composite FK + 2 indexes + 3 CHECKs. If drizzle-kit fails on the self-referential composite FK, fall back to `--custom` for that single `ALTER TABLE handoff_receipts ADD CONSTRAINT handoff_receipts_correction_same_end_fk FOREIGN KEY ("supersedesReceiptId","legId","phase") REFERENCES handoff_receipts (id,"legId",phase);` and note it in the migration comment.
+
+- [ ] **Step 5b: DB-enforced receipt immutability** (spec §6.2 rev.5 — the repo exposing no update/delete is not the enforcement):
+
+```bash
+DATABASE_URL="postgresql://kuruma:kuruma@localhost:5499/kuruma_custody" bun run db:generate --custom --name receipts_append_only_grants
+```
+
+Fill it by MIRRORING the #1556 consent-ledger migration (`git log --oneline --all -- drizzle | grep -i consent` → read that migration's SQL): the same role-separation statements applied to `handoff_receipts` — the application role keeps INSERT/SELECT, loses UPDATE/DELETE. Copy #1556's guard style exactly (it already handles the role-name/environment conditionality); apply + `db:verify`.
 
 - [ ] **Step 6: Typecheck + commit**
 
@@ -1210,9 +1334,10 @@ export interface HandoffReceipt {
 - [ ] **Step 3: Named-constraint consts** — append to `packages/api/src/pg-errors.ts`:
 
 ```ts
-/** §6.1 seals on movement_legs: retried create-leg never duplicates a traversal; one leg per booking. */
+/** §6.1 seals on movement_legs: retried create-leg never duplicates a traversal; one leg per booking; one in-flight leg per vehicle. */
 export const MOVEMENT_LEGS_IDEMPOTENCY_UNIQUE = 'movement_legs_idempotencyKey_unique'
 export const MOVEMENT_LEGS_BOOKING_UNIQUE = 'movement_legs_bookingId_unique'
+export const MOVEMENT_LEGS_ONE_IN_FLIGHT = 'movement_legs_one_in_flight_per_vehicle'
 /** §10: one open custody period per vehicle — a double-receipt race is rejected by the DB. */
 export const CUSTODY_PERIODS_ONE_OPEN = 'custody_periods_one_open_per_vehicle'
 /** §6.2 seals on handoff_receipts. */
@@ -1239,30 +1364,37 @@ export type NewMovementLeg = Omit<
   MovementLeg,
   'id' | 'createdAt' | 'departedAt' | 'receivedAt' | 'voidedAt'
 > & {
-  /** A ferry departs the moment it is created; a rental leg is created planned. */
+  /** Every leg is created PLANNED (ferry included — §8 rev.5). The only
+   *  already-departed creates: the ACTIVE-substitution replacement leg (§5)
+   *  and flip-script synthesis (Task 22). */
   departedAt?: Date | null
 }
 
 export interface MovementLegRepository {
-  /** Throws 23505 `movement_legs_idempotencyKey_unique` / `movement_legs_bookingId_unique`. */
+  /** Throws named 23505s: idempotency / one-leg-per-booking / one-in-flight-per-vehicle. */
   create(data: NewMovementLeg): Promise<MovementLeg>
   findById(id: string): Promise<MovementLeg | undefined>
+  /** The booking's LIVE leg (voided substitution predecessors excluded). */
   findByBookingId(bookingId: string): Promise<MovementLeg | undefined>
+  /** Replay resolution (§6.2 rev.5): checked FIRST, before any state precondition. */
+  findByIdempotencyKey(key: string): Promise<MovementLeg | undefined>
   /** The §2.1 pending projection: receivedAt IS NULL AND voidedAt IS NULL. */
   findPendingByVehicle(vehicleId: string): Promise<MovementLeg[]>
-  /** The (at most one, by process invariant) departed-but-unarrived leg. */
+  /** The (at most one — DB seal) departed-but-unarrived leg. */
   findInFlightByVehicle(vehicleId: string): Promise<MovementLeg | undefined>
   /** Guard: departedAt IS NULL AND voidedAt IS NULL — undefined when unmet. */
   markDeparted(id: string, departedAt: Date): Promise<MovementLeg | undefined>
-  /** Guard: receivedAt IS NULL AND departedAt IS NOT NULL. Re-sets to* on recovery (§5). */
+  /** Guard: receivedAt IS NULL AND departedAt IS NOT NULL. Re-sets to* ONLY on a
+   *  recovery receipt — the service enforces the §5 no-re-target rule. */
   markReceived(
     id: string,
     args: { receivedAt: Date; toOperatorId: string; toLocationId: string },
   ): Promise<MovementLeg | undefined>
-  /** Guard: departedAt IS NULL AND voidedAt IS NULL (pre-start cancel only, §5). */
+  /** Guard: departedAt IS NULL AND voidedAt IS NULL (pre-start cancel/substitution, §5). */
   markVoided(id: string, voidedAt: Date): Promise<MovementLeg | undefined>
-  /** Archival guard (§7): pending legs whose endpoint is this location. */
+  /** Archival guard (§7 rev.5): pending legs touching this location as EITHER endpoint. */
   countPendingTo(operatorId: string, locationId: string): Promise<number>
+  countPendingFrom(operatorId: string, locationId: string): Promise<number>
 }
 
 export type NewCustodyPeriod = Omit<
@@ -1284,11 +1416,15 @@ export interface CustodyPeriodRepository {
 
 export type NewHandoffReceipt = Omit<HandoffReceipt, 'id' | 'createdAt'>
 
-/** Append-only by design (§6.2): no update, no delete — a correction is a new row. */
+/** Append-only by design (§6.2): no update, no delete — a correction is a new
+ *  row; the DB enforces it via #1556-style role separation (Task 5 Step 5b). */
 export interface HandoffReceiptRepository {
   /** Throws named 23505s: idempotency / canonical-per-leg-end / supersedes-linear. */
   create(data: NewHandoffReceipt): Promise<HandoffReceipt>
   findById(id: string): Promise<HandoffReceipt | undefined>
+  /** Replay resolution (§6.2 rev.5): checked FIRST, inside the lock, before any
+   *  state precondition — a 23505 would abort the tx, so check-first is required. */
+  findByIdempotencyKey(key: string): Promise<HandoffReceipt | undefined>
   findByLeg(legId: string): Promise<HandoffReceipt[]>
   findByVehicle(vehicleId: string): Promise<HandoffReceipt[]>
 }
@@ -1303,8 +1439,10 @@ export interface VehicleTimelineLock {
 }
 
 /** Custody columns write — separate from VehicleRepository (size cap): both
- *  concrete vehicle repos additionally implement this. No ctx: callers are the
- *  custody/vehicle services which have already tenant-bound the vehicle. */
+ *  concrete vehicle repos additionally implement this — the in-memory half in
+ *  THIS task, the drizzle half in Task 9 (rev.2 ordering: everything the Task 9
+ *  tx bundle wires must already exist). No ctx: callers are the custody/vehicle
+ *  services which have already tenant-bound the vehicle. */
 export interface VehicleCustodyWrites {
   updateCustody(
     vehicleId: string,
@@ -1338,6 +1476,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MOVEMENT_LEGS_BOOKING_UNIQUE,
   MOVEMENT_LEGS_IDEMPOTENCY_UNIQUE,
+  MOVEMENT_LEGS_ONE_IN_FLIGHT,
   PG_ERROR,
   pgConstraintName,
   pgErrorCode,
@@ -1419,19 +1558,40 @@ describe('InMemoryMovementLegRepository', () => {
     expect(await repo.markVoided(departedLeg.id, d('2026-07-30T00:00:00Z'))).toBeUndefined()
     expect(await repo.findPendingByVehicle('v1')).toHaveLength(1) // voided leg dropped out
   })
-  it('countPendingTo counts pending legs targeting a location', async () => {
+  it('countPendingTo / countPendingFrom count pending legs touching a location as either endpoint', async () => {
     const repo = new InMemoryMovementLegRepository()
     await repo.create(legData())
     const voided = await repo.create(legData({ idempotencyKey: crypto.randomUUID() }))
     await repo.markVoided(voided.id, d('2026-07-30T00:00:00Z'))
     expect(await repo.countPendingTo('op', 'B')).toBe(1)
     expect(await repo.countPendingTo('op', 'Z')).toBe(0)
+    expect(await repo.countPendingFrom('op', 'A')).toBe(1)
+    expect(await repo.countPendingFrom('op', 'B')).toBe(0)
+  })
+  it('one in-flight leg per vehicle is a named 23505 (create-departed and markDeparted alike)', async () => {
+    const repo = new InMemoryMovementLegRepository()
+    const first = await repo.create(legData())
+    await repo.markDeparted(first.id, d('2026-08-01T10:05:00Z'))
+    const err = await repo
+      .create(legData({ idempotencyKey: crypto.randomUUID(), departedAt: d('2026-08-01T11:00:00Z') }))
+      .catch((e: unknown) => e)
+    expect(pgConstraintName(err)).toBe(MOVEMENT_LEGS_ONE_IN_FLIGHT)
+    const second = await repo.create(legData({ idempotencyKey: crypto.randomUUID() }))
+    const err2 = await repo.markDeparted(second.id, d('2026-08-01T12:00:00Z')).catch((e: unknown) => e)
+    expect(pgConstraintName(err2)).toBe(MOVEMENT_LEGS_ONE_IN_FLIGHT)
+  })
+  it('findByIdempotencyKey resolves a replay', async () => {
+    const repo = new InMemoryMovementLegRepository()
+    const key = crypto.randomUUID()
+    const leg = await repo.create(legData({ idempotencyKey: key }))
+    expect(await repo.findByIdempotencyKey(key)).toMatchObject({ id: leg.id })
+    expect(await repo.findByIdempotencyKey(crypto.randomUUID())).toBeUndefined()
   })
 })
 ```
 
 `custody-period.test.ts` asserts: open→row with `settlementState: 'ACCRUING'`, `departedAt: null`; second `open` for the same vehicle throws named `CUSTODY_PERIODS_ONE_OPEN` (`pgErrorCode` 23505 + `pgConstraintName`); after `closeOpen` the row has the given `departedAt`/`closedByLegId` + `settlementState: 'CLOSED'` and a NEW `open` succeeds; `closeOpen` with nothing open returns `undefined`; `findOpenByVehicle` returns only the open row.
-`handoff-receipt.test.ts` asserts: create returns the row; duplicate `idempotencyKey` throws named `HANDOFF_RECEIPTS_IDEMPOTENCY_UNIQUE`; a second canonical (same `legId`+`phase`, `supersedesReceiptId: null`) throws named `HANDOFF_RECEIPTS_CANONICAL_UNIQUE`; a correction (`supersedesReceiptId` set to the first row's id, same leg+phase) succeeds; two corrections pointing at the same row throw named `HANDOFF_RECEIPTS_SUPERSEDES_UNIQUE`; `findByLeg` returns both rows.
+`handoff-receipt.test.ts` asserts: create returns the row; duplicate `idempotencyKey` throws named `HANDOFF_RECEIPTS_IDEMPOTENCY_UNIQUE`; **`findByIdempotencyKey` returns the prior row (the §6.2 replay path)**; a second canonical (same `legId`+`phase`, `supersedesReceiptId: null`) throws named `HANDOFF_RECEIPTS_CANONICAL_UNIQUE`; a correction (`supersedesReceiptId` set to the first row's id, same leg+phase) succeeds; two corrections pointing at the same row throw named `HANDOFF_RECEIPTS_SUPERSEDES_UNIQUE`; `findByLeg` returns both rows.
 
 - [ ] **Step 6: Run to verify failure**
 
@@ -1464,8 +1624,15 @@ export class InMemoryMovementLegRepository implements MovementLegRepository {
       if (leg.idempotencyKey === data.idempotencyKey) {
         throw uniqueViolation(MOVEMENT_LEGS_IDEMPOTENCY_UNIQUE)
       }
-      if (data.bookingId !== null && leg.bookingId === data.bookingId) {
+      if (data.bookingId !== null && leg.bookingId === data.bookingId && leg.voidedAt === null) {
         throw uniqueViolation(MOVEMENT_LEGS_BOOKING_UNIQUE)
+      }
+      if (
+        (data.departedAt ?? null) !== null &&
+        leg.vehicleId === data.vehicleId &&
+        leg.departedAt !== null && leg.receivedAt === null && leg.voidedAt === null
+      ) {
+        throw uniqueViolation(MOVEMENT_LEGS_ONE_IN_FLIGHT)
       }
     }
     const leg: MovementLeg = {
@@ -1485,7 +1652,7 @@ export class InMemoryMovementLegRepository implements MovementLegRepository {
   }
 
   async findByBookingId(bookingId: string): Promise<MovementLeg | undefined> {
-    return [...this.store.values()].find((l) => l.bookingId === bookingId)
+    return [...this.store.values()].find((l) => l.bookingId === bookingId && l.voidedAt === null)
   }
 
   async findPendingByVehicle(vehicleId: string): Promise<MovementLeg[]> {
@@ -1501,9 +1668,23 @@ export class InMemoryMovementLegRepository implements MovementLegRepository {
   async markDeparted(id: string, departedAt: Date): Promise<MovementLeg | undefined> {
     const leg = this.store.get(id)
     if (!leg || leg.departedAt !== null || leg.voidedAt !== null) return undefined
+    // Parity with the partial unique index (it applies to UPDATEs too): a second
+    // in-flight leg for the same vehicle is a named 23505, not a silent write.
+    for (const other of this.store.values()) {
+      if (
+        other.id !== id && other.vehicleId === leg.vehicleId &&
+        other.departedAt !== null && other.receivedAt === null && other.voidedAt === null
+      ) {
+        throw uniqueViolation(MOVEMENT_LEGS_ONE_IN_FLIGHT)
+      }
+    }
     const next = { ...leg, departedAt }
     this.store.set(id, next)
     return next
+  }
+
+  async findByIdempotencyKey(key: string): Promise<MovementLeg | undefined> {
+    return [...this.store.values()].find((l) => l.idempotencyKey === key)
   }
 
   async markReceived(
@@ -1539,11 +1720,23 @@ export class InMemoryMovementLegRepository implements MovementLegRepository {
         l.toLocationId === locationId,
     ).length
   }
+
+  async countPendingFrom(operatorId: string, locationId: string): Promise<number> {
+    return [...this.store.values()].filter(
+      (l) =>
+        l.receivedAt === null &&
+        l.voidedAt === null &&
+        l.fromOperatorId === operatorId &&
+        l.fromLocationId === locationId,
+    ).length
+  }
 }
 ```
 
 `in-memory/custody-period.ts` — same shape: `open()` scans for an existing row with `vehicleId` + `departedAt === null` and throws `uniqueViolation(CUSTODY_PERIODS_ONE_OPEN)`; inserts `{ ...data, id: crypto.randomUUID(), departedAt: null, closedByLegId: null, accruedJpy: null, settlementState: 'ACCRUING', settlementRef: null, settledAt: null, createdAt: new Date() }`. `closeOpen()` finds the open row, replaces it with `{ ...row, departedAt: args.departedAt, closedByLegId: args.closedByLegId, settlementState: 'CLOSED' }`.
-`in-memory/handoff-receipt.ts` — `create()` scans: idempotency dup → `HANDOFF_RECEIPTS_IDEMPOTENCY_UNIQUE`; same `(legId, phase)` with both `supersedesReceiptId === null` → `HANDOFF_RECEIPTS_CANONICAL_UNIQUE`; same non-null `supersedesReceiptId` → `HANDOFF_RECEIPTS_SUPERSEDES_UNIQUE`. No update/delete methods exist.
+`in-memory/handoff-receipt.ts` — `create()` scans: idempotency dup → `HANDOFF_RECEIPTS_IDEMPOTENCY_UNIQUE`; same `(legId, phase)` with both `supersedesReceiptId === null` → `HANDOFF_RECEIPTS_CANONICAL_UNIQUE`; same non-null `supersedesReceiptId` → `HANDOFF_RECEIPTS_SUPERSEDES_UNIQUE`. Plus `findByIdempotencyKey`. No update/delete methods exist.
+
+Also in THIS task (rev.2 ordering — everything the Task 9 tx bundle wires must already exist): the **in-memory vehicle repo** gains `updateCustody` (shallow-merge into a new object, return it) + `countHomeBasedAt` (`operatorId` + `pickupLocationId` match) + `countPhysicallyAt` (`physicalHostOperatorId` + `physicalLocationId` match), declaring `implements ..., VehicleCustodyWrites, VehicleCustodyReads`. Unit-test the three alongside the custody repos. The drizzle half lands in Task 9 Step 1b.
 
 - [ ] **Step 8: Run to verify pass, then commit**
 
@@ -1555,10 +1748,68 @@ git add packages/api/src/stores.ts packages/api/src/pg-errors.ts packages/api/sr
 git commit -m "feat(custody): custody ports + in-memory repositories with seal parity"
 ```
 
-### Task 8: Drizzle repositories + transaction bundle + real-pg seal tests
+### Task 8: The per-vehicle timeline lock
+
+**Files:**
+- Modify: `packages/api/src/repositories/drizzle/availability.ts`, `in-memory/availability.ts` (implement `VehicleTimelineLock`)
+- Test: extend `packages/api/src/repositories/in-memory/availability.test.ts` (or create if absent)
+
+- [ ] **Step 1: Failing test** (in-memory serialization — mirrors the comboLockTails behavior):
+
+```ts
+it('lockVehicleTimeline serializes concurrent holders per vehicle', async () => {
+  const repo = new InMemoryAvailabilityRepository(/* existing ctor args */)
+  const order: string[] = []
+  const r1 = await repo.lockVehicleTimeline('v1')
+  const second = repo.lockVehicleTimeline('v1').then((release) => {
+    order.push('second-acquired')
+    release()
+  })
+  order.push('first-holds')
+  r1()
+  await second
+  expect(order).toEqual(['first-holds', 'second-acquired'])
+})
+it('locks are per-vehicle, not global', async () => {
+  const repo = new InMemoryAvailabilityRepository(/* ... */)
+  const r1 = await repo.lockVehicleTimeline('v1')
+  const other = await repo.lockVehicleTimeline('v2') // must not block
+  r1(); other()
+})
+```
+
+Run: fails — method missing.
+
+- [ ] **Step 2: Implement.** Drizzle (`drizzle/availability.ts`, next to `lockComboCapacity` :191):
+
+```ts
+  async lockVehicleTimeline(vehicleId: string): Promise<() => void> {
+    // §2.1: ONE lock guards the whole movement stream — booking create/cancel/
+    // substitution, leg departure, arrival receipt. Same mechanics as
+    // lockComboCapacity: advisory xact-lock, auto-released at commit/rollback.
+    // Lock ORDER when both are taken (SPECIFIC create): combo lock first, then
+    // this — keep that order everywhere or two creates can deadlock.
+    const key = `vehicle-timeline:${vehicleId}`
+    await this.db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`)
+    return () => {}
+  }
+```
+
+In-memory: clone the `comboLockTails` promise-chain pattern (`in-memory/availability.ts:152-176`) with its own `vehicleLockTails = new Map<string, Promise<void>>()` keyed `vehicle-timeline:${vehicleId}`. Declare `implements AvailabilityRepository, VehicleTimelineLock` on both classes. The tx-bundle wiring happens in Task 9, which runs after this one (rev.2 ordering fix — nothing there forward-references an unbuilt method).
+
+- [ ] **Step 3: Verify + commit**
+
+```bash
+bun run --filter @kuruma/api test -- availability && bunx tsc -p packages/api --noEmit
+git add packages/api
+git commit -m "feat(custody): per-vehicle advisory timeline lock (drizzle + in-memory)"
+```
+
+### Task 9: Drizzle repositories + transaction bundle + real-pg seal tests
 
 **Files:**
 - Create: `packages/api/src/repositories/drizzle/movement-leg.ts`, `drizzle/custody-period.ts`, `drizzle/handoff-receipt.ts`
+- Modify: `packages/api/src/repositories/drizzle/vehicle.ts` (Step 1b — `VehicleCustodyWrites` + `VehicleCustodyReads`)
 - Modify: `packages/api/src/repositories/types-transactions.ts`, `repositories/drizzle/transaction.ts`
 - Modify: `packages/api/src/composition/repositories.ts`, `packages/api/src/app-overrides.ts`
 - Test: `packages/api/tests/integration/custody-repo.test.ts`
@@ -1591,7 +1842,10 @@ export class DrizzleMovementLegRepository implements MovementLegRepository {
   }
 
   async findByBookingId(bookingId: string): Promise<MovementLeg | undefined> {
-    const [row] = await this.db.select().from(movementLegs).where(eq(movementLegs.bookingId, bookingId))
+    const [row] = await this.db
+      .select()
+      .from(movementLegs)
+      .where(and(eq(movementLegs.bookingId, bookingId), isNull(movementLegs.voidedAt)))
     return row
   }
 
@@ -1676,7 +1930,9 @@ export class DrizzleMovementLegRepository implements MovementLegRepository {
 }
 ```
 
-`drizzle/custody-period.ts`: `open()` plain insert (the partial unique index throws the named 23505); `closeOpen()` = `update ... set({ departedAt, closedByLegId, settlementState: 'CLOSED' }).where(and(eq(vehicleId), isNull(departedAt))).returning()`. `drizzle/handoff-receipt.ts`: plain insert (all seals are DB constraints) + the three finders. If `select()` row types don't structurally match the `stores` interfaces (e.g. array column typing), add a small `toX` mapper in the repo file rather than widening types.
+`drizzle/movement-leg.ts` additionally implements `findByIdempotencyKey` and `countPendingFrom` (same shapes as their siblings). `drizzle/custody-period.ts`: `open()` plain insert (the partial unique index throws the named 23505); `closeOpen()` = `update ... set({ departedAt, closedByLegId, settlementState: 'CLOSED' }).where(and(eq(vehicleId), isNull(departedAt))).returning()`. `drizzle/handoff-receipt.ts`: plain insert (all seals are DB constraints) + the finders incl. `findByIdempotencyKey`. If `select()` row types don't structurally match the `stores` interfaces (e.g. array column typing), add a small `toX` mapper in the repo file rather than widening types.
+
+- [ ] **Step 1b: Drizzle vehicle-repo custody methods** — on `repositories/drizzle/vehicle.ts` add `updateCustody` (`update(vehicles).set(patch).where(eq(id)).returning()` → mapped row | undefined), `countHomeBasedAt` (`operatorId` + `pickupLocationId`), `countPhysicallyAt` (`physicalHostOperatorId` + `physicalLocationId`); declare `implements ..., VehicleCustodyWrites, VehicleCustodyReads` (the in-memory half landed in Task 7). The tenant-anchor lint scans repo writes: `updateCustody`'s patch type structurally excludes `operatorId` (`Pick`ed away) — if `lint:tenant-anchors` still flags the file, add a `vehicle-custody` EXEMPTIONS entry citing the `Pick` (mirror the `class-rate-plan` exemption in `scripts/lint-tenant-anchor-immutability.ts`).
 
 - [ ] **Step 2: Transaction bundle.** In `types-transactions.ts`, extend `TransactionRepos` (after `consentRepo`):
 
@@ -1696,11 +1952,11 @@ with `import type { CustodyPeriodRepository, HandoffReceiptRepository, MovementL
         movementLegRepo: new DrizzleMovementLegRepository(txDb),
         custodyPeriodRepo: new DrizzleCustodyPeriodRepository(txDb),
         handoffReceiptRepo: new DrizzleHandoffReceiptRepository(txDb),
-        vehicleTimelineLock: availabilityRepo, // tx-bound DrizzleAvailabilityRepository (method added in Task 9)
-        vehicleCustody: vehicleRepo, // tx-bound DrizzleVehicleRepository (updateCustody added in Task 12)
+        vehicleTimelineLock: availabilityRepo, // tx-bound DrizzleAvailabilityRepository (method from Task 8)
+        vehicleCustody: vehicleRepo, // tx-bound DrizzleVehicleRepository (updateCustody from Step 1b)
 ```
 
-(Task 9 adds `lockVehicleTimeline` to the availability repos; to keep this task compiling, add the interface method in Task 9 and wire `vehicleTimelineLock` there if you prefer strict ordering — otherwise implement both tasks' repo edits together and commit separately.)
+(Both dependencies already exist when this task runs: `lockVehicleTimeline` landed in Task 8, and the drizzle `updateCustody`/count methods land in Step 1b below — nothing here forward-references a later task.)
 
 - [ ] **Step 3: Composition wiring** — `composition/repositories.ts`: add the three fields to the `Repos` interface; in BOTH in-memory builders instantiate `new InMemoryMovementLegRepository()` etc. (honoring `overrides.movementLegRepo ?? ...`), include them in the returned bundle AND inside both in-memory `runInTransaction` closures; in `buildDrizzleRepos` add `movementLegRepo: new DrizzleMovementLegRepository(db)` etc. Add the three optional slots to `app-overrides.ts`. Mirror exactly how `classRatePlanRepo` is threaded (`repositories.ts:203/259/281/364/475/524/564/618`, `app-overrides.ts:79`).
 
@@ -1713,9 +1969,14 @@ with `import type { CustodyPeriodRepository, HandoffReceiptRepository, MovementL
   6. second canonical receipt for one leg-end → `handoff_receipts_canonical_unique`; correction insert (supersedes first) succeeds; second correction of the same row → `handoff_receipts_supersedes_unique`
   7. a correction naming a DIFFERENT leg in `legId` → 23503 `handoff_receipts_correction_same_end_fk`
   8. inserting a leg whose `(toOperatorId, toLocationId)` crosses tenants → 23503 `movement_legs_to_location_fk`
+  9. a second in-flight leg for one vehicle (insert-departed AND `markDeparted` on a planned sibling) → 23505 `movement_legs_one_in_flight_per_vehicle`
+  10. a RENTAL leg with `bookingId: null` (and a FERRY leg WITH one) → 23514 check `movement_legs_kind_booking`
+  11. `markReceived` with `receivedAt < departedAt` → 23514 check `movement_legs_received_after_departed`
+  12. a receipt whose `vehicleId` differs from its leg's vehicle → 23503 `handoff_receipts_leg_vehicle_fk`
+  13. **append-only is DB-enforced**: a raw `UPDATE handoff_receipts SET "conditionNotes" = ...` / `DELETE FROM handoff_receipts` through the app-role connection fails with a permission error (mirror how the #1556 consent integration test asserts its role-separation; skip-with-comment if the local container runs as a superuser and CI covers it — same caveat as consent).
 
 Run: `DATABASE_URL="postgresql://kuruma:kuruma@localhost:5499/kuruma_custody" bunx vitest run tests/integration/custody-repo.test.ts --root packages/api`
-Expected: PASS (8 tests).
+Expected: PASS (13 tests).
 
 - [ ] **Step 5: Full check + commit**
 
@@ -1724,64 +1985,6 @@ bunx tsc -p packages/api --noEmit && bun run --filter @kuruma/api test && bun ru
 git add packages/api
 git commit -m "feat(custody): drizzle custody repositories + tx bundle + real-pg seal tests"
 ```
-
-### Task 9: The per-vehicle timeline lock
-
-**Files:**
-- Modify: `packages/api/src/repositories/drizzle/availability.ts`, `in-memory/availability.ts` (implement `VehicleTimelineLock`)
-- Test: extend `packages/api/src/repositories/in-memory/availability.test.ts` (or create if absent)
-
-- [ ] **Step 1: Failing test** (in-memory serialization — mirrors the comboLockTails behavior):
-
-```ts
-it('lockVehicleTimeline serializes concurrent holders per vehicle', async () => {
-  const repo = new InMemoryAvailabilityRepository(/* existing ctor args */)
-  const order: string[] = []
-  const r1 = await repo.lockVehicleTimeline('v1')
-  const second = repo.lockVehicleTimeline('v1').then((release) => {
-    order.push('second-acquired')
-    release()
-  })
-  order.push('first-holds')
-  r1()
-  await second
-  expect(order).toEqual(['first-holds', 'second-acquired'])
-})
-it('locks are per-vehicle, not global', async () => {
-  const repo = new InMemoryAvailabilityRepository(/* ... */)
-  const r1 = await repo.lockVehicleTimeline('v1')
-  const other = await repo.lockVehicleTimeline('v2') // must not block
-  r1(); other()
-})
-```
-
-Run: fails — method missing.
-
-- [ ] **Step 2: Implement.** Drizzle (`drizzle/availability.ts`, next to `lockComboCapacity` :191):
-
-```ts
-  async lockVehicleTimeline(vehicleId: string): Promise<() => void> {
-    // §2.1: ONE lock guards the whole movement stream — booking create/cancel/
-    // substitution, leg departure, arrival receipt. Same mechanics as
-    // lockComboCapacity: advisory xact-lock, auto-released at commit/rollback.
-    // Lock ORDER when both are taken (SPECIFIC create): combo lock first, then
-    // this — keep that order everywhere or two creates can deadlock.
-    const key = `vehicle-timeline:${vehicleId}`
-    await this.db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`)
-    return () => {}
-  }
-```
-
-In-memory: clone the `comboLockTails` promise-chain pattern (`in-memory/availability.ts:152-176`) with its own `vehicleLockTails = new Map<string, Promise<void>>()` keyed `vehicle-timeline:${vehicleId}`. Declare `implements AvailabilityRepository, VehicleTimelineLock` on both classes. If Task 8's `vehicleTimelineLock` bundle field was deferred, wire it now (drizzle tx factory passes the tx-bound availability repo; in-memory closures pass the singleton).
-
-- [ ] **Step 3: Verify + commit**
-
-```bash
-bun run --filter @kuruma/api test -- availability && bunx tsc -p packages/api --noEmit
-git add packages/api
-git commit -m "feat(custody): per-vehicle advisory timeline lock (drizzle + in-memory)"
-```
-
 ---
 
 ## Phase 4 — Flag, storage, custody services
@@ -1889,7 +2092,6 @@ git commit -m "feat(custody): private ReceiptStorage port (R2/disabled/in-memory
 ### Task 12: Vehicle placement / sync / re-label rule + `updateCustody`
 
 **Files:**
-- Modify: `packages/api/src/repositories/drizzle/vehicle.ts`, `in-memory/vehicle.ts` (implement `VehicleCustodyWrites` + `VehicleCustodyReads`)
 - Modify: `packages/api/src/services/vehicle.ts` (create `:135` region, update `:164-200` region)
 - Modify: `packages/api/src/index.ts` (or composition) — thread `isCustodyEnabled` into `VehicleService`
 - Test: extend the vehicle service test file (find via `ls packages/api/src/services/vehicle*.test.ts`)
@@ -1914,22 +2116,7 @@ describe('custody placement / sync / re-label (§4/§8)', () => {
 
 Write them fully against the real service API (constructor gains `isCustodyEnabled: () => Promise<boolean>` — tests pass `async () => false` / `async () => true`). Run → FAIL (extra ctor arg missing / custody fields not written).
 
-- [ ] **Step 2: Repo methods.** On BOTH concrete vehicle repos add (declare `implements ..., VehicleCustodyWrites, VehicleCustodyReads`):
-
-```ts
-  async updateCustody(vehicleId, patch) {
-    // drizzle: this.db.update(vehicles).set(patch).where(eq(vehicles.id, vehicleId)).returning() → mapped row | undefined
-    // in-memory: shallow-merge a new object into the map, return it
-  }
-  async countHomeBasedAt(operatorId, locationId) {
-    // vehicles WHERE operatorId = $1 AND pickupLocationId = $2 (count)
-  }
-  async countPhysicallyAt(operatorId, locationId) {
-    // vehicles WHERE physicalHostOperatorId = $1 AND physicalLocationId = $2 (count)
-  }
-```
-
-The tenant-anchor lint scans repo writes: `updateCustody`'s patch type structurally excludes `operatorId` (it is `Pick`ed away), which is the same structural-exclusion argument as the `class-rate-plan` exemption — if `lint:tenant-anchors` still flags the file, add a `vehicle-custody` entry to its EXEMPTIONS with a comment citing the `Pick` (mirror `scripts/lint-tenant-anchor-immutability.ts`'s existing exemption shape).
+- [ ] **Step 2: Repo methods — already landed** (rev.2 reorder: in-memory in Task 7, drizzle in Task 9 Step 1b, tenant-anchor lint note included there). This task is service-rule only.
 
 - [ ] **Step 3: Service rule.** In `VehicleService.create` (payload built ~`:135`), compute the custody columns into the create payload:
 
@@ -2031,15 +2218,20 @@ export async function voidBookingLegInTx(
 (`@kuruma/shared/lib/custody-state` may need a `package.json` subpath export in `packages/shared` — mirror how `lib/error-codes` is exported; add `./lib/custody-state`, `./lib/custody-timeline`, `./lib/custody-feasibility` in one edit.)
 
 - [ ] **Step 2: Failing service tests** — `services/custody.test.ts` with hand-rolled deps (in-memory repos + `runInTransaction: (fn) => fn(bundle)` where `bundle` includes the in-memory repos, `vehicleTimelineLock: { lockVehicleTimeline: async () => () => {} }`, and `vehicleCustody` = the in-memory vehicle repo). Cases (write all — mutation-resistant, assert exact fields):
-  - `receiveVehicle` happy path: given an in-flight RENTAL leg to `LOC_B`, receiving at `LOC_B` → leg `receivedAt` set; ARRIVAL receipt row with actor/at/idempotencyKey/photo keys; vehicle `AT_STATION` at `(op, LOC_B)`; `heldOffline: true` (default wait-for-owner); custody period opened with both snapshots `0`, `openedByLegId` = leg id.
+  - `receiveVehicle` happy path: given an in-flight RENTAL leg to `LOC_B` whose booking is **`COMPLETED`**, receiving at `LOC_B` → leg `receivedAt` set; ARRIVAL receipt row with actor/at/idempotencyKey/photo keys; vehicle `AT_STATION` at `(op, LOC_B)`; `heldOffline: true` (default wait-for-owner); custody period opened with both snapshots `0`, `openedByLegId` = leg id.
+  - **ordering (§5 rev.5): booking still `ACTIVE` → 409 `CUSTODY_CONFLICT`** ("complete the booking before receiving"). A FERRY leg needs no booking check.
+  - **replay (§6.2 rev.5): calling `receiveVehicle` again with the SAME `idempotencyKey` after success returns the same receipt (`ok: true`)** — even though the leg is no longer in flight. This pins check-first resolution: the idempotency lookup runs before the in-flight precondition.
+  - **no-re-target (§5 rev.5): a NORMAL arrival at a location ≠ the leg's planned `toLocationId` → 409 `CUSTODY_CONFLICT`** (message names the planned destination). Recovery re-target: leg planned to `LOC_B`, booking `CANCELLED`, received at `LOC_C` → leg `toLocationId` becomes `LOC_C`, vehicle at `LOC_C`.
+  - **photos mandatory (§6.2 rev.5): zero photo files → 400** before any write.
   - `autoRelistOnReceipt: true` → `heldOffline: false` after receipt.
-  - recovery re-target: leg planned to `LOC_B`, received at `LOC_C` (active-cancelled booking) → leg `toLocationId` becomes `LOC_C`, vehicle at `LOC_C`.
   - receipt at HOME clears the promo pair.
-  - no in-flight leg → `{ ok: false, status: 409, code: 'CUSTODY_CONFLICT' }`.
+  - no in-flight leg (and an unknown `idempotencyKey`) → `{ ok: false, status: 409, code: 'CUSTODY_CONFLICT' }`.
   - cross-tenant vehicle → 404; archived or cross-tenant location → 400 `INVALID_LOCATION`.
-  - second receive → 409 (leg already received).
-  - `startFerry` happy path: creates a FERRY leg already departed (from = current physical pair, to = destination, `plannedEndAt` = now + 24h), closes the open period, vehicle `IN_TRANSIT`.
+  - a DIFFERENT-key second receive → 409 (leg already received).
+  - `startFerry` happy path: creates a **planned** FERRY leg (from = current physical pair, to = destination, `plannedEndAt` = now + 24h) **then departs it through `departVehicleInTx`** → leg `departedAt` set, the open custody period CLOSED with `closedByLegId` = ferry leg id, vehicle `IN_TRANSIT`. (rev.2 fix: the leg is never born departed — `departVehicleInTx`'s `markDeparted` must actually flip it, or the period would stay open and the car at the station.)
   - `startFerry` while `IN_TRANSIT` → 409 `CUSTODY_CONFLICT`.
+  - **ferry continuity (§8 rev.5): ANY pending leg (e.g. a future confirmed booking) → 409 `CUSTODY_CONFLICT`** ("substitute or cancel future bookings first").
+  - `startFerry` replay (same `idempotencyKey`) → `ok: true`, no second leg.
   - `setListing` toggles `heldOffline` / `autoRelistOnReceipt`; `setPromoHome` writes the pair, rejects a past `cutoffAt` (400), `clearPromoHome` nulls both.
 
 Run: FAIL — module not found.
@@ -2079,8 +2271,15 @@ export interface CustodyServiceDeps {
 ```
 
 Method logic, in order (all writes go through `this.deps.runInTransaction`, first statement inside the tx is `await repos.vehicleTimelineLock.lockVehicleTimeline(vehicleId)`):
-  - `receiveVehicle(ctx, vehicleId, input, photos: File[])`: resolve operator (`resolveOperatorIdForWrite`), upload photos BEFORE the tx (R2 is not transactional; orphaned keys on a failed tx are accepted — note it in a comment), then in-tx: load vehicle (404 on miss/cross-tenant) → `findInFlightByVehicle` (409 `CUSTODY_CONFLICT` when none) → location must exist, belong to the operator, and be ACTIVE (400 `INVALID_LOCATION`) → `markReceived` (undefined → 409 already-received) → `handoffReceiptRepo.create({ legId, phase: 'ARRIVAL', ... })`, catching the named idempotency 23505 and returning the existing receipt from `findByLeg` (idempotent replay) → `receiveCustody(vehicle, operatorId, input.locationId)` → `repos.vehicleCustody.updateCustody(vehicleId, { ...transition.next, heldOffline: !vehicle.autoRelistOnReceipt, ...(input.locationId === vehicle.pickupLocationId ? { homewardPromoPercent: null, homewardPromoCutoffAt: null } : {}) })` → `custodyPeriodRepo.open({ ..., dailyRateJpySnapshot: 0, handoffFeeJpySnapshot: 0, openedByLegId: legId })` (Slice 1: hostIsOwner ⇒ rate 0, §10).
-  - `startFerry(ctx, vehicleId, input)`: in-tx: vehicle AT_STATION or 409 → destination owner-active or 400 → `movementLegRepo.create({ kind: 'FERRY', bookingId: null, from: physical pair, to: destination, plannedStartAt: now, plannedEndAt: +24h, departedAt: now, idempotencyKey: input.idempotencyKey })` (catch idempotency dup → 409) → `departVehicleInTx(repos, vehicle, leg.id, now)`.
+  - `receiveVehicle(ctx, vehicleId, input, photos: File[])`: resolve operator (`resolveOperatorIdForWrite`); **`photos.length >= 1` or 400** (§6.2 mandatory evidence); upload photos BEFORE the tx (R2 is not transactional; orphaned keys on a failed tx are accepted — note it in a comment); then in-tx, in this exact order:
+    1. `lockVehicleTimeline(vehicleId)`.
+    2. **Replay first (§6.2 rev.5):** `handoffReceiptRepo.findByIdempotencyKey(input.idempotencyKey)` → hit ⇒ return it as `ok: true` (the retry of a completed receive must not fall through to "no in-flight leg"; and a 23505-then-query approach cannot work — the 23505 aborts the tx).
+    3. Load vehicle (404 on miss/cross-tenant) → `findInFlightByVehicle` (none ⇒ 409 `CUSTODY_CONFLICT`).
+    4. **Ordering gate (§5 rev.5):** RENTAL leg ⇒ load its booking; status must be `COMPLETED` or `CANCELLED`, else 409 ("complete the booking before receiving"). `isRecovery = status === 'CANCELLED'`.
+    5. Location must exist, belong to the operator, and be ACTIVE (400 `INVALID_LOCATION`).
+    6. **No-re-target gate (§5 rev.5):** `!isRecovery && input.locationId !== leg.toLocationId` ⇒ 409 naming the planned destination.
+    7. `markReceived` (undefined ⇒ 409 already-received) → `handoffReceiptRepo.create({ legId, vehicleId, phase: 'ARRIVAL', ... })` (any residual named 23505 = true race ⇒ let it abort; the client retry replays via step 2) → `receiveCustody(vehicle, operatorId, input.locationId)` → `repos.vehicleCustody.updateCustody(vehicleId, { ...transition.next, heldOffline: !vehicle.autoRelistOnReceipt, ...(input.locationId === vehicle.pickupLocationId ? { homewardPromoPercent: null, homewardPromoCutoffAt: null } : {}) })` → `custodyPeriodRepo.open({ ..., dailyRateJpySnapshot: 0, handoffFeeJpySnapshot: 0, openedByLegId: legId })` (Slice 1: hostIsOwner ⇒ rate 0, §10).
+  - `startFerry(ctx, vehicleId, input)`: in-tx: lock → **replay first**: `movementLegRepo.findByIdempotencyKey(input.idempotencyKey)` → hit ⇒ `ok: true` no-op → vehicle AT_STATION or 409 → **`findPendingByVehicle` must be EMPTY or 409** (§8 rev.5 continuity rule: substitute/cancel future bookings before repositioning) → destination owner-active or 400 → `movementLegRepo.create({ kind: 'FERRY', bookingId: null, from: physical pair, to: destination, plannedStartAt: now, plannedEndAt: +24h, idempotencyKey: input.idempotencyKey })` — **created PLANNED (no `departedAt`)** — then `departVehicleInTx(repos, vehicle, leg.id, now)` flips it, closes the open period, and puts the car `IN_TRANSIT` (rev.2 fix: a leg born departed made `markDeparted` a no-op and left the period open).
   - `setListing` / `setPromoHome` / `clearPromoHome`: tenant-check then `updateCustody` (no tx needed — single write). `setPromoHome` validates `cutoffAt > now` (400).
   - `listReceipts(ctx, vehicleId)` (operator read, tenant-bound) and `getReceiptPhoto(ctx, receiptId, index)` → receipt (tenant-bound via its vehicle) → `receiptStorage.getFile(receipt.photoStorageKeys[index])` (404 on either miss).
   Results follow the repo-wide `{ ok: true, ... } | { ok: false; error; status; code? }` union; `'CUSTODY_CONFLICT' satisfies ErrorCode` at the emit sites.
@@ -2099,10 +2298,10 @@ git commit -m "feat(custody): CustodyService — receipt gate, ferry, listing, p
 
 ## Phase 5 — Booking + search integration
 
-### Task 14: Booking lifecycle hooks (depart / void / recovery)
+### Task 14: Booking lifecycle hooks (depart / void / recovery / substitution / assignment)
 
 **Files:**
-- Modify: `packages/api/src/services/booking-lifecycle.ts` (`updateStatus` :408, renter `cancel` :495; ctor)
+- Modify: `packages/api/src/services/booking-lifecycle.ts` (`updateStatus` :408, renter `cancel` :495, `substitute` :93, `assignVehicle` :250; ctor)
 - Modify: composition root (thread `runInTransaction` + `isCustodyEnabled` into `BookingLifecycleService`)
 - Test: extend `packages/api/src/services/booking-lifecycle.test.ts` (or the suite `tsc`/grep finds for this service)
 
@@ -2113,6 +2312,10 @@ git commit -m "feat(custody): CustodyService — receipt gate, ferry, listing, p
   - flag ON, renter `cancel()` (CONFIRMED-only): leg voided.
   - flag ON, booking with NO leg (created while dark): every transition succeeds unchanged — hooks no-op.
   - flag OFF: repos untouched (spy: leg repo empty, vehicle custody unchanged).
+  - **substitution, pre-departure** (flag ON, booking `CONFIRMED` with a leg on car X): `substitute(→ car Y)` → X's leg `voidedAt` set; a NEW planned leg exists for Y over the booking's window with a fresh idempotency key (`booking:<id>:sub:<n>` or the leg id — any unique scheme); exactly one LIVE (non-voided) leg for the booking — the `movement_legs_bookingId_unique` seal is scoped `WHERE voidedAt IS NULL` for exactly this path (§6.1 rev.5); pin it with a test.
+  - **substitution while ACTIVE** (flag ON, X departed): X's leg NOT voided, still in flight (recovery); Y gains a leg `departedAt` = substitution instant; Y `IN_TRANSIT`; X unchanged (`IN_TRANSIT`, waiting on its receipt).
+  - **class-assignment** (flag ON, CLASS_COMBO float, no leg): `assignVehicle(car Z)` → a planned RENTAL leg for Z over the booking window; feasibility (Task 15's shared predicate) rejects an assignment whose window overlaps Z's pending legs.
+  - **two-vehicle lock order**: substitution acquires both vehicle locks in ascending `vehicleId` order (assert via a lock-spy recording acquisition order for both X<Y and Y<X id orderings).
 
 Run → FAIL (service has no custody deps).
 
@@ -2151,6 +2354,10 @@ Run → FAIL (service has no custody deps).
 ```
 
 Renter `cancel()` (:495): same fork — flag ON wraps its status write in `runInTransaction` with the lock + `voidBookingLegInTx` (renter cancel is CONFIRMED-only, so it is always a pre-start void). Keep both forks minimal — the fee/refund/notification logic stays exactly where it is; only the status-write statement moves inside the tx.
+
+- [ ] **Step 2b: Substitution + assignment hooks (§5 rev.5).** Both already run inside `runInTransaction`; the custody additions live inside those existing transactions:
+  - `substitute` (:93): when custody is ON and the booking has a live leg, acquire BOTH timeline locks in **ascending `vehicleId` order** immediately after the tx opens (extract a tiny `lockVehiclesInOrder(repos, ids)` helper next to the motion helpers). After the reassign succeeds: booking `CONFIRMED` ⇒ `markVoided(oldLeg)` + `movementLegRepo.create` a planned leg for the replacement (window `[startAt, effectiveEndAt]`, `idempotencyKey: 'booking:' + bookingId + ':' + newVehicleId`); booking `ACTIVE` ⇒ leave the old leg in flight (recovery — a receipt lands it) and create the replacement's leg with `departedAt: now`, flipping the replacement `IN_TRANSIT` via `departVehicleInTx` (create planned, then depart — one definition of depart). Also run the shared feasibility predicate against the replacement's pending legs (reject 409 on overlap) — substitution must not bypass what create enforces.
+  - `assignVehicle` (:250): when custody is ON, lock the assigned vehicle, run the shared feasibility predicate for the booking's window against the car's pending legs (409 on failure), and create the booking's planned RENTAL leg (`idempotencyKey: 'booking:' + bookingId + ':' + vehicleId`). A float created while dark and assigned while ON gets its leg here — "every booking has a leg" holds at the assignment boundary.
 
 - [ ] **Step 3: Run to PASS; full api suite; commit**
 

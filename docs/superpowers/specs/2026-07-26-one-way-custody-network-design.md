@@ -172,7 +172,7 @@ This is the **same movement the §2.1 feasibility stream folds** and the boundar
 
 **DB seals:**
 - **`UNIQUE(idempotencyKey)`** — a retried create-leg command never duplicates a movement.
-- **`UNIQUE(bookingId) WHERE bookingId IS NOT NULL`** — exactly one leg per booking (a booking is one traversal).
+- **`UNIQUE(bookingId) WHERE bookingId IS NOT NULL AND voidedAt IS NULL`** — exactly one **live** leg per booking (a booking is one traversal). Scoped to live legs because a pre-departure substitution voids the old car's leg and writes the replacement's for the *same* booking (§5) — the voided audit row stays.
 - **`CHECK ((kind = 'RENTAL') = (bookingId IS NOT NULL))`** — a rental leg always names its booking; a ferry/transfer never does.
 - **`UNIQUE(vehicleId) WHERE departedAt IS NOT NULL AND receivedAt IS NULL AND voidedAt IS NULL`** — at most **one in-flight leg per vehicle**; the "at most one, by process invariant" claim becomes a constraint.
 - **Timestamp coherence** — `CHECK (receivedAt IS NULL OR (departedAt IS NOT NULL AND receivedAt >= departedAt))` (an arrival needs a departure and never precedes it) and `CHECK (voidedAt IS NULL OR departedAt IS NULL)` (a departed leg can never be voided — it becomes a recovery leg instead).
