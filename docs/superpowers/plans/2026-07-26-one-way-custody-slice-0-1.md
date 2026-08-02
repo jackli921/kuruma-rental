@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Plan rev.4** (2026-08-02) — folded the plan-rev.3 review (2 P0 + 6 P1) against **spec rev.8**. The finding→task map is in "rev.4 changes at a glance" below; the rev.3 map is kept for history.
+> **Plan rev.5** (2026-08-02) — folded the plan-rev.4 review (4 P0 + 5 P1, concurrency/deployment) against **spec rev.9**. The finding→task map is in "rev.5 changes at a glance" below; earlier maps kept for history.
 
 **Goal:** Implement Slice 0 (pure custody state machine + Q3-strict feasibility predicate) and Slice 1 (same-operator homeward one-way rentals: movement legs, receipt gate with configurable checklist, custody periods at rate 0, cancellation recovery, substitution/assignment legs, archival guard, staff reposition, promo-home, shared predicate on search + checkout) of the one-way custody network design.
 
-**Spec (source of truth):** `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md` (rev.8).
+**Spec (source of truth):** `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md` (rev.9).
 
 **Architecture:** Pure Functional Core in `packages/shared/src/lib/` (fold + feasibility + custody transitions + fingerprint), imperative shell in `packages/api` (drizzle tables with full DB seals incl. state⇔reference FKs, repos behind ports, services orchestrating under a per-vehicle advisory lock inside `runInTransaction`), web surfaces in `packages/web` (operator custody actions, renter dropoff picker). Everything behavior-changing is dark behind one runtime flag `ONE_WAY_CUSTODY`; recovery operations are state-driven and never gated (§14.1).
 
@@ -31,24 +31,41 @@
 13. **Receipt checklist model (spec Q5).** `RECEIPT_CHECKLIST_ITEMS = ['PHOTOS','FUEL','ODOMETER','DAMAGE_NOTES']`. Owner config = `operators.receiptChecklist text[] NOT NULL DEFAULT '{}'` (empty = minimal core only — the v1 default). The §5 depart transition snapshots it onto the leg (`movement_legs.checklistSnapshot`); the receive service enforces the **snapshot** (400 `RECEIPT_CHECKLIST_INCOMPLETE` naming the missing items). A `NULL` snapshot (dark-era/synthesized legs) = minimal core.
 14. **Request fingerprints (spec §6).** `requestFingerprint(payload)` = SHA-256 hex over a key-sorted canonical JSON (pure helper, `lib/request-fingerprint.ts`). Replay resolution: same `idempotencyKey` + same fingerprint ⇒ return the prior row; same key + different fingerprint ⇒ 409 `IDEMPOTENCY_MISMATCH`. Photo storage keys are excluded from the fingerprint (they regenerate per upload); the **sorted SHA-256 content hash of each photo** is included (`photoHashes` — a count would let a reused key return evidence for different images; rev.4).
 15. **Tail rule — now spec §8 rule 6 (owner-approved as enforcement, not policy).** Rule 3 guarantees every live leg's own anchor stays valid — but only if creates cannot invalidate it retroactively. A one-way inserted **before** an existing future leg would strand that leg's pickup. So a one-way (dropoff ≠ pickup) is feasible only when no live leg occupies at/after the window's end (`ONEWAY_NOT_TAIL`); round trips are exempt. This is #882's TAIL_ONLY; the FULL_CHAIN dial is dropped (YAGNI). The same fold gates the Task 22 cutover synthesis.
-16. **State⇔reference seals land in a custom migration.** `vehicles.inFlightLegId`/`openCustodyPeriodId` FK into `movement_legs`/`custody_periods`, which FK back into `vehicles` — drizzle modules would import each other circularly. The columns are bare in `fleet.ts`; the two composite FKs + the three-way CHECK + the receipt endpoint-match trigger + **the rev.4 lifecycle triggers (§3: referenced leg in flight / referenced period open, both directions) and the leg-endpoint update guard (§6)** are one hand-written migration (Task 5 Step 5c); **the home-base⇒tracked trigger (§13) lands in the Task 6 backfill migration, after the backfill UPDATE** (adding it earlier would fail old-code writes to not-yet-backfilled rows). Drizzle never diffs custom SQL, so no snapshot drift.
+16. **State⇔reference seals land in a custom migration.** `vehicles.inFlightLegId`/`openCustodyPeriodId` FK into `movement_legs`/`custody_periods`, which FK back into `vehicles` — drizzle modules would import each other circularly. The columns are bare in `fleet.ts`; the two composite FKs + the three-way CHECK + the receipt endpoint-match trigger + **the lifecycle triggers (§3: referenced leg in flight / referenced period open, both directions) and the leg-endpoint update guard (§6)** are one hand-written migration (Task 5 Step 5c). **Every trigger function re-reads the current row(s) by id — a deferred trigger's `NEW` is an event-time snapshot, and insert-untracked-then-place must pass (§3 rev.9); the reverse-seal trigger fires on ALL lifecycle columns (`departedAt` included — clearing it un-in-flights a leg too).** The home-base⇒tracked trigger (§13) is NOT in this branch at all — decision 22. Drizzle never diffs custom SQL, so no snapshot drift.
 17. **The booking's current leg is identified by (bookingId, vehicleId).** The §4 seal is `UNIQUE(bookingId, vehicleId) WHERE bookingId IS NOT NULL AND voidedAt IS NULL` — an ACTIVE substitution legitimately leaves TWO live legs on one booking (old car's detached recovery + new car's current). Every "the booking's leg" read is `findLiveByBookingAndVehicle(bookingId, booking.assignedVehicleId)`.
 18. **Staff reposition is home-only and never flag-gated (spec §9 rev.8).** The service takes NO destination — it is always the car's current home base (`vehicle.pickupLocationId`); the UI is a confirm-only "Send home" dialog. Every reposition is homeward recovery, so the §14.1 flag gate on repositions disappears entirely. A deliberate outward move = re-label home (§9) then reposition home — two explicit steps, capability preserved. `TRANSFER` stays script/admin-only.
-19. **Leg idempotency keys carry a traversal generation (spec §4 rev.8).** Booking-driven legs use `booking:<bookingId>:<vehicleId>:g<n>` where `n = countByBookingAndVehicle(bookingId, vehicleId)` (all states, counted inside the tx under the vehicle locks). A voided leg keeps its key, so the static `booking:<id>:<vehicleId>` form permanently jams an X→Y→X→Y swap sequence. Retry safety is service-level: substitution/assignment whose target already equals `booking.assignedVehicleId` no-ops before creating anything.
-20. **Receipt commands preflight before any photo upload (spec §6 rev.8).** Order: resolve tenant + load vehicle (404) → replay-resolve the idempotency key (fingerprint compare) → in-flight-leg existence — all BEFORE `receiptStorage.put`. The locked tx re-checks everything; orphaned keys now require a true race/crash, not a bad request. `setReceiptChecklist` rejects enabling `PHOTOS` while `receiptStorage.isConfigured()` is false (400) — no obligation the receiver cannot satisfy.
-21. **Seeds place their own vehicles (spec §13 rev.8).** `scripts/seed.ts` writes `AT_STATION` + baseline periods for every vehicle it inserts with a home base (Task 6 Step 2b) — seed runs after migration, so the backfill cannot cover it. Vehicle-service create places in the SAME transaction as the insert. The §13 trigger makes any straggler a hard failure instead of a car search lists but checkout rejects.
+19. **Leg idempotency keys are COMMAND keys (spec §4 rev.9 — supersedes rev.4's generation keys).** Booking-create legs: `booking:<bookingId>` (one create per booking). Substitution/class-assignment: the request carries a REQUIRED client `idempotencyKey` (UUID per user action); the leg stores it, and replay = `findByIdempotencyKey` + fingerprint compare (bookingId, target vehicle, window) ⇒ return the original outcome as a no-op. This fixes BOTH shapes: repeated swaps X→Y→X→Y are distinct commands (distinct keys — nothing jams on a voided leg's key), and a **delayed duplicate** of the first X→Y arriving after Y→X replays instead of re-executing (a generation key would have minted `g2` and flipped the assignment back). `substituteVehicleSchema`/`assignVehicleSchema` gain the field; the web UI sends `crypto.randomUUID()` per action; sync `e2e/mock-api.ts` (standing lesson). The rev.4 `countByBookingAndVehicle` port method is dropped — nothing needs it.
+20. **Receipt commands preflight ALL deterministic checks before any photo upload (spec §6 rev.9).** Order: resolve tenant + load vehicle (404) → replay-resolve the idempotency key (fingerprint compare) → in-flight leg exists → booking-ordering gate (terminal status) → no-re-target rule → receiving-location validity → checklist completeness — all BEFORE `receiptStorage.put` (a receiver who forgot the odometer must not orphan a photo set per retry). The locked tx re-validates everything; orphaned keys now require a true race/crash, not a bad request. **Fingerprints bind command identity:** `vehicleId` + `legId` + `phase` ride in the hash alongside the payload + sorted photo content hashes (two minimal-core receipts at the same location are otherwise indistinguishable); the replay compare recomputes with the STORED receipt's `legId` + the REQUEST's `vehicleId`, so a cross-vehicle key reuse 409s. `setReceiptChecklist` rejects enabling `PHOTOS` while `receiptStorage.isConfigured()` is false (400) — no obligation the receiver cannot satisfy.
+21. **Seeds place their own vehicles (spec §13 rev.9).** The REAL inserts live in `packages/shared/src/db/seed.ts` (~`:408` vehicle loop) — `scripts/seed.ts` is only the CLI wrapper. The seed db is **neon-http (no interactive transactions — CLAUDE.md gotcha)** and Postgres CTE snapshots forbid insert+update-same-row in one statement, so the shape is two-step per vehicle: insert **untracked without `pickupLocationId`**, then ONE data-modifying-CTE statement (baseline `custody_periods` insert + `UPDATE vehicles` setting home + `AT_STATION` + physical pair + `openCustodyPeriodId` together — single statement = single implicit tx, trigger-safe under autocommit). Vehicle-service create places in the SAME `runInTransaction` as its insert.
+22. **The home-base⇒tracked trigger ships expand–contract (spec §13 rev.9).** `deploy.yml` migrates BEFORE deploying code, so a trigger in this branch would break OLD Workers still creating home-based untracked cars in the migrate→deploy window (and on any rollback). This branch = expand: additive schema, backfill, self-placing seed, atomically-placing code. Task 24 = contract: a SEPARATE follow-up PR (trigger migration + its raw-SQL test), merged only after this feature is deployed and stable.
+23. **Lock first, read second (spec §4 rev.9).** Any vehicle/leg/booking state a custody-bearing write depends on is (re-)read INSIDE the tx after `lockVehicleTimeline` — never carried in from before the lock. `submitInTx` loads the vehicle at `booking-creation.ts:276` long before the locks at `:354+`; that object stays as the cheap pre-gate, but every custody check (rule 1, anchor, fold, promo, capacity skip) runs against a fresh in-tx re-read. Same rule in vehicle update/placement (Task 12) and substitution/assignment (Task 14).
+
+## rev.5 changes at a glance (plan-rev.4 review finding → where it landed)
+
+| # | Finding | Spec | Plan tasks |
+|---|---|---|---|
+| P0-i | Deferred trigger checks stale `NEW`; seed edit targeted the wrapper, no tx possible on neon-http | §3 re-read rule; §13 seed shape | 5 (Step 5c re-read triggers), 6 (Step 2b rewrite: `packages/shared/src/db/seed.ts`, two-step CTE), 24 |
+| P0-ii | Home-base trigger not deploy-safe (migrate-before-deploy) | §13 expand–contract | 6 (trigger REMOVED from backfill), 24 (contract follow-up PR) — decision 22 |
+| P0-iii | Checkout locks after reading vehicle; stale object drives custody gates | §4 lock-then-reread | 12, 14, 15 (in-tx re-read after lock) — decision 23 |
+| P0-iv | Cutover re-check under lock was state-only; atomicity wording wrong | §14.1 full fold under lock, per-vehicle resumable | 22 |
+| P1-v | Receipt fingerprint omits command identity | §6 vehicle/leg/phase in hash | 13 — decision 20 |
+| P1-vi | Generation keys don't stop delayed-duplicate re-execution | §4 client command keys | 7 (port method dropped), 14, 18 (schemas) — decision 19 |
+| P1-vii | Preflight-before-upload was partial | §6 all deterministic checks | 13 — decision 20 |
+| P1-viii | Reverse seal missed clearing `departedAt` | §3 all lifecycle columns + final-row eval | 5, 9 (case 18) |
+| P1-ix | Custody-period provenance not DB-sealed | §11 provenance FKs | 5 (table def), 9 (case 21) |
+| minor | Self-supersession CHECK; one lock formula; stale `booking:<id>` test note; decision count | §6, §4 | 5, 15, footer |
 
 ## rev.4 changes at a glance (plan-rev.3 review finding → where it landed)
 
 | # | Finding | Spec | Plan tasks |
 |---|---|---|---|
 | P0-A | Cutover could synthesize an impossible (stranded) schedule | §14.1 validate-before-write fence; §8 rule 6 | 22 (validation pass + per-vehicle tx under lock), 15 (OFF path folds legs) |
-| P0-B | Seeded cars untracked → search lists, checkout rejects | §13 self-placing seeds + home-base⇒tracked trigger + atomic create | 6 (trigger after backfill + Step 2b seed), 9 (case 20), 12 (same-tx create), 21 (pre-assert) |
+| P0-B | Seeded cars untracked → search lists, checkout rejects | §13 self-placing seeds + home-base⇒tracked trigger *(trigger moved to Task 24 in rev.5 — expand–contract)* + atomic create | 6 (Step 2b seed), 12 (same-tx create), 21 (pre-assert), 24 (trigger) |
 | P1-C | FKs prove ownership, not lifecycle state; endpoint trigger one-directional | §3 lifecycle triggers; §6 bidirectional endpoint guard | 5 (Step 5c), 9 (cases 17–19) |
 | P1-D | `departVehicleInTx` could commit partially (ACTIVE booking, car AT_STATION) | §5 validate-first, all-or-nothing | 13 (Step 1 rewrite), 14 |
 | P1-E | Placement / re-label / receipt / re-target skipped the location FOR SHARE | §4 widened FOR SHARE rule | 12 (placement + sync + re-label), 13 (receive) |
 | P1-F | Reposition exceeded "bring it home" (arbitrary destination + UI selector) | §9 home-only, never gated; §14.1 scrubbed | 13, 18 (schema), 19 (confirm-only dialog) — decision 18 |
-| P1-G | Substitution idempotency keys jam X→Y→X→Y | §4 generation keys | 7 (`countByBookingAndVehicle`), 14, 15 — decision 19 |
+| P1-G | Substitution idempotency keys jam X→Y→X→Y | §4 generation keys *(superseded in rev.5 by client command keys — P1-vi)* | 14, 15 — decision 19 |
 | P1-H | Photo replay under-bound; uploads before auth; PHOTOS w/o bucket | §6 photo hashes + preflight + storage guard | 2 (fingerprint doc), 11 (`isConfigured`), 13, 18 — decision 20 |
 
 ## rev.3 changes at a glance (rev.6 review finding / rev.7 correction → where it landed)
@@ -129,8 +146,9 @@ packages/web/src/vite/reservation/ReservationWizard.tsx  MODIFY  dropoff state +
 packages/web/messages/{en,ja,zh}.json                 MODIFY  i18n keys
 e2e/real-db/one-way-custody.auth.spec.ts              CREATE
 playwright.real-db.config.ts                          MODIFY  VITE_FEATURE_ONE_WAY_CUSTODY
-scripts/backfill-movement-legs.ts                     CREATE  flip runbook script (before AND after each flip)
-scripts/seed.ts                                       MODIFY  place seeded vehicles (baseline periods, §13)
+scripts/backfill-movement-legs.ts                     CREATE  flip runbook script (validate + before AND after each flip)
+packages/shared/src/db/seed.ts                        MODIFY  place seeded vehicles (baseline periods, §13 — scripts/seed.ts is only the wrapper)
+drizzle (FOLLOW-UP PR, Task 24)                       CUSTOM  home-base⇒tracked trigger (expand–contract, post-deploy)
 ```
 
 ---
@@ -1201,6 +1219,25 @@ export const custodyPeriods = pgTable(
       foreignColumns: [locations.operatorId, locations.id],
       name: 'custody_periods_host_location_fk',
     }),
+    // §11 rev.9 provenance seals: the recorded owner IS the car's owner
+    // (target: vehicles_operatorId_id_unique), and the legs bounding a period
+    // belong to that same car (target: movement_legs_id_vehicleId_unique).
+    // NULL leg refs (baseline / administrative close) pass via MATCH SIMPLE.
+    foreignKey({
+      columns: [table.ownerOperatorId, table.vehicleId],
+      foreignColumns: [vehicles.operatorId, vehicles.id],
+      name: 'custody_periods_owner_vehicle_fk',
+    }),
+    foreignKey({
+      columns: [table.openedByLegId, table.vehicleId],
+      foreignColumns: [movementLegs.id, movementLegs.vehicleId],
+      name: 'custody_periods_opened_leg_vehicle_fk',
+    }),
+    foreignKey({
+      columns: [table.closedByLegId, table.vehicleId],
+      foreignColumns: [movementLegs.id, movementLegs.vehicleId],
+      name: 'custody_periods_closed_leg_vehicle_fk',
+    }),
     check('custody_periods_close_after_open', sql`${table.departedAt} IS NULL OR ${table.departedAt} >= ${table.receivedAt}`),
     check('custody_periods_rate_non_negative', sql`${table.dailyRateJpySnapshot} >= 0`),
     check('custody_periods_handoff_fee_non_negative', sql`${table.handoffFeeJpySnapshot} >= 0`),
@@ -1260,6 +1297,8 @@ export const handoffReceipts = pgTable(
       .on(table.supersedesReceiptId)
       .where(sql`${table.supersedesReceiptId} IS NOT NULL`),
     unique('handoff_receipts_id_legId_phase_unique').on(table.id, table.legId, table.phase),
+    // rev.9: a receipt can never supersede itself (the same-row FK would pass).
+    check('handoff_receipts_no_self_supersede', sql`${table.supersedesReceiptId} IS NULL OR ${table.supersedesReceiptId} <> ${table.id}`),
     // A correction can never re-point to a different leg or end.
     foreignKey({
       columns: [table.supersedesReceiptId, table.legId, table.phase],
@@ -1362,16 +1401,21 @@ CREATE CONSTRAINT TRIGGER handoff_receipts_endpoint_match
 -- the recovery flow (re-target to*, then insert the matching ARRIVAL receipt,
 -- same tx) is checked once, against the final state.
 CREATE OR REPLACE FUNCTION movement_leg_endpoint_receipts_check() RETURNS trigger AS $$
+DECLARE
+  l record;
 BEGIN
+  -- §3 rev.9: NEW is an event-time snapshot — evaluate the FINAL row.
+  SELECT "fromLocationId", "toLocationId" INTO l FROM "movement_legs" WHERE "id" = NEW."id";
+  IF NOT FOUND THEN RETURN NULL; END IF;
   PERFORM 1 FROM "handoff_receipts" r
     WHERE r."legId" = NEW."id"
-      AND ((r."phase" = 'ARRIVAL' AND r."atLocationId" <> NEW."toLocationId")
-        OR (r."phase" = 'DEPARTURE' AND r."atLocationId" <> NEW."fromLocationId"));
+      AND ((r."phase" = 'ARRIVAL' AND r."atLocationId" <> l."toLocationId")
+        OR (r."phase" = 'DEPARTURE' AND r."atLocationId" <> l."fromLocationId"));
   IF FOUND THEN
     RAISE EXCEPTION 'movement_legs_endpoint_receipts: leg % endpoint update orphans an existing receipt',
       NEW."id" USING ERRCODE = '23514';
   END IF;
-  RETURN NEW;
+  RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1380,29 +1424,37 @@ CREATE CONSTRAINT TRIGGER movement_legs_endpoint_receipts
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION movement_leg_endpoint_receipts_check();
 
--- §3 rev.8: lifecycle triggers. The composite FKs prove the referenced row
+-- §3 rev.9: lifecycle triggers. The composite FKs prove the referenced row
 -- BELONGS to the car — an FK is equally satisfied by a received leg or a
 -- closed period. These deferred triggers assert the lifecycle state at commit,
--- from BOTH directions, completing the seal.
+-- from BOTH directions, completing the seal. EVERY function re-reads the
+-- current row by id: a deferred trigger's NEW is captured at event time, so an
+-- insert-untracked-then-place transaction queues an insert event whose NEW is
+-- the pre-placement row — checking NEW would fail a perfectly legal sequence.
 CREATE OR REPLACE FUNCTION vehicle_custody_lifecycle_check() RETURNS trigger AS $$
+DECLARE
+  v record;
 BEGIN
-  IF NEW."custodyState" = 'IN_TRANSIT' THEN
+  SELECT "custodyState", "inFlightLegId", "openCustodyPeriodId" INTO v
+    FROM "vehicles" WHERE "id" = NEW."id";
+  IF NOT FOUND THEN RETURN NULL; END IF; -- row deleted later in tx: nothing to seal
+  IF v."custodyState" = 'IN_TRANSIT' THEN
     PERFORM 1 FROM "movement_legs" l
-      WHERE l."id" = NEW."inFlightLegId"
+      WHERE l."id" = v."inFlightLegId"
         AND l."departedAt" IS NOT NULL AND l."receivedAt" IS NULL AND l."voidedAt" IS NULL;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'vehicles_custody_lifecycle: vehicle % IN_TRANSIT but leg % is not in flight',
-        NEW."id", NEW."inFlightLegId" USING ERRCODE = '23514';
+        NEW."id", v."inFlightLegId" USING ERRCODE = '23514';
     END IF;
-  ELSIF NEW."custodyState" = 'AT_STATION' THEN
+  ELSIF v."custodyState" = 'AT_STATION' THEN
     PERFORM 1 FROM "custody_periods" p
-      WHERE p."id" = NEW."openCustodyPeriodId" AND p."departedAt" IS NULL;
+      WHERE p."id" = v."openCustodyPeriodId" AND p."departedAt" IS NULL;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'vehicles_custody_lifecycle: vehicle % AT_STATION but period % is not open',
-        NEW."id", NEW."openCustodyPeriodId" USING ERRCODE = '23514';
+        NEW."id", v."openCustodyPeriodId" USING ERRCODE = '23514';
     END IF;
   END IF;
-  RETURN NEW;
+  RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1411,37 +1463,47 @@ CREATE CONSTRAINT TRIGGER vehicles_custody_lifecycle
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION vehicle_custody_lifecycle_check();
 
--- The reverse direction: receiving/voiding a leg or closing a period fails at
--- commit while a vehicle still references it as in-flight/open — the §5
--- transitions must update the vehicle in the same transaction, always.
+-- The reverse direction: ANY update that ends a leg's in-flight state
+-- (receivedAt/voidedAt set, OR departedAt cleared — the rev.4 OF-list missed
+-- that) or closes a period fails at commit while a vehicle still references
+-- it — the §5 transitions must update the vehicle in the same transaction.
 CREATE OR REPLACE FUNCTION movement_leg_backref_check() RETURNS trigger AS $$
+DECLARE
+  l record;
 BEGIN
-  IF NEW."receivedAt" IS NOT NULL OR NEW."voidedAt" IS NOT NULL THEN
+  SELECT "departedAt", "receivedAt", "voidedAt" INTO l
+    FROM "movement_legs" WHERE "id" = NEW."id";
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  IF l."departedAt" IS NULL OR l."receivedAt" IS NOT NULL OR l."voidedAt" IS NOT NULL THEN
     PERFORM 1 FROM "vehicles" v WHERE v."inFlightLegId" = NEW."id";
     IF FOUND THEN
-      RAISE EXCEPTION 'vehicles_custody_lifecycle: leg % settled while a vehicle still references it in-flight',
+      RAISE EXCEPTION 'vehicles_custody_lifecycle: leg % is no longer in flight but a vehicle still references it',
         NEW."id" USING ERRCODE = '23514';
     END IF;
   END IF;
-  RETURN NEW;
+  RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE CONSTRAINT TRIGGER movement_legs_vehicle_backref
-  AFTER UPDATE OF "receivedAt", "voidedAt" ON "movement_legs"
+  AFTER UPDATE OF "departedAt", "receivedAt", "voidedAt" ON "movement_legs"
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION movement_leg_backref_check();
 
 CREATE OR REPLACE FUNCTION custody_period_backref_check() RETURNS trigger AS $$
+DECLARE
+  p record;
 BEGIN
-  IF NEW."departedAt" IS NOT NULL THEN
+  SELECT "departedAt" INTO p FROM "custody_periods" WHERE "id" = NEW."id";
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  IF p."departedAt" IS NOT NULL THEN
     PERFORM 1 FROM "vehicles" v WHERE v."openCustodyPeriodId" = NEW."id";
     IF FOUND THEN
       RAISE EXCEPTION 'vehicles_custody_lifecycle: period % closed while a vehicle still references it as open',
         NEW."id" USING ERRCODE = '23514';
     END IF;
   END IF;
-  RETURN NEW;
+  RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1469,10 +1531,11 @@ git add packages/shared/src/db packages/shared/src/enums.ts drizzle
 git commit -m "feat(custody): custody schema — legs/periods/receipts + state-reference seals + endpoint trigger"
 ```
 
-### Task 6: Backfill migration (baseline periods + placement)
+### Task 6: Backfill migration (baseline periods + placement) + self-placing seed
 
 **Files:**
 - Generate: `drizzle/01NN_backfill_vehicle_custody.sql` (custom)
+- Modify: `packages/shared/src/db/seed.ts` (Step 2b — the real insert site; `scripts/seed.ts` is only the CLI wrapper)
 
 - [ ] **Step 1: Generate the custom migration**
 
@@ -1507,27 +1570,9 @@ SET "custodyState" = 'AT_STATION',
     "openCustodyPeriodId" = p."id"
 FROM placed p
 WHERE p."vehicleId" = v."id";
-
--- §13 rev.8: a car with a home base is NEVER untracked. Added AFTER the
--- backfill (every existing home-based row is tracked now) so no old-code
--- write window exists. Any future insert path that sets a home base without
--- placing custody (raw seeds, scripts) fails at commit instead of minting a
--- car search would list but checkout must reject (§8 parity).
-CREATE OR REPLACE FUNCTION vehicle_home_base_tracked_check() RETURNS trigger AS $$
-BEGIN
-  IF NEW."pickupLocationId" IS NOT NULL AND NEW."custodyState" IS NULL THEN
-    RAISE EXCEPTION 'vehicles_home_base_tracked: vehicle % has a home base but no custody placement — write AT_STATION + a baseline period in the same transaction',
-      NEW."id" USING ERRCODE = '23514';
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE CONSTRAINT TRIGGER vehicles_home_base_tracked
-  AFTER INSERT OR UPDATE ON "vehicles"
-  DEFERRABLE INITIALLY DEFERRED
-  FOR EACH ROW EXECUTE FUNCTION vehicle_home_base_tracked_check();
 ```
+
+> **NO home-base⇒tracked trigger in this migration — or anywhere in this branch (decision 22).** `deploy.yml` migrates BEFORE deploying the Worker, so a trigger here would break OLD code still creating home-based untracked cars in the migrate→deploy window, and any rollback after it. The trigger is Task 24's separate follow-up PR, merged only after this feature is deployed. Until then the guarantee is process-level: the seed (Step 2b), the fixtures, and the Task 12 service all place atomically.
 
 - [ ] **Step 2: Apply + verify + spot-check**
 
@@ -1539,7 +1584,7 @@ docker exec kuruma-custody-pg psql -U kuruma -d kuruma_custody -c "SELECT count(
 
 Expected: verify green; every vehicle with a pickup location is `tracked` with a baseline period (a freshly-migrated empty DB shows 0/0 — seed in Step 2b for a non-trivial check).
 
-- [ ] **Step 2b: Seeds place their own vehicles (P0-B — decision 21).** Seed runs AFTER migration, so the backfill cannot cover seeded rows; without this the flag-ON E2E (Task 21) books a car whose `physicalLocationId` is null — search lists it (COALESCE fallback), checkout rejects it. In `scripts/seed.ts`, after the vehicle inserts, add one placement statement mirroring the backfill CTE exactly (insert a baseline `custody_periods` row per home-based vehicle — owner-host, rate snapshots 0, `openedByLegId` NULL — and set `custodyState 'AT_STATION'` + physical pair + `openCustodyPeriodId` in the same statement; idempotent via the same `custodyState IS NULL` guard). The Task 6 trigger turns a seed that forgets this into a hard failure, not a broken beta. Verify:
+- [ ] **Step 2b: Seeds place their own vehicles (P0-B — decision 21).** Seed runs AFTER migration, so the backfill cannot cover seeded rows; without this the flag-ON E2E (Task 21) books a car whose `physicalLocationId` is null — search lists it (COALESCE fallback), checkout rejects it. **Edit the REAL insert site, `packages/shared/src/db/seed.ts` (vehicle loop ~`:408`) — `scripts/seed.ts` is only the CLI wrapper.** Constraint: the prod seed db is neon-http (NO interactive transactions — CLAUDE.md gotcha) and a CTE cannot insert-and-update the same row in one statement (shared snapshot), so use the two-step shape (decision 21): (1) the existing per-vehicle insert keeps `pickupLocationId` for now — **once Task 24's trigger lands the insert must drop `pickupLocationId`** — and (2) AFTER the vehicle loop, ONE data-modifying-CTE statement over all seeded vehicles, mirroring the backfill exactly: insert a baseline `custody_periods` row per home-based untracked seeded vehicle (owner-host, rate snapshots 0, `openedByLegId` NULL) and `UPDATE vehicles` setting `custodyState 'AT_STATION'` + physical pair + `openCustodyPeriodId` together; idempotent via the same `custodyState IS NULL` guard, so re-seeding is safe. Write it as a small exported helper (e.g. `placeSeededVehicles(db, ids)`) so Task 24 can flip the insert shape without touching the placement. Verify:
 
 ```bash
 DATABASE_URL="postgresql://kuruma:kuruma@localhost:5499/kuruma_custody" bun run db:seed
@@ -1548,13 +1593,13 @@ docker exec kuruma-custody-pg psql -U kuruma -d kuruma_custody -c "SELECT count(
 
 Expected: `0` — no seeded car is home-based-but-untracked.
 
-> **Fixture fallout (check now, fix where hit):** the trigger fails ANY raw insert of a home-based vehicle without placement — that includes integration-test fixtures and e2e `testSql` inserts, not just the seed. Grep `tests/integration` + `e2e/real-db` for direct `vehicles` inserts with a `pickupLocationId`; give each the same one-statement placement (or extract a tiny SQL helper next to the fixture utils and reuse it in Tasks 9/15/21). A fixture that trips the trigger is the seal working — fix the fixture, never weaken the trigger.
+> **Fixture fallout (fix NOW, sealed LATER):** Task 24's trigger will fail ANY raw insert of a home-based vehicle without placement — integration-test fixtures and e2e `testSql` inserts included. Grep `tests/integration` + `e2e/real-db` for direct `vehicles` inserts with a `pickupLocationId` and give each the same placement (extract a tiny SQL helper next to the fixture utils; test DBs are TCP postgres-js, so a plain transaction is fine there). Do it in THIS branch — an unplaced fixture car already breaks §8 search/checkout parity today; Task 24 only turns the mistake into a loud failure.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add drizzle scripts/seed.ts
-git commit -m "feat(custody): bootstrap backfill + home-base⇒tracked seal; seeds place their vehicles"
+git add drizzle packages/shared/src/db/seed.ts
+git commit -m "feat(custody): bootstrap backfill; seeds place their vehicles (baseline periods)"
 ```
 
 ---
@@ -1709,11 +1754,8 @@ export interface MovementLegRepository {
    *  ACTIVE substitution's detached recovery leg (other vehicle) is excluded
    *  by the vehicle match. */
   findLiveByBookingAndVehicle(bookingId: string, vehicleId: string): Promise<MovementLeg | undefined>
-  /** Generation counter for the §4 rev.8 idempotency keys
-   *  (`booking:<id>:<vehicleId>:g<n>`): counts the pair's legs in ANY state
-   *  (voided included) — called inside the tx under the vehicle locks. */
-  countByBookingAndVehicle(bookingId: string, vehicleId: string): Promise<number>
-  /** Replay resolution (§6): checked FIRST, before any state precondition. */
+  /** Replay resolution (§6, and decision 19's command keys for substitution/
+   *  assignment): checked FIRST, before any state precondition. */
   findByIdempotencyKey(key: string): Promise<MovementLeg | undefined>
   /** The live projection: receivedAt IS NULL AND voidedAt IS NULL. */
   findPendingByVehicle(vehicleId: string): Promise<MovementLeg[]>
@@ -1941,14 +1983,6 @@ describe('InMemoryMovementLegRepository', () => {
     expect((await repo.markVoided(planned.id, d('2026-07-30T00:00:00Z')))?.voidedAt).not.toBeNull()
     expect(await repo.markVoided(departedLeg.id, d('2026-07-30T00:00:00Z'))).toBeUndefined()
     expect(await repo.findPendingByVehicle('v1')).toHaveLength(1) // voided leg dropped out
-  })
-  it('countByBookingAndVehicle counts ALL states — voided legs included (generation keys, decision 19)', async () => {
-    const repo = new InMemoryMovementLegRepository()
-    const first = await repo.create(legData({ kind: 'RENTAL', bookingId: 'b1', vehicleId: 'v1' }))
-    await repo.markVoided(first.id, d('2026-07-30T00:00:00Z'))
-    await repo.create(legData({ kind: 'RENTAL', bookingId: 'b1', vehicleId: 'v1', idempotencyKey: crypto.randomUUID() }))
-    expect(await repo.countByBookingAndVehicle('b1', 'v1')).toBe(2)
-    expect(await repo.countByBookingAndVehicle('b1', 'v2')).toBe(0)
   })
   it('countPendingTo / countPendingFrom count pending legs touching a location as either endpoint', async () => {
     const repo = new InMemoryMovementLegRepository()
@@ -2395,10 +2429,11 @@ with the matching `import type` from `'./types-custody'`. (`vehicleTimelineLock`
   14. **state-reference FKs**: `inFlightLegId` pointing at ANOTHER vehicle's leg → 23503 `vehicles_in_flight_leg_fk`; `openCustodyPeriodId` pointing at a period whose host/location differ from the vehicle's physical pair → 23503 `vehicles_open_custody_period_fk`
   15. **endpoint trigger (§6)**: an ARRIVAL receipt at a location ≠ the leg's `toLocationId` → the tx COMMIT fails with the `handoff_receipts_endpoint_match` error (23514); after updating the leg's `to*` in the same tx first, the same insert commits (the recovery path)
   16. **append-only is DB-enforced**: a raw `UPDATE handoff_receipts SET "conditionNotes" = ...` / `DELETE FROM handoff_receipts` through the app-role connection fails with a permission error (mirror how the #1556 consent integration test asserts its role-separation; skip-with-comment if the local container runs as superuser and CI covers it — same caveat as consent).
-  17. **lifecycle trigger, vehicle side (§3 rev.8)**: raw-SQL a vehicle to `IN_TRANSIT` whose `inFlightLegId` references a leg that is already RECEIVED (FK satisfied, lifecycle wrong) → COMMIT fails with `vehicles_custody_lifecycle` (23514); same for `AT_STATION` referencing a CLOSED period.
-  18. **lifecycle trigger, reverse side (§3 rev.8)**: `markReceived` a leg (raw UPDATE) while a vehicle still references it via `inFlightLegId`, WITHOUT updating the vehicle in the same tx → COMMIT fails; the full §5 shape (leg received + period opened + vehicle written, one tx) commits. Same for closing a period a vehicle still references as open.
-  19. **leg-endpoint update guard (§6 rev.8)**: raw `UPDATE movement_legs SET "toLocationId" = <other>` on a leg that already has a matching ARRIVAL receipt → COMMIT fails with `movement_legs_endpoint_receipts` (23514); the recovery order (re-target `to*` then insert the matching receipt, same tx) still commits.
-  20. **home-base⇒tracked (§13 rev.8)**: inserting a vehicle with a `pickupLocationId` and NULL `custodyState` (no placement in the tx) → COMMIT fails with `vehicles_home_base_tracked` (23514); insert + baseline period + `AT_STATION` in one tx commits.
+  17. **lifecycle trigger, vehicle side (§3 rev.9)**: raw-SQL a vehicle to `IN_TRANSIT` whose `inFlightLegId` references a leg that is already RECEIVED (FK satisfied, lifecycle wrong) → COMMIT fails with `vehicles_custody_lifecycle` (23514); same for `AT_STATION` referencing a CLOSED period. **Re-read pin:** an insert-untracked-then-place two-statement tx COMMITS cleanly (the stale-`NEW` insert event must not fail it — P0-i).
+  18. **lifecycle trigger, reverse side (§3 rev.9)**: `markReceived` a leg (raw UPDATE) while a vehicle still references it via `inFlightLegId`, WITHOUT updating the vehicle in the same tx → COMMIT fails; **raw `UPDATE movement_legs SET "departedAt" = NULL` on a referenced in-flight leg → COMMIT fails too (the cleared-departure hole, P1-viii)**; the full §5 shape (leg received + period opened + vehicle written, one tx) commits. Same for closing a period a vehicle still references as open.
+  19. **leg-endpoint update guard (§6 rev.9)**: raw `UPDATE movement_legs SET "toLocationId" = <other>` on a leg that already has a matching ARRIVAL receipt → COMMIT fails with `movement_legs_endpoint_receipts` (23514); the recovery order (re-target `to*` then insert the matching receipt, same tx) still commits.
+  20. **custody-period provenance (§11 rev.9)**: a period whose `ownerOperatorId` is not the vehicle's `operatorId` → 23503 `custody_periods_owner_vehicle_fk`; `openedByLegId`/`closedByLegId` naming ANOTHER vehicle's leg → 23503 `custody_periods_opened_leg_vehicle_fk`/`_closed_leg_vehicle_fk`; a baseline row (`openedByLegId` NULL) still inserts. Plus: a receipt superseding ITSELF → 23514 `handoff_receipts_no_self_supersede`.
+  (The home-base⇒tracked trigger test is Task 24's — the trigger does not exist in this branch, decision 22.)
 
 Run: `DATABASE_URL="postgresql://kuruma:kuruma@localhost:5499/kuruma_custody" bunx vitest run tests/integration/custody-repo.test.ts --root packages/api`
 Expected: PASS (20 tests).
@@ -2597,6 +2632,11 @@ Run → FAIL (extra ctor args missing / custody fields not written).
     //   baseline period to the new location so physical state stays byte-equivalent
     //   to pickupLocationId while dark (§14.1 facts-honored guarantee).
     // - Flag ON + home change       = a re-label; physical state NEVER moves (§9).
+    // Decision 23 (lock-then-reread): `existing` below is the PRE-LOCK read and
+    // only picks the branch; inside each tx, after lockVehicleTimeline, re-read
+    // the vehicle and re-verify the branch condition against the fresh row
+    // (return/no-op on mismatch) before writing — a concurrent depart/receive
+    // between read and lock must not be clobbered.
     if (existing.custodyState === null && nextPickup) {
       await this.runInTransaction(async (repos) => {
         await repos.vehicleTimelineLock.lockVehicleTimeline(existing.id)
@@ -2747,6 +2787,7 @@ export async function voidBookingLegInTx(
   - cross-tenant vehicle → 404; archived or cross-tenant location → 400 `INVALID_LOCATION`.
   - **preflight (decision 20): cross-tenant vehicle WITH photos → 404 AND the receipt storage stays empty** (assert `InMemoryReceiptStorage.size() === 0` — no upload before authorization); a replayed receive (same key, same payload, with photos) returns the prior receipt without a second upload.
   - **photo-hash binding (decision 14): same key, same photo COUNT, different photo bytes → 409 `IDEMPOTENCY_MISMATCH`** (the fingerprint hashes content, not count).
+  - **command-identity binding (P1-v): the same key replayed against a DIFFERENT vehicle with an identical minimal payload → 409 `IDEMPOTENCY_MISMATCH`** (vehicle/leg/phase ride in the fingerprint — a global key can never return another car's receipt).
   - a DIFFERENT-key second receive → 409 (leg already received).
   - `startReposition` happy path (decision 18 — no destination input): creates a **planned** STAFF_REPOSITION leg (from = current physical pair, **to = the car's home base — always**, `plannedEndAt` = now + 24h) **then departs it through `departVehicleInTx`** → leg `departedAt` set + `checklistSnapshot` = the owner's config; the open custody period CLOSED with `closedByLegId` = leg id; vehicle `IN_TRANSIT` with `inFlightLegId` = leg id; **and a minimal `DEPARTURE` receipt row exists for the leg (mandatory for repositions, decision 11)** with `atLocationId` = the origin.
   - `startReposition` while `IN_TRANSIT` → 409 `CUSTODY_CONFLICT`; **already at home → 409 `CUSTODY_CONFLICT`** (nothing to bring home); **home base archived (or none) → 400 `INVALID_LOCATION`** ("re-label the home base first").
@@ -2792,9 +2833,9 @@ export interface CustodyServiceDeps {
 
 Method logic, in order (all writes go through `runInTransaction`; first statement inside the tx is `lockVehicleTimeline(vehicleId)`):
   - `receiveVehicle(ctx, vehicleId, input, photos: File[])` — **decision 20 order: preflight → upload → locked tx.**
-    (P) **Preflight, before any byte reaches storage:** resolve operator (`resolveOperatorIdForWrite`); load vehicle (404 on miss/cross-tenant); compute per-photo SHA-256 (`crypto.subtle.digest` over each `File`'s bytes) and `fingerprint = await requestFingerprint({ locationId, fuelPercent: input.fuelPercent ?? null, odometerKm: input.odometerKm ?? null, damageReported: input.damageReported, conditionNotes: input.conditionNotes ?? null, photoHashes: [...hashes].sort() })`; replay-resolve `input.idempotencyKey` (hit + fingerprint match ⇒ return the prior receipt now, no upload; hit + mismatch ⇒ 409 `IDEMPOTENCY_MISMATCH`); require an in-flight leg (none + unknown key ⇒ 409). These are unlocked reads — the tx re-checks all of them authoritatively.
+    (P) **Preflight — ALL deterministic checks before any byte reaches storage (decision 20):** resolve operator (`resolveOperatorIdForWrite`); load vehicle (404 on miss/cross-tenant); find the in-flight leg; compute per-photo SHA-256 (`crypto.subtle.digest` over each `File`'s bytes) and `fingerprint = await requestFingerprint({ vehicleId, legId: leg.id, phase: 'ARRIVAL', locationId, fuelPercent: input.fuelPercent ?? null, odometerKm: input.odometerKm ?? null, damageReported: input.damageReported, conditionNotes: input.conditionNotes ?? null, photoHashes: [...hashes].sort() })` — **command identity rides in the hash (P1-v)**; replay-resolve `input.idempotencyKey` FIRST (hit ⇒ recompute the fingerprint with the STORED receipt's `legId` + the REQUEST's `vehicleId`: match ⇒ return the prior receipt now, no upload; mismatch ⇒ 409 `IDEMPOTENCY_MISMATCH`); then no in-flight leg + unknown key ⇒ 409; **booking-ordering gate** (RENTAL leg's booking terminal, else 409); **no-re-target gate** (non-recovery arrival at ≠ `leg.toLocationId` ⇒ 409); **location validity** (owner's, ACTIVE ⇒ else 400); **checklist gate** (missing items ⇒ 400) — a receiver who forgot the odometer must not orphan a photo set per retry. These are unlocked reads — the tx re-validates all of them authoritatively.
     (U) Upload photos (R2 is not transactional; orphaned keys now require a race/crash between preflight and commit — accepted, comment it).
-    (T) Then in-tx, in this exact order:
+    (T) Then in-tx (fresh reads after the lock — decision 23), in this exact order:
     1. `lockVehicleTimeline(vehicleId)`.
     2. **Replay first (§6):** `handoffReceiptRepo.findByIdempotencyKey(input.idempotencyKey)` → hit + `requestFingerprint` matches ⇒ return it as `ok: true`; hit + mismatch ⇒ 409 `IDEMPOTENCY_MISMATCH`. (A retry of a completed receive must not fall through to "no in-flight leg"; a 23505-then-query approach cannot work — the 23505 aborts the tx.)
     3. Load vehicle (404 on miss/cross-tenant) → `findInFlightByVehicle` (none ⇒ 409 `CUSTODY_CONFLICT`).
@@ -2803,7 +2844,7 @@ Method logic, in order (all writes go through `runInTransaction`; first statemen
     6. **No-re-target gate (§5):** `!isRecovery && input.locationId !== leg.toLocationId` ⇒ 409 naming the planned destination.
     7. **Checklist gate (Q5):** `missing = missingChecklistItems(leg.checklistSnapshot ?? [], input, photos.length)`; non-empty ⇒ 400 `RECEIPT_CHECKLIST_INCOMPLETE` listing the items. (`missingChecklistItems` = a small exhaustive function in this file: `PHOTOS` ⇒ `photoCount >= 1`, `FUEL` ⇒ `fuelPercent != null`, `ODOMETER` ⇒ `odometerKm != null`, `DAMAGE_NOTES` ⇒ `conditionNotes` non-empty.)
     8. **Recovery re-target first** (so the deferred endpoint trigger sees a consistent pair): if recovery and `input.locationId !== leg.toLocationId`, that is folded into `markReceived`'s `to*` args. `markReceived` (undefined ⇒ 409 already-received) → `handoffReceiptRepo.create({ legId, vehicleId, phase: 'ARRIVAL', ..., requestFingerprint: fingerprint })` (a residual named 23505 = true race ⇒ let it abort; the client retry replays via step 2) → `custodyPeriodRepo.open({ ..., dailyRateJpySnapshot: 0, handoffFeeJpySnapshot: 0, openedByLegId: legId })` → `receiveCustody(vehicle, operatorId, input.locationId)` → `repos.vehicleCustody.updateCustody(vehicleId, { ...transition.next, inFlightLegId: null, openCustodyPeriodId: period.id, heldOffline: !vehicle.autoRelistOnReceipt, ...(input.locationId === vehicle.pickupLocationId ? { homewardPromoPercent: null, homewardPromoCutoffAt: null } : {}) })`.
-  - `startReposition(ctx, vehicleId, input)` — **decision 18: no destination input; the destination IS the car's current home base; never flag-gated.** Resolve operator; in-tx: lock → load vehicle (404 cross-tenant) → `home = vehicle.pickupLocationId` (null ⇒ 400 `INVALID_LOCATION` "assign a home base first") → `fingerprint = await requestFingerprint({ toLocationId: home })` → **replay first** via `movementLegRepo.findByIdempotencyKey` (fingerprint compare, as above — a re-label between retries is a different claim) → vehicle AT_STATION or 409 → **already at home ⇒ 409 `CUSTODY_CONFLICT`** → **`findPendingByVehicle` must be EMPTY or 409** (§9 continuity rule) → `lockLocationsForShare([origin, home])` → home owner-active or 400 `INVALID_LOCATION` ("re-label the home base first") → `movementLegRepo.create({ kind: 'STAFF_REPOSITION', bookingId: null, from: physical pair, to: home, plannedStartAt: now, plannedEndAt: +REPOSITION_PROJECTION_HOURS, idempotencyKey, requestFingerprint: fingerprint })` — **created PLANNED** — then `departVehicleInTx(repos, vehicle, operator.receiptChecklist, leg.id, now)` **and write the mandatory minimal DEPARTURE receipt in the same tx** (`handoffReceiptRepo.create({ legId, vehicleId, phase: 'DEPARTURE', actorUserId: ctx.userId, atOperatorId/atLocationId: the origin pair, capturedAt: now, photoStorageKeys: [], idempotencyKey: input.idempotencyKey + ':dep', requestFingerprint: fingerprint })`).
+  - `startReposition(ctx, vehicleId, input)` — **decision 18: no destination input; the destination IS the car's current home base; never flag-gated.** Resolve operator; in-tx: lock → load vehicle FRESH inside the tx (404 cross-tenant; decision 23) → `home = vehicle.pickupLocationId` (null ⇒ 400 `INVALID_LOCATION` "assign a home base first") → `fingerprint = await requestFingerprint({ vehicleId, toLocationId: home })` (command identity — P1-v) → **replay first** via `movementLegRepo.findByIdempotencyKey` (fingerprint compare, as above — a re-label between retries is a different claim) → vehicle AT_STATION or 409 → **already at home ⇒ 409 `CUSTODY_CONFLICT`** → **`findPendingByVehicle` must be EMPTY or 409** (§9 continuity rule) → `lockLocationsForShare([origin, home])` → home owner-active or 400 `INVALID_LOCATION` ("re-label the home base first") → `movementLegRepo.create({ kind: 'STAFF_REPOSITION', bookingId: null, from: physical pair, to: home, plannedStartAt: now, plannedEndAt: +REPOSITION_PROJECTION_HOURS, idempotencyKey, requestFingerprint: fingerprint })` — **created PLANNED** — then `departVehicleInTx(repos, vehicle, operator.receiptChecklist, leg.id, now)` **and write the mandatory minimal DEPARTURE receipt in the same tx** (`handoffReceiptRepo.create({ legId, vehicleId, phase: 'DEPARTURE', actorUserId: ctx.userId, atOperatorId/atLocationId: the origin pair, capturedAt: now, photoStorageKeys: [], idempotencyKey: input.idempotencyKey + ':dep', requestFingerprint: fingerprint })`).
   - `setListing` / `clearPromoHome`: tenant-check then `updateCustody` — never flag-gated (state-driven / exposure-reducing). `setPromoHome`: 404 when the flag is OFF; validates `cutoffAt > now` (400).
   - `getReceiptChecklist(ctx)` / `setReceiptChecklist(ctx, items)`: tenant-bound read/write of `operators.receiptChecklist` (validate items ∈ `RECEIPT_CHECKLIST_ITEMS`; **items containing `PHOTOS` while `!receiptStorage.isConfigured()` ⇒ 400** — decision 20).
   - `listReceipts(ctx, vehicleId)` (operator read, tenant-bound) and `getReceiptPhoto(ctx, receiptId, index)` → receipt (tenant-bound via its vehicle) → `receiptStorage.getFile(receipt.photoStorageKeys[index])` (404 on either miss).
@@ -2843,8 +2884,9 @@ git commit -m "feat(custody): CustodyService — receipt gate + checklist, staff
   - **class-assignment CONFIRMED** (flag ON, CLASS_COMBO float, no leg): `assignVehicle(car Z)` → a planned RENTAL leg for Z over the booking window; the shared feasibility predicate rejects an assignment whose window overlaps Z's pending legs (409).
   - **class-assignment ACTIVE** (flag ON): the leg is created AND departed in the same tx (from = Z's physical location) — the rental is already underway (§5).
   - **two-vehicle lock order**: substitution acquires both vehicle locks in ascending `vehicleId` order (assert via a lock-spy recording acquisition order for both X<Y and Y<X id orderings).
-  - **repeated swaps (decision 19, P1-G): X→Y, Y→X, X→Y again (all pre-departure, flag ON) — every substitution succeeds**; the three created legs carry DISTINCT generation keys (`...:gN`); the final live leg is Y's. A static per-pair key would 23505 on the third swap — this test pins the fix.
-  - **substitution retry no-op: `substitute(→ Y)` when `booking.assignedVehicleId` is already Y → `ok: true`, no new leg, no void** (service-level retry safety — the generation key deliberately does not dedupe across commits).
+  - **repeated swaps (decision 19): X→Y, Y→X, X→Y again (all pre-departure, flag ON, each with its OWN client `idempotencyKey`) — every substitution succeeds**; three legs with three distinct keys; the final live leg is Y's. (A static per-pair server key would 23505 on the third swap — this pins the command-key model.)
+  - **delayed duplicate replays, never re-executes (P1-vi): re-send the FIRST X→Y command (same key, same payload) AFTER Y→X has run → `ok: true` replay no-op; `booking.assignedVehicleId` is STILL X and no new leg exists.** A generation key would have minted a fresh key and flipped the assignment back — this is the finding's exact scenario.
+  - **same key, different payload** (same key, target Z) → 409 `IDEMPOTENCY_MISMATCH`.
 
 Run → FAIL (service has no custody deps).
 
@@ -2889,8 +2931,9 @@ Run → FAIL (service has no custody deps).
 Renter `cancel()` (:495): same shape — wrap its status write in `runInTransaction` with the lock + `voidBookingLegInTx` (renter cancel is CONFIRMED-only, so it is always a pre-departure void). Keep the fork minimal — the fee/refund/notification logic stays exactly where it is; only the status-write statement moves inside the tx.
 
 - [ ] **Step 2b: Substitution + assignment hooks (§5).** Both already run inside `runInTransaction`; the custody additions live inside those existing transactions (gated on `await this.isCustodyEnabled()` for CREATING new legs — creating movement is outbound and flag-gated; voiding/departing existing legs is not):
-  - `substitute` (:93): **retry guard first — `newVehicleId === booking.assignedVehicleId` ⇒ `ok: true` no-op (decision 19)**. When the booking has a live leg on the old car, acquire BOTH timeline locks in **ascending `vehicleId` order** immediately after the tx opens (extract a tiny `lockVehiclesInOrder(repos, ids)` helper next to the motion helpers). After the reassign succeeds: run the shared feasibility predicate against the replacement (reject 409 on overlap/anchor failure — substitution must not bypass what create enforces); then booking `CONFIRMED` ⇒ `markVoided(oldLeg)` + `movementLegRepo.create` a planned leg for the replacement (window `[startAt, effectiveEndAt]`, **generation key: `` `booking:${bookingId}:${newVehicleId}:g${await repos.movementLegRepo.countByBookingAndVehicle(bookingId, newVehicleId)}` `` — counted under the locks; a voided leg keeps its key, so X→Y→X→Y needs `g0/g1/...`**, fingerprint over the window+endpoints); booking `ACTIVE` ⇒ leave the old leg live (detached recovery — a receipt lands it) and create the replacement's leg PLANNED then `departVehicleInTx` it in the same tx (one definition of depart; the (booking, vehicle) seal admits both live legs).
-  - `assignVehicle` (:250): **same retry guard (already assigned to this car ⇒ no-op)**; lock the assigned vehicle, run the shared feasibility predicate for the booking's window against the car's pending legs (409 on failure), create the booking's planned RENTAL leg (**same generation-key form**); when the booking is already `ACTIVE`, follow with `departVehicleInTx` in the same tx. A float created while dark and assigned while ON gets its leg here — "every booking has a leg" holds at the assignment boundary.
+  - **Command keys (decision 19):** `substituteVehicleSchema` + `assignVehicleSchema` (`packages/shared/src/validators/`) gain a REQUIRED `idempotencyKey: z.string().uuid()`; the operator UI sends `crypto.randomUUID()` per action; sync `e2e/mock-api.ts` for the changed contracts (standing lesson). **Replay resolution, first thing inside the tx after the locks:** `findByIdempotencyKey(input.idempotencyKey)` → hit + fingerprint match (`requestFingerprint({ bookingId, vehicleId: target, startAt, effectiveEndAt })`) ⇒ return the CURRENT booking state as `ok: true` (no void, no create — a delayed duplicate must never re-execute, P1-vi); hit + mismatch ⇒ 409 `IDEMPOTENCY_MISMATCH`.
+  - `substitute` (:93): when the booking has a live leg on the old car, acquire BOTH timeline locks in **ascending `vehicleId` order** immediately after the tx opens (extract a tiny `lockVehiclesInOrder(repos, ids)` helper next to the motion helpers), **then re-read booking + both vehicles fresh (decision 23)**. After the reassign succeeds: run the shared feasibility predicate against the replacement's FRESH state (reject 409 on overlap/anchor failure — substitution must not bypass what create enforces); then booking `CONFIRMED` ⇒ `markVoided(oldLeg)` + `movementLegRepo.create` a planned leg for the replacement (window `[startAt, effectiveEndAt]`, `idempotencyKey: input.idempotencyKey`, the fingerprint above); booking `ACTIVE` ⇒ leave the old leg live (detached recovery — a receipt lands it) and create the replacement's leg PLANNED then `departVehicleInTx` it in the same tx (one definition of depart; the (booking, vehicle) seal admits both live legs).
+  - `assignVehicle` (:250): same replay resolution; lock the assigned vehicle, **re-read it fresh**, run the shared feasibility predicate for the booking's window against the car's pending legs (409 on failure), create the booking's planned RENTAL leg (`idempotencyKey: input.idempotencyKey`); when the booking is already `ACTIVE`, follow with `departVehicleInTx` in the same tx. A float created while dark and assigned while ON gets its leg here — "every booking has a leg" holds at the assignment boundary.
 
 - [ ] **Step 3: Run to PASS; full api suite; commit**
 
@@ -2930,7 +2973,7 @@ Run → FAIL.
 
 - [ ] **Step 3: Implement in `booking-creation.ts`** (SPECIFIC path; CLASS_COMBO stays round-trip-only — the validator already forces it and Task 16 keeps displaced cars out of the pool):
   1. Ctor gains `isCustodyEnabled: () => Promise<boolean>` (wire like `isOperatorTermsEnabled`, `:136` precedent). Resolve once per `create()` before the tx and pass down (`custodyOn`).
-  2. Inside `submitSpecificInTxLocked` (:378), immediately after the existing combo-capacity lock acquisition (:354-375 — combo lock FIRST, then vehicle lock; keep this order, it is the documented deadlock rule): `await repos.vehicleTimelineLock.lockVehicleTimeline(assignedVehicleId)` (always — cheap, and the OFF path also writes bookings that Task 14 may later move).
+  2. Inside `submitSpecificInTxLocked` (:378), immediately after the existing combo-capacity lock acquisition (:354-375 — combo lock FIRST, then vehicle lock; keep this order, it is the documented deadlock rule): `await repos.vehicleTimelineLock.lockVehicleTimeline(assignedVehicleId)` (always — cheap, and the OFF path also writes bookings that Task 14 may later move). **Then re-read the vehicle through the tx-bound repo and use THAT row for every custody gate below (decision 23, P0-iii):** the `vehicle` parameter was loaded at `:276`, long before any lock — it stays as the cheap pre-gate (status/class/shaken), but rule 1, the anchor, the fold, the promo pair, and the capacity skip must all read the fresh row, or a concurrent reposition/receipt between read and lock drives checkout off stale custody.
   3. `await repos.locationShareLock.lockLocationsForShare([input.pickupLocationId, input.dropoffLocationId])` (§4 — serializes against archival).
   4. Replace the pickup gate. **OFF (kill-safe, §14.1):**
 
@@ -3038,10 +3081,9 @@ Run → FAIL.
             toLocationId: input.dropoffLocationId,
             plannedStartAt: input.startAt,
             plannedEndAt: effectiveEndAt,
-            // Decision 19: the uniform generation form. At create no legs can
-            // exist for the pair, so n is always 0 — uniformity beats a
-            // second key format.
-            idempotencyKey: `booking:${booking.id}:${vehicle.id}:g0`,
+            // Decision 19: one create per booking — the booking id IS the
+            // command key. Substitution/assignment legs use client keys.
+            idempotencyKey: `booking:${booking.id}`,
             requestFingerprint: await requestFingerprint({
               bookingId: booking.id,
               pickup: input.pickupLocationId,
@@ -3051,7 +3093,7 @@ Run → FAIL.
         }
 ```
 
-  (Same tx ⇒ a failed leg insert rolls the booking back; the generation key + the (booking, vehicle) unique make retries inert.)
+  (Same tx ⇒ a failed leg insert rolls the booking back; the `booking:<id>` key + the (booking, vehicle) unique make retries inert.)
 
 - [ ] **Step 4: Integration tests** — extend `tests/integration/bookings.test.ts` (real pg): flag ON via a `feature_flags` DB override row (insert `{ key: 'ONE_WAY_CUSTODY', enabled: true }` through the repo/table in `beforeAll`, delete in `afterAll`): the displaced-homeward 201 case + the leg row assert; the existing `#882 same-operator one-way guardrail` test (`:633`) must still pass (cross-operator dropoff → still 400 — `resolveDropoffEffectiveEnd` fires first).
 
@@ -3408,7 +3450,7 @@ Bookings created while the flag was OFF have no legs; dark-era COMPLETED one-way
 // Usage: DATABASE_URL=... bun run scripts/backfill-movement-legs.ts [--apply]
 ```
 
-Logic (drizzle over a `postgres()` client): **pass 0** — collect every affected vehicle (passes 1-3 selectors below), and per vehicle run the pure fold (`projectedLocationAt`/`pendingLegOverlaps` + the tail rule from `@kuruma/shared/lib`) over existing live legs ∪ would-be legs; violations accumulate into the conflict report (never partially apply). **Passes 1-2** — select CONFIRMED/ACTIVE bookings with `assignedVehicleId IS NOT NULL` and no live `movement_legs` row for (booking, vehicle) (`LEFT JOIN ... IS NULL`); build the leg (`kind 'RENTAL'`, from/to = booking pickup/dropoff with the booking's `operatorId`, planned window `[startAt, effectiveEndAt]`, `idempotencyKey: 'backfill:' + bookingId`, `requestFingerprint: 'backfill:' + bookingId`, `departedAt: startAt` for ACTIVE); for ACTIVE: close the vehicle's open custody period (`departedAt = startAt, closedByLegId = leg id`), then `UPDATE vehicles SET "custodyState"='IN_TRANSIT', "physicalHostOperatorId"=NULL, "physicalLocationId"=NULL, "inFlightLegId"=<leg id>, "openCustodyPeriodId"=NULL` (order matters — the three-way CHECK is per-statement). **Pass 3** — for each AT_STATION vehicle whose latest COMPLETED booking's `dropoffLocationId` differs from `physicalLocationId` and has no leg: synthesize a departed `TRANSFER` leg (from = materialized pair, to = the booking's dropoff pair, window = booking end → +24h, `idempotencyKey: 'recovery:' + bookingId`), close the open period, flip the vehicle IN_TRANSIT as above. **Under `--apply`, each vehicle's statements run in ONE transaction opened with `SELECT pg_advisory_xact_lock(hashtextextended('vehicle-timeline:' || vehicleId, 0))`** (the same key the API takes — a concurrent depart/receive cannot interleave with the synthesis; per-vehicle granularity keeps lock hold times short and the run resumable). Re-check the pass-guards (`custodyState`, no-live-leg) inside the locked tx — the validation snapshot may be stale by the time the lock is held. Print the full statement set; execute only under `--apply`. Idempotent via the idempotency keys + in-tx guards.
+Logic (drizzle over a `postgres()` client): **pass 0** — collect every affected vehicle (passes 1-3 selectors below), and per vehicle run the pure fold (`projectedLocationAt`/`pendingLegOverlaps` + the tail rule from `@kuruma/shared/lib`) over existing live legs ∪ would-be legs; violations accumulate into the conflict report (never partially apply). **Passes 1-2** — select CONFIRMED/ACTIVE bookings with `assignedVehicleId IS NOT NULL` and no live `movement_legs` row for (booking, vehicle) (`LEFT JOIN ... IS NULL`); build the leg (`kind 'RENTAL'`, from/to = booking pickup/dropoff with the booking's `operatorId`, planned window `[startAt, effectiveEndAt]`, `idempotencyKey: 'backfill:' + bookingId`, `requestFingerprint: 'backfill:' + bookingId`, `departedAt: startAt` for ACTIVE); for ACTIVE: close the vehicle's open custody period (`departedAt = startAt, closedByLegId = leg id`), then `UPDATE vehicles SET "custodyState"='IN_TRANSIT', "physicalHostOperatorId"=NULL, "physicalLocationId"=NULL, "inFlightLegId"=<leg id>, "openCustodyPeriodId"=NULL` (order matters — the three-way CHECK is per-statement). **Pass 3** — for each AT_STATION vehicle whose latest COMPLETED booking's `dropoffLocationId` differs from `physicalLocationId` and has no leg: synthesize a departed `TRANSFER` leg (from = materialized pair, to = the booking's dropoff pair, window = booking end → +24h, `idempotencyKey: 'recovery:' + bookingId`), close the open period, flip the vehicle IN_TRANSIT as above. **Under `--apply`, each vehicle's statements run in ONE transaction opened with `SELECT pg_advisory_xact_lock(hashtextextended('vehicle-timeline:' || vehicleId, 0))`** (the exact key formula the API takes — one canonical formula, spec §4). **Inside that lock, re-run the ENTIRE pass-0 fold for the vehicle against freshly-read bookings/legs — not just the state guards (P0-iv):** a booking can land between pass 0 and the lock, and a state-only re-check waves the stranded schedule through. A vehicle failing the locked re-validation is SKIPPED and reported; the script exits non-zero listing every skipped vehicle. **`--apply` atomicity is per-vehicle and the run is resumable** — already-written vehicles stay written, an idempotent re-run picks up the skipped/remaining ones; pass 0's abort-before-anything is the only global gate (never claim all-or-nothing for `--apply`). Print the full statement set; execute only under `--apply`. Idempotent via the idempotency keys + in-tx guards.
 
 - [ ] **Step 2: Dry-run against the local DB** (`DATABASE_URL=... bun run scripts/backfill-movement-legs.ts` → prints, exits 0), then `--apply` on the local DB with a seeded ACTIVE booking and a synthetic dark-era displaced COMPLETED booking; assert legs + IN_TRANSIT flips + closed periods via psql; run `--apply` a SECOND time → zero new statements (idempotency pin). **Conflict pin (P0-A): add a synthetic stranded fixture — a CONFIRMED one-way A→B followed by a later CONFIRMED A→A booking on the same car — and assert the script exits non-zero with both bookings named in the report and writes NOTHING (leg count unchanged), even under `--apply`.**
 
@@ -3442,6 +3484,43 @@ Every line green. Any red = fix before proceeding (flaky = defect).
 
 - [ ] **Step 3: Docs + teardown.** Add a CLAUDE.md gotcha entry only if something surprising was hit (per the standing rule). `docker rm -f kuruma-custody-pg`. Then use **superpowers:finishing-a-development-branch**: rebase onto `origin/develop` (regenerate the migrations if numbers collided — drop + `db:generate`, never hand-rename), PR base `develop`, plain-English title "One-way rentals: cars can be dropped at another branch and rented home", body `Refs #882` + link to the spec, squash-merge, NO force-push (`gh pr update-branch` if behind).
 
+### Task 24: Contract migration — home-base⇒tracked trigger (SEPARATE follow-up PR, post-deploy)
+
+**Do NOT start this task until the Task 23 PR is merged AND deployed** (decision 22 — `deploy.yml` migrates before code, so shipping this trigger with the feature would break old Workers in the migrate→deploy window and on rollback). This is the expand–contract "contract" step, its own branch/PR.
+
+- [ ] **Step 1: Pre-checks.** The feature is live (beta/prod as applicable); `SELECT count(*) FROM vehicles WHERE "pickupLocationId" IS NOT NULL AND "custodyState" IS NULL` returns 0 on the target DB (backfill + self-placing seed + atomic create have held); re-run the Task 6 fixture grep (`tests/integration` + `e2e/real-db` raw vehicle inserts) — any new unplaced fixture added since is fixed FIRST.
+- [ ] **Step 2: Migration** (`bun run db:generate --custom --name vehicles_home_base_tracked_seal`):
+
+```sql
+-- §13 rev.9 (contract step of expand-contract; expand shipped with the
+-- feature). A car with a home base is NEVER untracked — any insert path that
+-- skips placement fails at commit instead of minting a car search would list
+-- but checkout must reject (§8 parity). Deferred + re-reads the FINAL row
+-- (§3 rev.9): insert-untracked-then-place in one tx must pass.
+CREATE OR REPLACE FUNCTION vehicle_home_base_tracked_check() RETURNS trigger AS $$
+DECLARE
+  v record;
+BEGIN
+  SELECT "pickupLocationId", "custodyState" INTO v FROM "vehicles" WHERE "id" = NEW."id";
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  IF v."pickupLocationId" IS NOT NULL AND v."custodyState" IS NULL THEN
+    RAISE EXCEPTION 'vehicles_home_base_tracked: vehicle % has a home base but no custody placement — place it (baseline period + AT_STATION) in the same transaction',
+      NEW."id" USING ERRCODE = '23514';
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE CONSTRAINT TRIGGER vehicles_home_base_tracked
+  AFTER INSERT OR UPDATE ON "vehicles"
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION vehicle_home_base_tracked_check();
+```
+
+- [ ] **Step 3: Seed insert shape flip.** In `packages/shared/src/db/seed.ts`, drop `pickupLocationId` from the per-vehicle insert (the Step 2b placement helper already sets it in the placement statement — under autocommit, an insert carrying a home base would now fail its own statement-commit). Re-run `db:seed` against the local container; the Step 2b count query still returns 0.
+- [ ] **Step 4: Raw-SQL test** (extend `tests/integration/custody-repo.test.ts`): inserting a vehicle with a `pickupLocationId` and no placement in the tx → COMMIT fails with `vehicles_home_base_tracked` (23514); insert-untracked-then-place in ONE tx commits (the §3 re-read pin); insert without a home base commits.
+- [ ] **Step 5: Ship.** `db:verify`, full gate (Task 23 Step 1 list), own PR, base `develop`, body links the spec §13 + this plan; merge only when the feature deploy is confirmed stable.
+
 ---
 
 ## Self-review notes (spec rev.8 coverage check, done at plan time)
@@ -3450,7 +3529,7 @@ Every line green. Any red = fix before proceeding (flaky = defect).
 |---|---|
 | §2 owner/host split | 5 (schema), 13 (fee-0 periods) |
 | §3 explicit state + three-way CHECK + state⇔reference FKs + lifecycle triggers | 2, 5 (Step 5c incl. lifecycle triggers), 6, 9 (cases 13-14, 17-18) |
-| §4 one stream, traversal-identity unique, generation keys, one lock, widened FOR SHARE | 3, 5, 7 (`countByBookingAndVehicle`), 8, 9, 12, 13, 14, 15 |
+| §4 one stream, traversal-identity unique, command keys, one canonical lock + lock-then-reread, widened FOR SHARE | 3, 5, 7, 8, 9, 12, 13, 14, 15 |
 | §5 transitions (depart all-or-nothing/receive/void/recovery/assignment/substitution) | 2, 13 (validate-first `departVehicleInTx`), 14 |
 | §5.1 receive authorization | 13 + decision 12 (Slice 1: owner staff; leg-derived capability = Slice 2) |
 | §6 receipt gate: minimal core, checklist snapshot, photo-hash fingerprints, bidirectional endpoint guard, preflight-before-upload, append-only, private storage | 2, 5 (Steps 5c/5d), 7, 9 (cases 15-16, 19), 11 (`isConfigured`), 13, 18 |
@@ -3459,11 +3538,11 @@ Every line green. Any red = fix before proceeding (flaky = defect).
 | §9 staff reposition (home-only, never gated) / promo-home (arrival compare) / re-label | 12, 13, 15, 18, 19, 20 — decision 18 |
 | §10/§11 custody periods at rate 0, close-on-departure, one-open seal, baseline rows | 5, 6, 9, 12, 13, 14 |
 | §12 schema & surface summary | 5, 16, 18 |
-| §13 bootstrap: untracked NULL, baseline periods, on-ramp, home-base⇒tracked, self-placing seeds | 5 (columns), 6 (backfill + trigger + seed), 9 (case 20), 12 (same-tx on-ramp), 21 (pre-assert) |
+| §13 bootstrap: untracked NULL, baseline periods, on-ramp, self-placing seeds, home-base⇒tracked (contract step) | 5 (columns), 6 (backfill + seed), 12 (same-tx on-ramp), 21 (pre-assert), 24 (trigger, post-deploy PR) |
 | §14 slice boundaries (no cost fold, no cross-op money) | honored — no accrual math, no settlement table, snapshots 0, receiving == ownerActive |
 | §14.1 flag: outbound-gated, recovery never gated, OFF path folds legs, validated cutover fence | 10, 13, 15 (OFF fold), 18, 19, 22 (pass 0 + per-vehicle locked tx) |
 | §15 Q1 P→P / Q2 pricing / Q3 strict + receipt / Q4 fees / Q5 checklist / Q6 combo deferral | Q1: 3/4/15 · Q2: untouched · Q3: 4/13/16 · Q4: n/a until Slice 2 · Q5: 5/13/18/19 · Q6: 16 |
 | §16 open questions | untouched (Slice 2): settlement cadence/rounding, host fee, liability, default checklist contents |
 | §17 out of scope | no free-roam, no displaced combo, no future repositions, no advance booking at unreceived stations |
 
-Known deliberate gaps (Slice 2+, per spec §14): cross-operator hosting/opt-in (receiving set widening), non-zero fees, settlement records, RENTAL departure-receipt UI, `CLASS_COMBO` for displaced cars, free-roam. Deviations from the spec letter are the 17 plan-level decisions up top (decision 15 — the tail rule — is the one genuinely NEW rule to confirm at review).
+Known deliberate gaps (Slice 2+, per spec §14): cross-operator hosting/opt-in (receiving set widening), non-zero fees, settlement records, RENTAL departure-receipt UI, `CLASS_COMBO` for displaced cars, free-roam. Deviations from the spec letter are the 23 plan-level decisions up top (every rule they introduced — tail, home-only reposition, command keys, expand–contract — has since been folded into the spec itself, rev.8/rev.9).
