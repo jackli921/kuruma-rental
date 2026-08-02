@@ -65,6 +65,23 @@ export interface OperatorApplicationServiceConfig {
   readonly replyTo?: string
 }
 
+// Collaborators for the sign-in-first onboarding service (#1564). A single deps
+// object rather than seven positional args — the constructor is easy to mis-order,
+// and the repo convention is `constructor(private readonly deps: XDeps)` (see
+// NotificationRetryService / CancellationRefundReconciler).
+export interface OperatorApplicationServiceDeps {
+  readonly repo: OperatorApplicationRepository
+  readonly recordAudit: RecordOperatorApplicationAudit
+  readonly runApproval: RunOperatorApproval
+  readonly config: OperatorApplicationServiceConfig
+  // Sign-in-first (#877): the already-operator guard reads the membership ledger,
+  // and the authoritative applicant email is resolved from the users projection —
+  // never the token's display email. Narrowed to the two reads submit() needs.
+  readonly members: Pick<OperatorMembershipRepository, 'findActiveByUserId'>
+  readonly users: Pick<UserRepository, 'findById'>
+  readonly emailSender: EmailSender
+}
+
 // The honeypot/consent fields are validated + stripped at the route boundary; the
 // service persists only the domain fields. Sign-in-first (#877): contactEmail is no
 // longer a client field (already removed from the schema) — the service resolves the
@@ -103,25 +120,14 @@ async function assertEmailUnclaimed(repos: OperatorApprovalRepos, email: string)
 }
 
 export class OperatorApplicationService {
-  constructor(
-    private readonly repo: OperatorApplicationRepository,
-    private readonly recordAudit: RecordOperatorApplicationAudit,
-    private readonly runApproval: RunOperatorApproval,
-    private readonly config: OperatorApplicationServiceConfig,
-    // Sign-in-first (#877): the already-operator guard reads the membership ledger,
-    // and the authoritative applicant email is resolved from the users projection —
-    // never the token's display email. Narrowed to the two reads submit() needs.
-    private readonly members: Pick<OperatorMembershipRepository, 'findActiveByUserId'>,
-    private readonly users: Pick<UserRepository, 'findById'>,
-    private readonly emailSender: EmailSender,
-  ) {}
+  constructor(private readonly deps: OperatorApplicationServiceDeps) {}
 
   async list(params: OperatorApplicationListParams): Promise<OperatorApplication[]> {
-    return this.repo.list(params)
+    return this.deps.repo.list(params)
   }
 
   async findMine(userId: string): Promise<ApplicantApplicationView | undefined> {
-    const application = await this.repo.findByApplicantUserId(userId)
+    const application = await this.deps.repo.findByApplicantUserId(userId)
     if (!application) return undefined
     // Applicant self-read must not leak internal review metadata. Keep operatorId +
     // rejectionReason (the status UI shows the portal link + the rejection reason);
@@ -135,14 +141,14 @@ export class OperatorApplicationService {
     reviewerUserId: string,
     rejectionReason: string,
   ): Promise<OperatorApplication> {
-    const row = await this.repo.markRejectedIfPending(
+    const row = await this.deps.repo.markRejectedIfPending(
       id,
       reviewerUserId,
       new Date(),
       rejectionReason,
     )
     if (!row) throw new NotFoundError('no pending application with that id')
-    this.recordAudit({
+    this.deps.recordAudit({
       type: 'OPERATOR_APPLICATION_REJECTED',
       actorUserId: reviewerUserId,
       applicationId: id,
@@ -160,7 +166,7 @@ export class OperatorApplicationService {
     // The atomic markApprovedIfPending below is still the race fence for concurrent
     // approvals that both pass this read. Email/name are immutable once PENDING, so
     // reading here (outside the tx) is safe.
-    const application = await this.repo.findById(id)
+    const application = await this.deps.repo.findById(id)
     if (!application) throw new NotFoundError('no application with that id')
     if (application.status !== 'PENDING') {
       throw new ConflictError('application already reviewed')
@@ -171,7 +177,7 @@ export class OperatorApplicationService {
       throw new ConflictError('application is not linked to an account; use the manual invite')
     }
     const outcome = await this.provisionApproval(id, application, reviewerUserId)
-    for (const e of outcome.events) this.recordAudit(e)
+    for (const e of outcome.events) this.deps.recordAudit(e)
     await this.notifyApproved(application, outcome)
     return { operatorId: outcome.operatorId, operatorSlug: outcome.operatorSlug }
   }
@@ -187,7 +193,7 @@ export class OperatorApplicationService {
   ): Promise<ApprovalOutcome> {
     for (let attempt = 1; attempt <= SLUG_ATTEMPTS; attempt++) {
       try {
-        return await this.runApproval((repos) =>
+        return await this.deps.runApproval((repos) =>
           this.provision(repos, id, application, reviewerUserId),
         )
       } catch (err) {
@@ -261,15 +267,15 @@ export class OperatorApplicationService {
     _outcome: ApprovalOutcome,
   ): Promise<void> {
     try {
-      const welcomeUrl = `${this.config.webBaseUrl}/${application.submittedLocale}/operator/welcome`
+      const welcomeUrl = `${this.deps.config.webBaseUrl}/${application.submittedLocale}/operator/welcome`
       const email = renderOperatorApplicationApproved(
         { businessName: application.businessName, welcomeUrl },
         application.submittedLocale,
       )
-      await this.emailSender.send({
+      await this.deps.emailSender.send({
         to: application.contactEmail,
-        from: this.config.fromAddress,
-        ...(this.config.replyTo ? { replyTo: this.config.replyTo } : {}),
+        from: this.deps.config.fromAddress,
+        ...(this.deps.config.replyTo ? { replyTo: this.deps.config.replyTo } : {}),
         subject: email.subject,
         html: email.html,
         text: email.text,
@@ -290,10 +296,10 @@ export class OperatorApplicationService {
         { businessName: row.businessName, reason: row.rejectionReason ?? '' },
         row.submittedLocale,
       )
-      await this.emailSender.send({
+      await this.deps.emailSender.send({
         to: row.contactEmail,
-        from: this.config.fromAddress,
-        ...(this.config.replyTo ? { replyTo: this.config.replyTo } : {}),
+        from: this.deps.config.fromAddress,
+        ...(this.deps.config.replyTo ? { replyTo: this.deps.config.replyTo } : {}),
         subject: email.subject,
         html: email.html,
         text: email.text,
@@ -309,17 +315,17 @@ export class OperatorApplicationService {
     // Already-operator guard: a signed-in caller who already owns or staffs an
     // operator can't apply again (the ledger is the revocation-aware source of truth,
     // not the users.role projection).
-    if (await this.members.findActiveByUserId(input.applicantUserId)) {
+    if (await this.deps.members.findActiveByUserId(input.applicantUserId)) {
       throw new ConflictError('you already belong to an operator')
     }
     // Server-authoritative email: resolve the applicant's real account email from the
     // users repo. Never trust a client-supplied email or the token's display email.
-    const account = await this.users.findById(input.applicantUserId)
+    const account = await this.deps.users.findById(input.applicantUserId)
     if (!account?.email) {
       throw new ConflictError('your account has no email on file')
     }
     try {
-      const app = await this.repo.create({
+      const app = await this.deps.repo.create({
         businessName: input.businessName,
         contactName: input.contactName,
         contactEmail: account.email,

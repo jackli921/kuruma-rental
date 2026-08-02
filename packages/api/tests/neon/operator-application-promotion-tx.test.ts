@@ -134,15 +134,15 @@ describe.skipIf(!NEON_URL)('operator approval promotion transaction atomicity (T
     })
     seededAppIds.push(app.id)
 
-    const service = new OperatorApplicationService(
+    const service = new OperatorApplicationService({
       repo,
-      noopAudit,
-      createDrizzleOperatorApproval(runTx),
-      { webBaseUrl: WEB_BASE_URL, fromAddress: 'noreply@test.io' },
-      new DrizzleOperatorMembershipRepository(db),
-      new DrizzleUserRepository(db),
-      { send: async () => ({ providerMessageId: 'noop' }) },
-    )
+      recordAudit: noopAudit,
+      runApproval: createDrizzleOperatorApproval(runTx),
+      config: { webBaseUrl: WEB_BASE_URL, fromAddress: 'noreply@test.io' },
+      members: new DrizzleOperatorMembershipRepository(db),
+      users: new DrizzleUserRepository(db),
+      emailSender: { send: async () => ({ providerMessageId: 'noop' }) },
+    })
     const result = await service.approve(app.id, reviewerId)
 
     // Operator row committed.
@@ -226,15 +226,15 @@ describe.skipIf(!NEON_URL)('operator approval promotion transaction atomicity (T
         }),
       )
 
-    const service = new OperatorApplicationService(
+    const service = new OperatorApplicationService({
       repo,
-      noopAudit,
-      failingFenceRun,
-      { webBaseUrl: WEB_BASE_URL, fromAddress: 'noreply@test.io' },
-      new DrizzleOperatorMembershipRepository(db),
-      new DrizzleUserRepository(db),
-      { send: async () => ({ providerMessageId: 'noop' }) },
-    )
+      recordAudit: noopAudit,
+      runApproval: failingFenceRun,
+      config: { webBaseUrl: WEB_BASE_URL, fromAddress: 'noreply@test.io' },
+      members: new DrizzleOperatorMembershipRepository(db),
+      users: new DrizzleUserRepository(db),
+      emailSender: { send: async () => ({ providerMessageId: 'noop' }) },
+    })
     await expect(service.approve(app.id, reviewerId)).rejects.toThrow('already reviewed')
 
     // The projection write genuinely executed inside the tx (visible on the tx connection
