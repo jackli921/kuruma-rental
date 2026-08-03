@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Plan rev.6** (2026-08-02) — folded the plan-rev.5 review (3 P0 + 2 P1: stale-assignment locks, placement tx ownership, flag-OFF substitution continuation). Spec stays at **rev.9** (approved). The finding→task map is in "rev.6 changes at a glance" below; earlier maps kept for history.
+> **Plan rev.7** (2026-08-03) — folded the owner change request: displaced `P→P` round trips become a **per-vehicle opt-in `allowRoundTripsWhileAway`, default OFF** (spec moves to **rev.10**, which also corrects §15 Q1's provenance — the "approved 2026-07-26" blanket approval was never an owner decision). The change→task map is in "rev.7 changes at a glance" below; earlier maps kept for history.
 
 **Goal:** Implement Slice 0 (pure custody state machine + Q3-strict feasibility predicate) and Slice 1 (same-operator homeward one-way rentals: movement legs, receipt gate with configurable checklist, custody periods at rate 0, cancellation recovery, substitution/assignment legs, archival guard, staff reposition, promo-home, shared predicate on search + checkout) of the one-way custody network design.
 
-**Spec (source of truth):** `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md` (rev.9).
+**Spec (source of truth):** `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md` (rev.10).
 
 **Architecture:** Pure Functional Core in `packages/shared/src/lib/` (fold + feasibility + custody transitions + fingerprint), imperative shell in `packages/api` (drizzle tables with full DB seals incl. state⇔reference FKs, repos behind ports, services orchestrating under a per-vehicle advisory lock inside `runInTransaction`), web surfaces in `packages/web` (operator custody actions, renter dropoff picker). Everything behavior-changing is dark behind one runtime flag `ONE_WAY_CUSTODY`; recovery operations are state-driven and never gated (§14.1).
 
@@ -39,8 +39,16 @@
 21. **Seeds place their own vehicles (spec §13 rev.9).** The REAL inserts live in `packages/shared/src/db/seed.ts` (~`:408` vehicle loop) — `scripts/seed.ts` is only the CLI wrapper. The seed db is **neon-http (no interactive transactions — CLAUDE.md gotcha)** and Postgres CTE snapshots forbid insert+update-same-row in one statement, so the shape is two-step per vehicle: insert **untracked without `pickupLocationId`** (a crash between the steps then leaves a harmless homeless untracked car, never a home-based untracked one), then ONE data-modifying-CTE statement per batch (baseline `custody_periods` insert + `UPDATE vehicles` setting **`pickupLocationId` + `AT_STATION` + physical pair + `openCustodyPeriodId` together** — single statement = single implicit tx, trigger-safe under autocommit). **The placement helper takes explicit `placements: Array<{ vehicleId, homeLocationId }>`** — once inserts omit the home column, vehicle ids alone cannot reconstruct each home (rev.6 P1-6) — so Task 24 changes nothing in the seed. Vehicle-service create places in the SAME `runInTransaction` as its insert.
 22. **The home-base⇒tracked trigger ships expand–contract (spec §13 rev.9).** `deploy.yml` migrates BEFORE deploying code, so a trigger in this branch would break OLD Workers still creating home-based untracked cars in the migrate→deploy window (and on any rollback). This branch = expand: additive schema, backfill, self-placing seed, atomically-placing code. Task 24 = contract: a SEPARATE follow-up PR (trigger migration + its raw-SQL test), merged only after this feature is deployed and stable.
 23. **Lock first, read second (spec §4 rev.9).** Any vehicle/leg/booking state a custody-bearing write depends on is (re-)read INSIDE the tx after `lockVehicleTimeline` — never carried in from before the lock. `submitInTx` loads the vehicle at `booking-creation.ts:276` long before the locks at `:354+`; that object stays as the cheap pre-gate, but every custody check (rule 1, anchor, fold, promo, capacity skip) runs against a fresh in-tx re-read. Same rule in vehicle update/placement (Task 12) and substitution/assignment (Task 14). **The lock TARGET itself is part of this rule (rev.6 P0-1): a pre-lock read only chooses which vehicle to lock. `updateStatus`/renter-cancel re-read the BOOKING under the lock and throw `CustodyTransitionConflict` (→ 409 `CUSTODY_CONFLICT`) if `assignedVehicleId` moved — a concurrent substitution otherwise makes them depart/void the wrong car. The placement helper re-reads the VEHICLE and no-ops if it is no longer untracked.** Helpers receive ids, not pre-lock objects.
+24. **Displaced round trips are a per-vehicle opt-in, default OFF (spec §7/§15 Q1, decided 2026-08-03).** `vehicles.allowRoundTripsWhileAway` boolean NOT NULL default false — owner's language, no P→P jargon in code or UI. The §7 displaced branch includes `{P} ∩ receiving` only when the toggle is true; OFF means displaced cars are home-only (the strict alternative rev.5 offered, byte-identical). The at-home branch never consults it. A plain policy flag like `autoRelistOnReceipt` — no lifecycle coupling, no CHECK/FK/trigger, nothing to backfill (the default reproduces current intent for every row). **Not flag work:** drop-off == pickup is not outbound movement, so `ONE_WAY_CUSTODY` OFF does not gate it — and it is unreachable while dark anyway (the OFF booking path requires a tracked car at home). It is config on the never-gated listing surface (`setListing`/`ListingDialog`).
 
-## rev.6 changes at a glance (plan-rev.5 review finding → where it landed)
+## rev.7 changes at a glance (owner change request 2026-08-03 → where it landed)
+
+| # | Change | Spec | Plan tasks |
+|---|---|---|---|
+| CR-1 | Q1 provenance corrected: rev.6 recorded a `P→P` approval the owner never gave (rev.5 had flagged it "Owner to confirm") | §15 Q1 rewrite (spec rev.10) | — (record-only) |
+| CR-2 | Displaced `P→P` round trips gated behind per-vehicle `allowRoundTripsWhileAway`, default OFF | §3 column, §7 displaced branch, §12 surface, §13 additive set, §14 Slice 1, §14.1 no-flag-gate note | 3 (leash arg + tests), 4 (predicate pass-through + tests), 5 (column), 7 (entity + defaults + writes Pick), 13 (`setListing`), 15 (in-tx read + tests), 18 (validator + DTO + dropoffs read), 19 (`ListingDialog` third switch) — decision 24 |
+
+**Parked-branch delta (for the session that resumes at Task 6):** Tasks 1–5 were executed against plan rev.6.1 in the parked worktree `~/Dev/kuruma-custody` (branch `feat/one-way-custody-slice-0-1`, never pushed). Before starting Task 6, fold this revision into the parked work: add the column to the unpushed Task-5 schema migration (safe to amend — local-only, never merged; re-apply against the `kuruma-custody-pg` container and re-run `db:verify`), and extend `allowedDropoffIds`/`assessOneWayFeasibility` + their tests per Tasks 3–4 as amended below. Do NOT redo Tasks 1–5.
 
 | # | Finding | Plan tasks |
 |---|---|---|
@@ -574,58 +582,87 @@ describe('ownerActiveLocationIds (§7 building block)', () => {
   })
 })
 
-describe('allowedDropoffIds (§7 rev.7 — receiving set split from owner set)', () => {
+describe('allowedDropoffIds (§7 rev.10 — receiving set split from owner set; P→P per-vehicle opt-in)', () => {
   const ownerActive = new Set(['HOME', 'B', 'C'])
   // Slice 1 (no host opt-in yet): receiving == ownerActive. The FOREIGN host
   // cases below pin the Slice-2 semantics the function must already carry.
   const receiving = new Set(['HOME', 'B', 'C', 'F'])
-  it('at home: the whole receiving set (the one permitted hop out, incl. a foreign F)', () => {
-    expect(
-      allowedDropoffIds({
-        physicalPickupLocationId: 'HOME',
-        homeBaseLocationId: 'HOME',
-        ownerActiveLocationIds: ownerActive,
-        receivingLocationIds: receiving,
-      }),
-    ).toEqual(new Set(['HOME', 'B', 'C', 'F']))
+  it('at home: the whole receiving set, whatever the round-trip toggle says (the one permitted hop out, incl. a foreign F)', () => {
+    for (const allowRoundTripsWhileAway of [false, true]) {
+      expect(
+        allowedDropoffIds({
+          physicalPickupLocationId: 'HOME',
+          homeBaseLocationId: 'HOME',
+          ownerActiveLocationIds: ownerActive,
+          receivingLocationIds: receiving,
+          allowRoundTripsWhileAway,
+        }),
+      ).toEqual(new Set(['HOME', 'B', 'C', 'F']))
+    }
   })
-  it('displaced at owner branch B: return home or a round trip in place — never onward B→C', () => {
+  it('displaced at owner branch B, toggle ON: return home or a round trip in place — never onward B→C', () => {
     expect(
       allowedDropoffIds({
         physicalPickupLocationId: 'B',
         homeBaseLocationId: 'HOME',
         ownerActiveLocationIds: ownerActive,
         receivingLocationIds: receiving,
+        allowRoundTripsWhileAway: true,
       }),
     ).toEqual(new Set(['HOME', 'B']))
   })
-  it('displaced at FOREIGN F: home comes from the owner set, P→P from the receiving set', () => {
+  it('displaced at B, toggle OFF (the default): home-only — the in-place drop-off is blocked', () => {
+    expect(
+      allowedDropoffIds({
+        physicalPickupLocationId: 'B',
+        homeBaseLocationId: 'HOME',
+        ownerActiveLocationIds: ownerActive,
+        receivingLocationIds: receiving,
+        allowRoundTripsWhileAway: false,
+      }),
+    ).toEqual(new Set(['HOME']))
+  })
+  it('displaced at FOREIGN F, toggle ON: home comes from the owner set, P→P from the receiving set', () => {
     expect(
       allowedDropoffIds({
         physicalPickupLocationId: 'F',
         homeBaseLocationId: 'HOME',
         ownerActiveLocationIds: ownerActive,
         receivingLocationIds: receiving,
+        allowRoundTripsWhileAway: true,
       }),
     ).toEqual(new Set(['HOME', 'F']))
   })
-  it('displaced with an archived home: only the round trip in place remains', () => {
+  it('toggle ON but the branch went inactive: {P} ∩ receiving is empty — home-only after all', () => {
+    expect(
+      allowedDropoffIds({
+        physicalPickupLocationId: 'B',
+        homeBaseLocationId: 'HOME',
+        ownerActiveLocationIds: new Set(['HOME', 'C']),
+        receivingLocationIds: new Set(['HOME', 'C', 'F']),
+        allowRoundTripsWhileAway: true,
+      }),
+    ).toEqual(new Set(['HOME']))
+  })
+  it('displaced with an archived home, toggle ON: only the round trip in place remains', () => {
     expect(
       allowedDropoffIds({
         physicalPickupLocationId: 'B',
         homeBaseLocationId: 'HOME',
         ownerActiveLocationIds: new Set(['B', 'C']),
         receivingLocationIds: new Set(['B', 'C']),
+        allowRoundTripsWhileAway: true,
       }),
     ).toEqual(new Set(['B']))
   })
-  it('no home base assigned: round trip in place only', () => {
+  it('no home base assigned, toggle ON: round trip in place only (toggle OFF strands it — nothing bookable)', () => {
     expect(
       allowedDropoffIds({
         physicalPickupLocationId: 'B',
         homeBaseLocationId: null,
         ownerActiveLocationIds: ownerActive,
         receivingLocationIds: receiving,
+        allowRoundTripsWhileAway: true,
       }),
     ).toEqual(new Set(['B']))
   })
@@ -712,20 +749,24 @@ export function ownerActiveLocationIds(args: {
 }
 
 /**
- * §7 rev.7 — the v1 leash over TWO location sets. The receiving set is who may
+ * §7 rev.10 — the v1 leash over TWO location sets. The receiving set is who may
  * take custody (owner branches ∪ opted-in foreign hosts); the owner set is
  * where "home" may point. Slice 1 passes receiving == ownerActive (no opt-in
  * yet); the shape already carries Slice 2. At home: the whole receiving set
- * (the one permitted hop out). Displaced at P: ({home} ∩ ownerActive) ∪
- * ({P} ∩ receiving) — return home or a round trip in place, never onward.
- * The pickup is the car's PHYSICAL location (§8 anchor — never a projection).
- * Search and checkout must share this one function — never re-derive it.
+ * (the one permitted hop out) — the round-trip toggle is never consulted.
+ * Displaced at P: ({home} ∩ ownerActive) ∪ (allowRoundTripsWhileAway ?
+ * {P} ∩ receiving : ∅) — return home or, only when this car's round-trips-
+ * while-away opt-in is on (§15 Q1, decision 24), a round trip in place; never
+ * onward. The pickup is the car's PHYSICAL location (§8 anchor — never a
+ * projection). Search and checkout must share this one function — never
+ * re-derive it.
  */
 export function allowedDropoffIds(args: {
   physicalPickupLocationId: string
   homeBaseLocationId: string | null
   ownerActiveLocationIds: ReadonlySet<string>
   receivingLocationIds: ReadonlySet<string>
+  allowRoundTripsWhileAway: boolean
 }): Set<string> {
   const {
     physicalPickupLocationId: pickup,
@@ -736,7 +777,7 @@ export function allowedDropoffIds(args: {
   if (home !== null && pickup === home) return new Set(receiving)
   const out = new Set<string>()
   if (home !== null && ownerActive.has(home)) out.add(home)
-  if (receiving.has(pickup)) out.add(pickup)
+  if (args.allowRoundTripsWhileAway && receiving.has(pickup)) out.add(pickup)
   return out
 }
 ```
@@ -744,7 +785,7 @@ export function allowedDropoffIds(args: {
 - [ ] **Step 4: Run to verify pass**
 
 Run: `bun run --filter @kuruma/shared test -- custody-timeline`
-Expected: PASS (15 tests).
+Expected: PASS (17 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -789,6 +830,9 @@ const base = {
   homeBaseLocationId: 'A' as string | null,
   ownerActiveLocationIds: active,
   receivingLocationIds: active,
+  // Decision 24 default OFF — at-home cases below prove the toggle never
+  // touches the at-home branch; displaced P→P cases opt in explicitly.
+  allowRoundTripsWhileAway: false,
 }
 
 describe('assessOneWayFeasibility (§8 — anchor, exclude-only projection, leash, tail)', () => {
@@ -803,10 +847,21 @@ describe('assessOneWayFeasibility (§8 — anchor, exclude-only projection, leas
       assessOneWayFeasibility({ ...base, physicalLocationId: 'B', pickupLocationId: 'B', dropoffLocationId: 'A' }),
     ).toEqual({ ok: true })
   })
-  it('displaced at B: a round trip in place (B→B) is feasible (Q1 approval)', () => {
+  it('displaced at B, toggle ON: a round trip in place (B→B) is feasible (Q1 per-vehicle opt-in)', () => {
+    expect(
+      assessOneWayFeasibility({
+        ...base,
+        physicalLocationId: 'B',
+        pickupLocationId: 'B',
+        dropoffLocationId: 'B',
+        allowRoundTripsWhileAway: true,
+      }),
+    ).toEqual({ ok: true })
+  })
+  it('displaced at B, toggle OFF (the default): the in-place round trip is rejected — home-only', () => {
     expect(
       assessOneWayFeasibility({ ...base, physicalLocationId: 'B', pickupLocationId: 'B', dropoffLocationId: 'B' }),
-    ).toEqual({ ok: true })
+    ).toEqual({ ok: false, reason: 'DROPOFF_NOT_HOMEWARD' })
   })
   it('displaced at B: onward B→C is rejected even though C is owner-active', () => {
     expect(
@@ -922,6 +977,7 @@ export function assessOneWayFeasibility(args: {
   homeBaseLocationId: string | null
   ownerActiveLocationIds: ReadonlySet<string>
   receivingLocationIds: ReadonlySet<string>
+  allowRoundTripsWhileAway: boolean
 }): CustodyFeasibility {
   // Rule 2 (anchor) — pickup IS where the car was last received. No promotion.
   if (args.physicalLocationId === null || args.pickupLocationId !== args.physicalLocationId) {
@@ -937,12 +993,14 @@ export function assessOneWayFeasibility(args: {
   if (pendingLegOverlaps(args.pendingLegs, args.startAt, args.effectiveEndAt)) {
     return { ok: false, reason: 'WINDOW_OVERLAPS_MOVEMENT' }
   }
-  // Rule 5 (leash) — §7 over the receiving/owner sets.
+  // Rule 5 (leash) — §7 over the receiving/owner sets + the per-vehicle
+  // round-trips-while-away opt-in (decision 24).
   const allowed = allowedDropoffIds({
     physicalPickupLocationId: args.pickupLocationId,
     homeBaseLocationId: args.homeBaseLocationId,
     ownerActiveLocationIds: args.ownerActiveLocationIds,
     receivingLocationIds: args.receivingLocationIds,
+    allowRoundTripsWhileAway: args.allowRoundTripsWhileAway,
   })
   if (!allowed.has(args.dropoffLocationId)) {
     return { ok: false, reason: 'DROPOFF_NOT_HOMEWARD' }
@@ -962,7 +1020,7 @@ export function assessOneWayFeasibility(args: {
 - [ ] **Step 4: Run to verify pass**
 
 Run: `bun run --filter @kuruma/shared test -- custody-feasibility`
-Expected: PASS (13 tests).
+Expected: PASS (14 tests).
 
 - [ ] **Step 5: Delete the superseded module** (zero production importers — re-verify, then delete):
 
@@ -1017,6 +1075,11 @@ No RED test here — the check is `db:verify` + generated SQL review + the Task 
     // / owner hold) + the per-car relist policy (default wait-for-owner).
     heldOffline: boolean('heldOffline').notNull().default(false),
     autoRelistOnReceipt: boolean('autoRelistOnReceipt').notNull().default(false),
+    // §7/§15 Q1 (decision 24): may this car be rented on round trips from
+    // wherever it is parked while displaced? Per-vehicle opt-in, default OFF =
+    // displaced cars are home-only. Plain policy flag — no lifecycle coupling,
+    // no CHECK/FK/trigger, nothing to backfill (default reproduces intent).
+    allowRoundTripsWhileAway: boolean('allowRoundTripsWhileAway').notNull().default(false),
     // §9 promo-home: discount for a booking that lands the car at its home base
     // by the cutoff (compared against ARRIVAL). Cleared by a receipt at home.
     homewardPromoPercent: integer('homewardPromoPercent'),
@@ -1069,7 +1132,7 @@ export const custodyStateEnum = pgEnum('custody_state', CUSTODY_STATES)
 
 ```ts
 // packages/shared/src/db/custody.ts
-// One-way custody network (spec rev.9): movement_legs is ONE row per physical
+// One-way custody network: movement_legs is ONE row per physical
 // traversal (§4) — the shared movement identity consumed by the §8 feasibility
 // fold, the §11 custody-period boundaries, and the §6 receipt records.
 // custody_periods is the accrual ledger [receivedAt, departedAt) — the time a
@@ -1649,6 +1712,7 @@ export type { CustodySettlementState, CustodyState, HandoffPhase, MovementLegKin
   openCustodyPeriodId: string | null
   heldOffline: boolean
   autoRelistOnReceipt: boolean
+  allowRoundTripsWhileAway: boolean
   homewardPromoPercent: number | null
   homewardPromoCutoffAt: Date | null
 ```
@@ -1719,7 +1783,7 @@ export interface HandoffReceipt {
 
 Also extend the `Operator` entity (same file) with `receiptChecklist: ReceiptChecklistItem[]`.
 
-**Compile fallout:** extending `Vehicle`/`Operator` breaks every fixture literal. Run `bunx tsc -p packages/api --noEmit` and fix each site with the untracked defaults (`custodyState: null, physicalHostOperatorId: null, physicalLocationId: null, inFlightLegId: null, openCustodyPeriodId: null, heldOffline: false, autoRelistOnReceipt: false, homewardPromoPercent: null, homewardPromoCutoffAt: null`; operators: `receiptChecklist: []`) — untracked is listable, so existing tests keep their behavior. Prefer extending any central `makeVehicle`-style factory over editing dozens of literals. Also extend the drizzle vehicle/operator column mappers (wherever `tsc` points) and the in-memory vehicle `create` defaults (same values; the in-memory create keeps custody untracked even when given a `pickupLocationId` — placement is the Task 12 service rule).
+**Compile fallout:** extending `Vehicle`/`Operator` breaks every fixture literal. Run `bunx tsc -p packages/api --noEmit` and fix each site with the untracked defaults (`custodyState: null, physicalHostOperatorId: null, physicalLocationId: null, inFlightLegId: null, openCustodyPeriodId: null, heldOffline: false, autoRelistOnReceipt: false, allowRoundTripsWhileAway: false, homewardPromoPercent: null, homewardPromoCutoffAt: null`; operators: `receiptChecklist: []`) — untracked is listable, so existing tests keep their behavior. Prefer extending any central `makeVehicle`-style factory over editing dozens of literals. Also extend the drizzle vehicle/operator column mappers (wherever `tsc` points) and the in-memory vehicle `create` defaults (same values; the in-memory create keeps custody untracked even when given a `pickupLocationId` — placement is the Task 12 service rule).
 
 - [ ] **Step 3: Named-constraint consts** — append to `packages/api/src/pg-errors.ts`:
 
@@ -1858,6 +1922,7 @@ export interface VehicleCustodyWrites {
         | 'openCustodyPeriodId'
         | 'heldOffline'
         | 'autoRelistOnReceipt'
+        | 'allowRoundTripsWhileAway' // rev.7: config write from the listing surface
         | 'homewardPromoPercent'
         | 'homewardPromoCutoffAt'
       >
@@ -2826,7 +2891,7 @@ export async function voidBookingLegInTx(
   - **reposition continuity (§9): ANY pending leg (e.g. a future confirmed booking) → 409 `CUSTODY_CONFLICT`** ("substitute or cancel future bookings first").
   - **never flag-gated (§9/§14.1 rev.8): a displaced car's reposition succeeds with the flag OFF** — every reposition is homeward recovery; there is no outbound case to gate.
   - `startReposition` replay (same `idempotencyKey`) → `ok: true`, no second leg; same key after a home re-label (fingerprint differs) → 409 `IDEMPOTENCY_MISMATCH`.
-  - `setListing` toggles `heldOffline` / `autoRelistOnReceipt` regardless of flag (never gated); `setPromoHome` writes the pair, rejects a past `cutoffAt` (400), **404 when the flag is OFF**; `clearPromoHome` nulls both (allowed while OFF — it reduces exposure).
+  - `setListing` toggles `heldOffline` / `autoRelistOnReceipt` / `allowRoundTripsWhileAway` regardless of flag (never gated — decision 24: the round-trip opt-in is config, not outbound movement); `setPromoHome` writes the pair, rejects a past `cutoffAt` (400), **404 when the flag is OFF**; `clearPromoHome` nulls both (allowed while OFF — it reduces exposure).
   - `setReceiptChecklist` / `getReceiptChecklist`: writes/reads `operators.receiptChecklist` (tenant-bound; validates against `RECEIPT_CHECKLIST_ITEMS`); **enabling `PHOTOS` while `receiptStorage.isConfigured()` is false → 400** (decision 20) — items without `PHOTOS` still succeed in that environment.
 
 Run: FAIL — module not found.
@@ -2998,7 +3063,7 @@ git commit -m "feat(custody): lifecycle depart/void/recovery + substitution/assi
   - round trip → 201 with a leg (planned A→A).
   - pickup where the car is NOT (car physically at B, request pickup A = its home) → 400 `PICKUP_NOT_AT_LOCATION` — **the §8 anchor: home is not a pickup for a displaced car.**
   - displaced same-op car at branch B → booking B→A homeward → 201. **The slice's headline behavior.**
-  - displaced at B → B→B round trip → 201 (Q1 approval); B→C onward → 400 `DROPOFF_NOT_HOMEWARD`.
+  - displaced at B with `allowRoundTripsWhileAway: true` → B→B round trip → 201 (Q1 per-vehicle opt-in); same request with the toggle false (the default) → 400 `DROPOFF_NOT_HOMEWARD` (**decision 24: displaced defaults to home-only**); B→C onward → 400 `DROPOFF_NOT_HOMEWARD` either way.
   - **anchor pin (rev.6 P0-1): car at A with a pending A→B leg — booking at B for a window after the leg settles → 400 `PICKUP_NOT_AT_LOCATION`** (destination unreceived; nothing is promoted).
   - car at A with a pending A→B leg — booking at A for a window after the leg settles → 400 `PICKUP_NOT_AT_LOCATION` (rule 3: the car will be gone).
   - window overlapping a scheduled STAFF_REPOSITION leg → 409 `WINDOW_OVERLAPS_MOVEMENT`.
@@ -3008,7 +3073,7 @@ git commit -m "feat(custody): lifecycle depart/void/recovery + substitution/assi
   - **displaced SPECIFIC skips the class capacity gate: car of class K displaced at B where at-B combo capacity is 0 → 201** (spec §8; the gate at :420-442 would zero it out).
   - flag OFF: leg table stays empty; today's `:331` pickup-equality behavior byte-identical for an at-home car (re-run an existing test unchanged); **kill-safe: a DISPLACED tracked car (physicalLocationId ≠ pickupLocationId) is NOT bookable at its home station → 409 `CUSTODY_CONFLICT`** (§14.1); **one-way request (dropoff ≠ pickup) → 404** (outbound gated).
   - **kill-safe leg fold (§14.1 rev.8, P0-A): flag OFF, car AT home, but an ON-era A→B leg settles before the requested window → 400 `PICKUP_NOT_AT_LOCATION`; window overlapping that leg → 409 `WINDOW_OVERLAPS_MOVEMENT`.** The search SQL folds legs unconditionally — a checkout that didn't would accept what search hides and hand Task 22 a stranded schedule to trip over.
-  - promo: vehicle displaced at B with `homewardPromoPercent: 20`, cutoff future; booking B→home **arriving before the cutoff** → `totalPrice` uses `floor(base * 0.8)` + insurance/add-ons unchanged; same booking with `effectiveEndAt` AFTER the cutoff → full price (**arrival compare, not booked-by** — the standing correction); B→B → full price (promo only lands-home trips).
+  - promo: vehicle displaced at B with `homewardPromoPercent: 20`, cutoff future; booking B→home **arriving before the cutoff** → `totalPrice` uses `floor(base * 0.8)` + insurance/add-ons unchanged; same booking with `effectiveEndAt` AFTER the cutoff → full price (**arrival compare, not booked-by** — the standing correction); B→B (toggle on) → full price (promo only lands-home trips).
 
 Run → FAIL.
 
@@ -3083,6 +3148,7 @@ Run → FAIL.
             homeBaseLocationId: vehicle.pickupLocationId,
             ownerActiveLocationIds: ownerActive,
             receivingLocationIds: ownerActive, // Slice 1: no host opt-in yet (§7)
+            allowRoundTripsWhileAway: vehicle.allowRoundTripsWhileAway, // decision 24 — from the in-tx re-read
           })
           if (!feasibility.ok) {
             const status = feasibility.reason === 'WINDOW_OVERLAPS_MOVEMENT' ? 409 : 400
@@ -3316,10 +3382,17 @@ export const custodyListingSchema = z
   .object({
     heldOffline: z.boolean().optional(),
     autoRelistOnReceipt: z.boolean().optional(),
+    // Decision 24: the displaced round-trip opt-in is listing config — never
+    // flag-gated, owner's language (no P→P jargon at the boundary).
+    allowRoundTripsWhileAway: z.boolean().optional(),
   })
-  .refine((d) => d.heldOffline !== undefined || d.autoRelistOnReceipt !== undefined, {
-    message: 'Provide at least one field',
-  })
+  .refine(
+    (d) =>
+      d.heldOffline !== undefined ||
+      d.autoRelistOnReceipt !== undefined ||
+      d.allowRoundTripsWhileAway !== undefined,
+    { message: 'Provide at least one field' },
+  )
 
 export const promoHomeSchema = z.object({
   percent: z.number().int().min(1).max(100),
@@ -3339,12 +3412,12 @@ export const receiptChecklistSchema = z.object({
   - `GET /manage/custody/receipt-checklist` / `PUT /manage/custody/receipt-checklist` — JSON `receiptChecklistSchema`, operator-scoped (fleet-write for the PUT). NOT flag-gated (config, not movement).
   - `GET /vehicles/:id/custody/receipts` — operator evidence list (management read; NOT public).
   - `GET /custody/receipts/:id/photos/:index` — streams via `ReceiptStorage.getFile` (mirror the renter-documents streaming route: correct `Content-Type`, `Cache-Control: private, no-store`).
-  - `GET /vehicles/:id/homeward-dropoffs` — `requireAuth` only (renters call it from the wizard): returns `{ locations: [{ id, name }], homeBaseLocationId, promo: { percent, cutoffAt } | null }` — the service computes the list with `allowedDropoffIds` (pickup = the car's `physicalLocationId`, receiving = ownerActive in Slice 1) and returns the promo pair only when set AND the vehicle is displaced. **404 when the flag is off.**
+  - `GET /vehicles/:id/homeward-dropoffs` — `requireAuth` only (renters call it from the wizard): returns `{ locations: [{ id, name }], homeBaseLocationId, promo: { percent, cutoffAt } | null }` — the service computes the list with `allowedDropoffIds` (pickup = the car's `physicalLocationId`, receiving = ownerActive in Slice 1, `allowRoundTripsWhileAway` from the vehicle row — decision 24) and returns the promo pair only when set AND the vehicle is displaced. **404 when the flag is off.**
   Route tests: happy paths + 401/403 + the gating split (receipt/listing/reposition work while dark; promo PUT + homeward-dropoffs 404 while dark) + a receipt-photo cross-tenant 404 (IDOR pin) + **checklist PUT with `PHOTOS` against a `DisabledReceiptStorage` app → 400 (decision 20)**, using `testAuthMiddleware`/`authHeaders` idioms.
 
 - [ ] **Step 3: Builder + mounts.** `composition/custody-service.ts` exports `buildCustodyService(deps: CustodyServiceDeps): CustodyService` (mirror `composition/operator-application-service.ts`'s shape and doc-comment). In `index.ts`: import route factory + builder (2 lines), destructure the new repos, `const custodyService = buildCustodyService({ ... })` (one call), mount `.route('/', createCustodyRoutes(custodyService, photoUploadLimiter, photoUploadUserLimiter))` next to the vehicle-photos mount. Run `bun run lint:size` — if `index.ts` crosses 800, move the nearest low-risk resolver block into `composition/` (precedent: `4c1a1183`).
 
-- [ ] **Step 4: Vehicle DTO.** The operator fleet UI needs the custody fields: extend the vehicle row DTO the fleet routes return (find the schema the web's `vehicleRowSchema` mirrors — `grep -rn "vehicleRowSchema" packages/web/src/vite/operator-fleet/api.ts` and the API-side serializer it parses) with `custodyState`, `physicalLocationId`, `heldOffline`, `autoRelistOnReceipt`, `homewardPromoPercent`, `homewardPromoCutoffAt`. Renter-facing DTOs are untouched.
+- [ ] **Step 4: Vehicle DTO.** The operator fleet UI needs the custody fields: extend the vehicle row DTO the fleet routes return (find the schema the web's `vehicleRowSchema` mirrors — `grep -rn "vehicleRowSchema" packages/web/src/vite/operator-fleet/api.ts` and the API-side serializer it parses) with `custodyState`, `physicalLocationId`, `heldOffline`, `autoRelistOnReceipt`, `allowRoundTripsWhileAway`, `homewardPromoPercent`, `homewardPromoCutoffAt`. Renter-facing DTOs are untouched.
 
 - [ ] **Step 5: Verify + commit**
 
@@ -3370,12 +3443,12 @@ Outbound custody UI (reposition-away, promo) is gated on `useFeatureFlag('ONE_WA
 
 - [ ] **Step 1: Failing tests.** `ReceiveVehicleDialog.test.tsx`: renders location select from provided owner locations; renders the checklist hint from the fetched operator checklist (photo/fuel/odometer/notes fields marked required only when listed); submit posts multipart with `locationId` + provided condition fields + `idempotencyKey`; server 400 `RECEIPT_CHECKLIST_INCOMPLETE` and 409 surface an inline `role="alert"` banner (combo-deals precedent); success invalidates `FLEET_QUERY_KEY` and closes. FleetRowActions (decision 18 matrix): `custodyState 'IN_TRANSIT'` shows "Receive vehicle" (flag OFF too — kill-safety pin); **"Send home" renders only for a DISPLACED `AT_STATION` car, flag-independent** (repositions are homeward recovery — an at-home car has nowhere to send, and the server 409s it); `AT_STATION` + flag ON adds "Listing & holds" / "Promo home"; flag OFF + at-home shows none of the custody items.
 
-- [ ] **Step 2: API client** (`operator-fleet/api.ts`): extend `vehicleRowSchema` with the six custody fields (zod, nullable as in the DTO); add `receiveVehicle(vehicleId, form: FormData, csrfToken, pickedOperatorId)` (FormData POST mirroring the photo-upload client `:200-217`), `startReposition`, `updateCustodyListing`, `setPromoHome`, `clearPromoHome`, `fetchReceiptChecklist`, `updateReceiptChecklist` (all `writeJson` PATCH/POST/PUT/DELETE with `X-CSRF-Token`, mirroring `updateVehicleStatus` :152-167).
+- [ ] **Step 2: API client** (`operator-fleet/api.ts`): extend `vehicleRowSchema` with the seven custody fields (zod, nullable as in the DTO); add `receiveVehicle(vehicleId, form: FormData, csrfToken, pickedOperatorId)` (FormData POST mirroring the photo-upload client `:200-217`), `startReposition`, `updateCustodyListing`, `setPromoHome`, `clearPromoHome`, `fetchReceiptChecklist`, `updateReceiptChecklist` (all `writeJson` PATCH/POST/PUT/DELETE with `X-CSRF-Token`, mirroring `updateVehicleStatus` :152-167).
 
 - [ ] **Step 3: Components.**
   - `CustodyBadge` — small presentational: `IN_TRANSIT` → amber "In transit"; `AT_STATION` + `heldOffline` → gray "Held offline"; displaced (`physicalLocationId !== pickupLocationId`, both non-null) → blue "Away from home"; else nothing. Used in `FleetTable` row + `FleetVehicleCard`.
   - `ReceiveVehicleDialog` — form: location `<select>` (owner active locations — reuse the locations query the fleet module already has; check `operator-locations` module's barrel for `operatorLocationsQueryOptions` and import via `@/vite/operator-locations` barrel only, bumping `VITE_CROSS_FEATURE_REACH_IN_BASELINE` in `scripts/lint-module-boundaries.ts:122` if the deep-import rule fires); condition fields (fuel %, odometer, damage checkbox, notes) + `<input type="file" multiple accept="image/*">` — required-marks driven by `fetchReceiptChecklist` (display hint only; the server's snapshot is authoritative and its 400 names any missing items); one `useState(() => crypto.randomUUID())` idempotency key per mount (wizard precedent); labeled inputs (`<label htmlFor>`), error banner `role="alert"`, submit disabled while pending.
-  - `RepositionDialog` — "Send home": **confirm-only (decision 18 — no destination control)**; names the home base it will drive to ("Staff will drive this car back to {homeBaseName}"; internal tool wording — never "ferry"); the POST body is just the idempotency key. `ListingDialog` — two switches (`heldOffline`, `autoRelistOnReceipt`); `PromoHomeDialog` — percent + cutoff datetime + clear button; `ChecklistSettingsDialog` — four checkboxes over `RECEIPT_CHECKLIST_ITEMS`, opened from a header button on the fleet page (flag-independent — config, not movement); **the `PHOTOS` checkbox is disabled with a hint when the server rejects it (400 — no receipt storage configured, decision 20)**.
+  - `RepositionDialog` — "Send home": **confirm-only (decision 18 — no destination control)**; names the home base it will drive to ("Staff will drive this car back to {homeBaseName}"; internal tool wording — never "ferry"); the POST body is just the idempotency key. `ListingDialog` — three switches (`heldOffline`, `autoRelistOnReceipt`, `allowRoundTripsWhileAway` — label it in the owner's words, e.g. "Allow round trips while away from home", with a hint that off means the car only rents homeward while displaced; decision 24); `PromoHomeDialog` — percent + cutoff datetime + clear button; `ChecklistSettingsDialog` — four checkboxes over `RECEIPT_CHECKLIST_ITEMS`, opened from a header button on the fleet page (flag-independent — config, not movement); **the `PHOTOS` checkbox is disabled with a hint when the server rejects it (400 — no receipt storage configured, decision 20)**.
   - `FleetRowActions.tsx` — extend the `OpenDialog` union (`'receive' | 'reposition' | 'listing' | 'promo'`) and add `DropdownMenuItem`s in the existing pattern (:106-115) per the Step-1 visibility matrix; all only when `canWrite`.
 
 - [ ] **Step 4: i18n** — add `business.vehicles.custody.*` keys (badge labels, menu items, dialog titles/fields/errors, checklist item labels — ~35 keys) to ALL THREE locale files; run `bun run lint:i18n-parity`.
@@ -3579,7 +3652,7 @@ CREATE CONSTRAINT TRIGGER vehicles_home_base_tracked
 
 ---
 
-## Self-review notes (spec rev.9 coverage check, done at plan time)
+## Self-review notes (spec rev.10 coverage check, done at plan time)
 
 | Spec section | Task(s) |
 |---|---|
@@ -3597,8 +3670,8 @@ CREATE CONSTRAINT TRIGGER vehicles_home_base_tracked
 | §13 bootstrap: untracked NULL, baseline periods, on-ramp, self-placing seeds, home-base⇒tracked (contract step) | 5 (columns), 6 (backfill + seed), 12 (same-tx on-ramp), 21 (pre-assert), 24 (trigger, post-deploy PR) |
 | §14 slice boundaries (no cost fold, no cross-op money) | honored — no accrual math, no settlement table, snapshots 0, receiving == ownerActive |
 | §14.1 flag: outbound-gated, recovery never gated, OFF path folds legs, validated cutover fence | 10, 13, 15 (OFF fold), 18, 19, 22 (pass 0 + per-vehicle locked tx) |
-| §15 Q1 P→P / Q2 pricing / Q3 strict + receipt / Q4 fees / Q5 checklist / Q6 combo deferral | Q1: 3/4/15 · Q2: untouched · Q3: 4/13/16 · Q4: n/a until Slice 2 · Q5: 5/13/18/19 · Q6: 16 |
+| §15 Q1 P→P per-vehicle opt-in / Q2 pricing / Q3 strict + receipt / Q4 fees / Q5 checklist / Q6 combo deferral | Q1: 3/4/5/13/15/18/19 (decision 24) · Q2: untouched · Q3: 4/13/16 · Q4: n/a until Slice 2 · Q5: 5/13/18/19 · Q6: 16 |
 | §16 open questions | untouched (Slice 2): settlement cadence/rounding, host fee, liability, default checklist contents |
 | §17 out of scope | no free-roam, no displaced combo, no future repositions, no advance booking at unreceived stations |
 
-Known deliberate gaps (Slice 2+, per spec §14): cross-operator hosting/opt-in (receiving set widening), non-zero fees, settlement records, RENTAL departure-receipt UI, `CLASS_COMBO` for displaced cars, free-roam. Deviations from the spec letter are the 23 plan-level decisions up top (every rule they introduced — tail, home-only reposition, command keys, expand–contract — has since been folded into the spec itself, rev.8/rev.9).
+Known deliberate gaps (Slice 2+, per spec §14): cross-operator hosting/opt-in (receiving set widening), non-zero fees, settlement records, RENTAL departure-receipt UI, `CLASS_COMBO` for displaced cars, free-roam. Deviations from the spec letter are the 24 plan-level decisions up top (every rule they introduced — tail, home-only reposition, command keys, expand–contract, the round-trip opt-in — has since been folded into the spec itself, rev.8/rev.9/rev.10).
