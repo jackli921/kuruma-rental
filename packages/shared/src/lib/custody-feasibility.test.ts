@@ -97,6 +97,22 @@ describe('assessOneWayFeasibility (§8 — anchor, exclude-only projection, leas
       reason: 'WINDOW_OVERLAPS_MOVEMENT',
     })
   })
+  it('rule precedence (rule 3 over rule 4): a projection-exclusion wins over a window overlap', () => {
+    // Two live legs: the default A→B settles before startAt (rule 3 fires
+    // first), AND a STAFF_REPOSITION overlaps the window (rule 4 would also
+    // fire if reached). The reason is the user-facing diagnostic — rule 3
+    // must outrank rule 4, so PICKUP_NOT_AT_LOCATION, not WINDOW_OVERLAPS_MOVEMENT.
+    const relocates = leg({})
+    const repo = leg({
+      kind: 'STAFF_REPOSITION',
+      plannedStartAt: d('2026-09-02T00:00:00Z'),
+      plannedEndAt: d('2026-09-04T00:00:00Z'),
+    })
+    expect(assessOneWayFeasibility({ ...base, pendingLegs: [relocates, repo] })).toEqual({
+      ok: false,
+      reason: 'PICKUP_NOT_AT_LOCATION',
+    })
+  })
   it('a dropoff outside the receiving set is rejected', () => {
     expect(assessOneWayFeasibility({ ...base, dropoffLocationId: 'X' })).toEqual({
       ok: false,
@@ -109,6 +125,21 @@ describe('assessOneWayFeasibility (§8 — anchor, exclude-only projection, leas
       toLocationId: 'A',
       plannedStartAt: d('2026-09-10T10:00:00Z'),
       plannedEndAt: d('2026-09-12T10:00:00Z'),
+    })
+    expect(
+      assessOneWayFeasibility({ ...base, pendingLegs: [successor], dropoffLocationId: 'B' }),
+    ).toEqual({ ok: false, reason: 'ONEWAY_NOT_TAIL' })
+  })
+  it('TAIL boundary: a successor starting the instant our window ends is still a successor (>=, not >)', () => {
+    // Rule 4's window is half-open ([occupiedFrom, plannedEndAt) vs
+    // [startAt, effectiveEndAt)) so a leg starting exactly at effectiveEndAt
+    // does NOT overlap — it is left entirely to the tail rule. A `>` mutant
+    // here would let this one-way through instead of rejecting it.
+    const successor = leg({
+      fromLocationId: 'A',
+      toLocationId: 'A',
+      plannedStartAt: d('2026-09-03T10:00:00Z'), // == base.effectiveEndAt
+      plannedEndAt: d('2026-09-05T10:00:00Z'),
     })
     expect(
       assessOneWayFeasibility({ ...base, pendingLegs: [successor], dropoffLocationId: 'B' }),

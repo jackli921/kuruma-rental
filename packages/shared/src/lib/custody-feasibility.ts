@@ -1,11 +1,5 @@
-// One-way custody network §8 — THE one feasibility predicate, shared verbatim
-// by search and checkout (read/write parity: search must never advertise a car
-// checkout would reject). Q3-STRICT: the pickup anchor is the physically
-// received location; the movement projection has exactly one job — EXCLUDING
-// windows the car will not be there for. A planned/in-flight leg never makes
-// its destination bookable (that needs the arrival receipt). Rule 1 (presence:
-// isCustodyListable + road-legality + operator active) is composed by the
-// caller against the car's CURRENT state; this module owns rules 2-5 + tail.
+// One-way custody network §8 — the shared feasibility predicate (see the
+// JSDoc on assessOneWayFeasibility below for the full contract).
 import {
   type PendingLeg,
   allowedDropoffIds,
@@ -13,6 +7,8 @@ import {
   projectedLocationAt,
 } from './custody-timeline'
 
+// Listed alphabetically-ish — NOT in rule-precedence order. Precedence is
+// rules 2 -> 3 -> 4 -> 5 -> tail, per the checks inside the function below.
 export const ONE_WAY_CUSTODY_REASONS = [
   'WINDOW_OVERLAPS_MOVEMENT',
   'PICKUP_NOT_AT_LOCATION',
@@ -23,6 +19,24 @@ export type OneWayCustodyReason = (typeof ONE_WAY_CUSTODY_REASONS)[number]
 
 export type CustodyFeasibility = { ok: true } | { ok: false; reason: OneWayCustodyReason }
 
+/**
+ * THE one feasibility predicate, shared verbatim by search and checkout
+ * (read/write parity: search must never advertise a car checkout would
+ * reject). Q3-STRICT: the pickup anchor is the physically received location;
+ * the movement projection has exactly one job — EXCLUDING windows the car
+ * will not be there for. A planned/in-flight leg never makes its destination
+ * bookable (that needs the arrival receipt).
+ *
+ * Rule 1 (presence: isCustodyListable + road-legality + operator active) is
+ * the CALLER's job, composed against the car's CURRENT state — an
+ * `{ ok: true }` here answers rules 2-5 + tail only, never presence.
+ *
+ * `pendingLegs` MUST already be filtered to LIVE legs (`receivedAt` and
+ * `voidedAt` both null). Passing a received or voided leg corrupts the
+ * projection this predicate relies on for rules 3 and 4.
+ *
+ * Search and checkout must both call this ONE function — never re-derive it.
+ */
 export function assessOneWayFeasibility(args: {
   physicalLocationId: string | null
   pendingLegs: readonly PendingLeg[]
