@@ -1850,6 +1850,7 @@ export interface VehicleCustodyWrites {
     patch: Partial<
       Pick<
         Vehicle,
+        | 'pickupLocationId' // rev.6 P0-2: home writes ride the custody tx
         | 'custodyState'
         | 'physicalHostOperatorId'
         | 'physicalLocationId'
