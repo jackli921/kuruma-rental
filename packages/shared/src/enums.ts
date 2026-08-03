@@ -253,3 +253,27 @@ export const REVIEW_DIMENSIONS = [
   'ruleAdherence',
 ] as const
 export type ReviewDimension = (typeof REVIEW_DIMENSIONS)[number]
+
+// --- One-way custody network (one-way custody network §3+) ---
+/** Custody discriminant (one-way custody network §3): possession, not ownership. */
+export const CUSTODY_STATES = ['AT_STATION', 'IN_TRANSIT'] as const
+export type CustodyState = (typeof CUSTODY_STATES)[number]
+
+/** One physical traversal (§4): a rental, an internal staff drive, or a
+ *  synthesized/administrative transfer. There is NO renter-facing "ferry"
+ *  product — STAFF_REPOSITION is a fleet operation (owner correction 2026-07-28). */
+export const MOVEMENT_LEG_KINDS = ['RENTAL', 'STAFF_REPOSITION', 'TRANSFER'] as const
+export type MovementLegKind = (typeof MOVEMENT_LEG_KINDS)[number]
+
+/** The two ends of one leg (§6): hand-out record vs location-authoritative arrival. */
+export const HANDOFF_PHASES = ['DEPARTURE', 'ARRIVAL'] as const
+export type HandoffPhase = (typeof HANDOFF_PHASES)[number]
+
+/** Custody-period settlement lifecycle (§11). Slice 1 uses ACCRUING→CLOSED at rate 0. */
+export const CUSTODY_SETTLEMENT_STATES = ['ACCRUING', 'CLOSED', 'SETTLED'] as const
+export type CustodySettlementState = (typeof CUSTODY_SETTLEMENT_STATES)[number]
+
+/** Owner-configurable receipt-checklist items (§6, Q5). The minimal core
+ *  (vehicle, location, receiver, time) is always mandatory and not listed here. */
+export const RECEIPT_CHECKLIST_ITEMS = ['PHOTOS', 'FUEL', 'ODOMETER', 'DAMAGE_NOTES'] as const
+export type ReceiptChecklistItem = (typeof RECEIPT_CHECKLIST_ITEMS)[number]
