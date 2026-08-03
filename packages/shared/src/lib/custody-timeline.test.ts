@@ -28,6 +28,15 @@ describe('projectedLocationAt (§8 rule 3 building block)', () => {
   it('before the projection settles, the car is still at its current location', () => {
     expect(projectedLocationAt('A', [leg({})], d('2026-08-01T09:00:00Z'))).toBe('A')
   })
+  it('the LATEST settled projection wins (distinct destinations discriminate order)', () => {
+    const rt1 = leg({ toLocationId: 'B' })
+    const rt2 = leg({
+      toLocationId: 'C',
+      plannedStartAt: d('2026-08-05T10:00:00Z'),
+      plannedEndAt: d('2026-08-06T10:00:00Z'),
+    })
+    expect(projectedLocationAt('A', [rt1, rt2], d('2026-08-07T00:00:00Z'))).toBe('C')
+  })
   it('the LATEST settled projection wins (P→P chains land back at P)', () => {
     const rt1 = leg({ toLocationId: 'A' })
     const rt2 = leg({
@@ -70,7 +79,7 @@ describe('ownerActiveLocationIds (§7 building block)', () => {
     { id: 'L1', operatorId: 'owner', status: 'ACTIVE' },
     { id: 'L2', operatorId: 'owner', status: 'ARCHIVED' },
     { id: 'L3', operatorId: 'other', status: 'ACTIVE' },
-  ]
+  ] as const
   it('active owner locations only', () => {
     expect(
       ownerActiveLocationIds({ ownerOperatorId: 'owner', ownerDeactivatedAt: null, locations }),
@@ -141,5 +150,25 @@ describe('allowedDropoffIds (§7 rev.7 — receiving set split from owner set)',
         receivingLocationIds: receiving,
       }),
     ).toEqual(new Set(['B']))
+  })
+  it('home must come from the OWNER set, not merely the receiving set', () => {
+    expect(
+      allowedDropoffIds({
+        physicalPickupLocationId: 'B',
+        homeBaseLocationId: 'HOME',
+        ownerActiveLocationIds: new Set(['B', 'C']),
+        receivingLocationIds: new Set(['HOME', 'B', 'C']),
+      }),
+    ).toEqual(new Set(['B']))
+  })
+  it('pickup outside the receiving set with no valid home yields an empty set (unbookable)', () => {
+    expect(
+      allowedDropoffIds({
+        physicalPickupLocationId: 'X',
+        homeBaseLocationId: null,
+        ownerActiveLocationIds: ownerActive,
+        receivingLocationIds: receiving,
+      }),
+    ).toEqual(new Set())
   })
 })

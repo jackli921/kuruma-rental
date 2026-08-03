@@ -2,7 +2,7 @@
 // policy, pure (FC/IS). The materialized vehicles.physicalLocationId IS the
 // fold evaluated at `now` so future feasibility only needs the PENDING legs
 // (receivedAt and voidedAt both NULL) layered on top of that baseline.
-import type { MovementLegKind } from '../enums'
+import type { LocationStatus, MovementLegKind } from '../enums'
 
 /** A not-yet-arrived, not-voided movement leg (the live projection). */
 export interface PendingLeg {
@@ -58,7 +58,7 @@ export function pendingLegOverlaps(
 export function ownerActiveLocationIds(args: {
   ownerOperatorId: string
   ownerDeactivatedAt: Date | null
-  locations: readonly { id: string; operatorId: string; status: string }[]
+  locations: readonly { id: string; operatorId: string; status: LocationStatus }[]
 }): Set<string> {
   if (args.ownerDeactivatedAt !== null) return new Set()
   return new Set(
@@ -90,6 +90,9 @@ export function allowedDropoffIds(args: {
     ownerActiveLocationIds: ownerActive,
     receivingLocationIds: receiving,
   } = args
+  // No ownerActive re-check here: the §7 archival guard refuses to archive
+  // any vehicle's home base, and search only ever surfaces ACTIVE stations —
+  // so an archived home base cannot reach this branch going forward.
   if (home !== null && pickup === home) return new Set(receiving)
   const out = new Set<string>()
   if (home !== null && ownerActive.has(home)) out.add(home)
