@@ -18,4 +18,14 @@ describe('requestFingerprint (§6 replay binding)', () => {
     const b = await requestFingerprint({ locationId: 'L1' })
     expect(a).not.toBe(b)
   })
+  it('canonicalizes nested-object key order', async () => {
+    const a = await requestFingerprint({ a: { y: 1, x: 2 } })
+    const b = await requestFingerprint({ a: { x: 2, y: 1 } })
+    expect(a).toBe(b)
+  })
+  it('array order matters (arrays are not sorted)', async () => {
+    const a = await requestFingerprint({ hashes: ['aa', 'bb'] })
+    const b = await requestFingerprint({ hashes: ['bb', 'aa'] })
+    expect(a).not.toBe(b)
+  })
 })

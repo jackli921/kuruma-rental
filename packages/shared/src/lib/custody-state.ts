@@ -2,7 +2,7 @@
 // CustodyService shell does the I/O; this decides what the next state is).
 // AT_STATION|IN_TRANSIT is possession, not ownership; atHome and hostIsOwner
 // are DERIVED from location/operator, never encoded in the enum.
-import type { CustodyState } from '../enums'
+import type { CustodyState, VehicleStatus } from '../enums'
 
 export interface CustodySnapshot {
   readonly custodyState: CustodyState | null
@@ -79,7 +79,7 @@ export function isHostOwner(s: CustodySnapshot, ownerOperatorId: string): boolea
  * conditions layered by the caller.
  */
 export function isCustodyListable(v: {
-  status: string
+  status: VehicleStatus
   custodyState: CustodyState | null
   heldOffline: boolean
 }): boolean {
