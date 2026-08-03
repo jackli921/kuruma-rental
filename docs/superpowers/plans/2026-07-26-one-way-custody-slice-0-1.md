@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Plan rev.7.1** (2026-08-03) — folded the owner change request: displaced `P→P` round trips become a **per-vehicle opt-in `allowRoundTripsWhileAway`, default OFF** (spec moves to **rev.10.1**, which also corrects §15 Q1's provenance — the "approved 2026-07-26" blanket approval was never an owner decision). rev.7.1 folds the round-10 review of that fold (1 P0 + 5 P1). The change→task map is in "rev.7 changes at a glance" below; earlier maps kept for history.
+> **Plan rev.8** (2026-08-03) — pre-beta rollout re-scope (spec **rev.11**): **23 tasks** — Task 24 deleted (home-base⇒tracked trigger collapsed into Task 6's backfill migration), Task 22 demoted to **BETA-FLIP PREREQUISITE** (not a merge gate), backfill kept but re-justified, `ONE_WAY_CUSTODY` kept with kill-switch choreography as documentation. The model — seals, receipt gate, §8 rules, lock-then-reread — is untouched. Earlier: rev.7/7.1 folded the `allowRoundTripsWhileAway` per-vehicle opt-in + Q1 provenance correction (spec rev.10/10.1) and its round-10 review (1 P0 + 5 P1). Maps below; earlier maps kept for history.
 
 **Goal:** Implement Slice 0 (pure custody state machine + Q3-strict feasibility predicate) and Slice 1 (same-operator homeward one-way rentals: movement legs, receipt gate with configurable checklist, custody periods at rate 0, cancellation recovery, substitution/assignment legs, archival guard, staff reposition, promo-home, shared predicate on search + checkout) of the one-way custody network design.
 
-**Spec (source of truth):** `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md` (rev.10.1).
+**Spec (source of truth):** `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md` (rev.11).
 
 **Architecture:** Pure Functional Core in `packages/shared/src/lib/` (fold + feasibility + custody transitions + fingerprint), imperative shell in `packages/api` (drizzle tables with full DB seals incl. state⇔reference FKs, repos behind ports, services orchestrating under a per-vehicle advisory lock inside `runInTransaction`), web surfaces in `packages/web` (operator custody actions, renter dropoff picker). Everything behavior-changing is dark behind one runtime flag `ONE_WAY_CUSTODY`; recovery operations are state-driven and never gated (§14.1).
 
@@ -36,10 +36,23 @@
 18. **Staff reposition is home-only and never flag-gated (spec §9 rev.8).** The service takes NO destination — it is always the car's current home base (`vehicle.pickupLocationId`); the UI is a confirm-only "Send home" dialog. Every reposition is homeward recovery, so the §14.1 flag gate on repositions disappears entirely. A deliberate outward move = re-label home (§9) then reposition home — two explicit steps, capability preserved. `TRANSFER` stays script/admin-only.
 19. **Leg idempotency keys are COMMAND keys (spec §4 rev.9 — supersedes rev.4's generation keys).** Booking-create legs: `booking:<bookingId>` (one create per booking). Substitution/class-assignment: the request carries a REQUIRED client `idempotencyKey` (UUID per user action); the leg stores it, and replay = `findByIdempotencyKey` + fingerprint compare (bookingId, target vehicle, window) ⇒ return the original outcome as a no-op. This fixes BOTH shapes: repeated swaps X→Y→X→Y are distinct commands (distinct keys — nothing jams on a voided leg's key), and a **delayed duplicate** of the first X→Y arriving after Y→X replays instead of re-executing (a generation key would have minted `g2` and flipped the assignment back). `substituteVehicleSchema`/`assignVehicleSchema` gain the field; the web UI sends `crypto.randomUUID()` per action; sync `e2e/mock-api.ts` (standing lesson). The rev.4 `countByBookingAndVehicle` port method is dropped — nothing needs it.
 20. **Receipt commands preflight ALL deterministic checks before any photo upload (spec §6 rev.9).** Order: resolve tenant + load vehicle (404) → replay-resolve the idempotency key (fingerprint compare) → in-flight leg exists → booking-ordering gate (terminal status) → no-re-target rule → receiving-location validity → checklist completeness — all BEFORE `receiptStorage.put` (a receiver who forgot the odometer must not orphan a photo set per retry). The locked tx re-validates everything; orphaned keys now require a true race/crash, not a bad request. **Fingerprints bind command identity:** `vehicleId` + `legId` + `phase` ride in the hash alongside the payload + sorted photo content hashes (two minimal-core receipts at the same location are otherwise indistinguishable); the replay compare recomputes with the STORED receipt's `legId` + the REQUEST's `vehicleId`, so a cross-vehicle key reuse 409s. `setReceiptChecklist` rejects enabling `PHOTOS` while `receiptStorage.isConfigured()` is false (400) — no obligation the receiver cannot satisfy.
-21. **Seeds place their own vehicles (spec §13 rev.9).** The REAL inserts live in `packages/shared/src/db/seed.ts` (~`:408` vehicle loop) — `scripts/seed.ts` is only the CLI wrapper. The seed db is **neon-http (no interactive transactions — CLAUDE.md gotcha)** and Postgres CTE snapshots forbid insert+update-same-row in one statement, so the shape is two-step per vehicle: insert **untracked without `pickupLocationId`** (a crash between the steps then leaves a harmless homeless untracked car, never a home-based untracked one), then ONE data-modifying-CTE statement per batch (baseline `custody_periods` insert + `UPDATE vehicles` setting **`pickupLocationId` + `AT_STATION` + physical pair + `openCustodyPeriodId` together** — single statement = single implicit tx, trigger-safe under autocommit). **The placement helper takes explicit `placements: Array<{ vehicleId, homeLocationId }>`** — once inserts omit the home column, vehicle ids alone cannot reconstruct each home (rev.6 P1-6) — so Task 24 changes nothing in the seed. Vehicle-service create places in the SAME `runInTransaction` as its insert.
-22. **The home-base⇒tracked trigger ships expand–contract (spec §13 rev.9).** `deploy.yml` migrates BEFORE deploying code, so a trigger in this branch would break OLD Workers still creating home-based untracked cars in the migrate→deploy window (and on any rollback). This branch = expand: additive schema, backfill, self-placing seed, atomically-placing code. Task 24 = contract: a SEPARATE follow-up PR (trigger migration + its raw-SQL test), merged only after this feature is deployed and stable.
+21. **Seeds place their own vehicles (spec §13 rev.9).** The REAL inserts live in `packages/shared/src/db/seed.ts` (~`:408` vehicle loop) — `scripts/seed.ts` is only the CLI wrapper. The seed db is **neon-http (no interactive transactions — CLAUDE.md gotcha)** and Postgres CTE snapshots forbid insert+update-same-row in one statement, so the shape is two-step per vehicle: insert **untracked without `pickupLocationId`** (a crash between the steps then leaves a harmless homeless untracked car, never a home-based untracked one), then ONE data-modifying-CTE statement per batch (baseline `custody_periods` insert + `UPDATE vehicles` setting **`pickupLocationId` + `AT_STATION` + physical pair + `openCustodyPeriodId` together** — single statement = single implicit tx, trigger-safe under autocommit). **The placement helper takes explicit `placements: Array<{ vehicleId, homeLocationId }>`** — once inserts omit the home column, vehicle ids alone cannot reconstruct each home (rev.6 P1-6) — so the trigger-bearing migration (rev.8: end of Task 6's backfill migration) never needs the seed changed. Vehicle-service create places in the SAME `runInTransaction` as its insert.
+22. **The home-base⇒tracked trigger ships WITH the feature (spec §13 rev.11 — supersedes the rev.5 expand–contract split).** Pre-beta there is no real traffic and data is disposable, so the migrate→deploy window in which old Workers could create home-based untracked cars costs nothing. The trigger lands at the END of Task 6's backfill migration — the same-file backfill guarantees the zero-violations gate passes on any database state, wiped or not — as lock → validate → install in one migration transaction (the rev.6 P1-5 discipline, unchanged). Old Task 24 is DELETED; its raw-SQL tests move to Task 9. **The expand–contract reasoning is retained in spec §13 as the documented PRODUCTION procedure** — any contract-tightening constraint added after the beta flip must ship additive-code-first with the constraint in a post-deploy follow-up migration; collapsing is a pre-beta-only privilege.
 23. **Lock first, read second (spec §4 rev.9).** Any vehicle/leg/booking state a custody-bearing write depends on is (re-)read INSIDE the tx after `lockVehicleTimeline` — never carried in from before the lock. `submitInTx` loads the vehicle at `booking-creation.ts:276` long before the locks at `:354+`; that object stays as the cheap pre-gate, but every custody check (rule 1, anchor, fold, promo, capacity skip) runs against a fresh in-tx re-read. Same rule in vehicle update/placement (Task 12) and substitution/assignment (Task 14). **The lock TARGET itself is part of this rule (rev.6 P0-1): a pre-lock read only chooses which vehicle to lock. `updateStatus`/renter-cancel re-read the BOOKING under the lock and throw `CustodyTransitionConflict` (→ 409 `CUSTODY_CONFLICT`) if `assignedVehicleId` moved — a concurrent substitution otherwise makes them depart/void the wrong car. The placement helper re-reads the VEHICLE and no-ops if it is no longer untracked.** Helpers receive ids, not pre-lock objects.
 24. **Displaced round trips are a per-vehicle opt-in, default OFF (spec §7/§15 Q1, decided 2026-08-03).** `vehicles.allowRoundTripsWhileAway` boolean NOT NULL default false — owner's language, no P→P jargon in code or UI. The §7 displaced branch includes `{P} ∩ receiving` only when the toggle is true; OFF means displaced cars are home-only (the strict alternative rev.5 offered, byte-identical). The at-home branch never consults it. A plain policy flag like `autoRelistOnReceipt` — no lifecycle coupling, no CHECK/FK/trigger, nothing to backfill (the default reproduces current intent for every row). **Not flag work:** drop-off == pickup is not outbound movement, so `ONE_WAY_CUSTODY` OFF does not gate it — and from booking-CREATE it is unreachable while dark anyway (the OFF booking path requires a tracked car at home). The one dark path that evaluates it is never-gated substitution (Task 14): the leash, toggle included, is per-vehicle policy the replacement car must satisfy — distinct from the runtime flag. **Create-time-only:** the toggle is read when a leg is created (create / substitution / assignment, always from the fresh in-tx row of the car getting the leg) and never re-evaluated against existing legs — a B→B leg booked while on still departs and receives normally after a flip-off (transitions never consult the leash). It is config on the never-gated listing surface (`setListing`/`ListingDialog`).
+
+## rev.8 changes at a glance (pre-beta rollout re-scope, owner 2026-08-03 → where it landed)
+
+Context: pre-beta — no real bookings, no real renters, all data disposable, wipe-and-reseed is a legitimate reset. The re-scope touches MIGRATION and ROLLOUT only; the model (owner/host split, custody state, every DB seal, receipt gate, §8 rules, lock-then-reread) is deliberately untouched — test data is when those earn their keep.
+
+| # | Re-scope | Removed or deferred? | Where it landed |
+|---|---|---|---|
+| RS-1 | Home-base⇒tracked trigger no longer a post-deploy follow-up PR | **Removed** (as a separate PR) — trigger now ships in the feature | Task 24 DELETED (**23 tasks**); trigger + lock + zero-violations gate at the END of Task 6's backfill migration; raw-SQL tests → Task 9 case 21; expand–contract kept in spec §13 as the documented production procedure — decision 22 rewritten |
+| RS-2 | Cutover fence script + flip runbook | **Deferred — BETA-FLIP PREREQUISITE** (tagged on Task 22; hard-gated list in spec §14.1). NOT a merge gate; MUST land + run before the first `ONE_WAY_CUSTODY` flip in any long-lived environment, or that environment is wiped and reseeded at the flip | Task 22 banner; spec §14.1 pre-beta scope note |
+| RS-3 | §13 backfill | **Kept** (assessed per the change request) — its job is no longer data preservation but migration self-containment: it is what lets RS-1's zero-violations gate pass on a non-wiped DB without a mandated wipe ordering; no-op on an empty DB | Task 6 rationale + spec §13 |
+| RS-4 | `ONE_WAY_CUSTODY` kill-switch choreography | **Kept as code, demoted as gate**: the flag ships (beta needs it) and its SEMANTICS stay implemented (outbound-only gating, recovery never gated, kill-safe OFF path — same shared predicate, free while dark, and removing them would fork search vs checkout, §8 parity). Only the flip choreography (fence runs, runbook drills) is deferred per RS-2 | spec §14.1; Tasks 10/13/15/18/19 unchanged |
+
+**Parked-branch note:** the rev.8 collapse needs NO parked-branch change — the trigger lands in Task 6's migration, which is not yet built; Task 5's parked seals migrations correctly never contained it.
 
 ## rev.7 changes at a glance (owner change request 2026-08-03 → where it landed)
 
@@ -136,7 +149,7 @@ packages/shared/src/lib/error-codes.ts                MODIFY  8 new codes (+ mem
 drizzle/01NN_one_way_custody_schema.sql               GENERATE
 drizzle/01NN_custody_state_reference_seals.sql        CUSTOM  vehicles state⇔reference FKs + three-way CHECK + endpoint trigger
 drizzle/01NN_receipts_append_only_grants.sql          CUSTOM  #1556-style role-separation immutability
-drizzle/01NN_backfill_vehicle_custody.sql             CUSTOM  backfill + baseline custody periods
+drizzle/01NN_backfill_vehicle_custody.sql             CUSTOM  backfill + baseline periods + home-base⇒tracked trigger (rev.8)
 packages/api/src/repositories/types-custody.ts        CREATE  ports
 packages/api/src/repositories/in-memory/{movement-leg,custody-period,handoff-receipt}.ts  CREATE
 packages/api/src/repositories/drizzle/{movement-leg,custody-period,handoff-receipt}.ts    CREATE
@@ -167,9 +180,8 @@ packages/web/src/vite/reservation/ReservationWizard.tsx  MODIFY  dropoff state +
 packages/web/messages/{en,ja,zh}.json                 MODIFY  i18n keys
 e2e/real-db/one-way-custody.auth.spec.ts              CREATE
 playwright.real-db.config.ts                          MODIFY  VITE_FEATURE_ONE_WAY_CUSTODY
-scripts/backfill-movement-legs.ts                     CREATE  flip runbook script (validate + before AND after each flip)
+scripts/backfill-movement-legs.ts                     CREATE  flip runbook script (BETA-FLIP PREREQUISITE, rev.8 — may land in a follow-up PR before the flip)
 packages/shared/src/db/seed.ts                        MODIFY  place seeded vehicles (baseline periods, §13 — scripts/seed.ts is only the wrapper)
-drizzle (FOLLOW-UP PR, Task 24)                       CUSTOM  home-base⇒tracked trigger (expand–contract, post-deploy)
 ```
 
 ---
@@ -1590,7 +1602,7 @@ CREATE CONSTRAINT TRIGGER custody_periods_vehicle_backref
   FOR EACH ROW EXECUTE FUNCTION custody_period_backref_check();
 ```
 
-Apply + `db:verify`. (The §13 home-base⇒tracked trigger is NOT in this migration — or anywhere in this branch. Decision 22: `deploy.yml` migrates before deploying code, so it ships as Task 24's separate post-deploy contract PR.)
+Apply + `db:verify`. (The §13 home-base⇒tracked trigger is NOT in this migration — it needs the backfill to have run first, so it lands at the END of Task 6's backfill migration. Decision 22, rev.8.)
 
 - [ ] **Step 5d: DB-enforced receipt immutability** (§6 — the repo exposing no update/delete is not the enforcement):
 
@@ -1608,7 +1620,7 @@ git add packages/shared/src/db packages/shared/src/enums.ts drizzle
 git commit -m "feat(custody): custody schema — legs/periods/receipts + state-reference seals + endpoint trigger"
 ```
 
-### Task 6: Backfill migration (baseline periods + placement) + self-placing seed
+### Task 6: Backfill migration (baseline periods + placement + home-base⇒tracked trigger) + self-placing seed
 
 **Files:**
 - Generate: `drizzle/01NN_backfill_vehicle_custody.sql` (custom)
@@ -1647,9 +1659,53 @@ SET "custodyState" = 'AT_STATION',
     "openCustodyPeriodId" = p."id"
 FROM placed p
 WHERE p."vehicleId" = v."id";
+--> statement-breakpoint
+-- §13 rev.11 (decision 22): the home-base⇒tracked seal ships WITH the feature —
+-- pre-beta the migrate→deploy window costs nothing (no real traffic, data
+-- disposable). Lock → validate → install in THIS one migration transaction
+-- (rev.6 P1-5: an operational pre-check proves nothing — a raw writer can slip
+-- a violating row between check and install, and the trigger never re-examines
+-- existing rows). The backfill ABOVE guarantees the check passes on any
+-- database state, wiped or not. SHARE ROW EXCLUSIVE blocks writes, allows
+-- reads, and is what CREATE TRIGGER takes anyway.
+LOCK TABLE "vehicles" IN SHARE ROW EXCLUSIVE MODE;
+--> statement-breakpoint
+DO $do$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM "vehicles"
+    WHERE "pickupLocationId" IS NOT NULL AND "custodyState" IS NULL
+  ) THEN
+    RAISE EXCEPTION 'vehicles_home_base_tracked: home-based untracked vehicle(s) exist — the backfill above should have placed them; investigate before re-running';
+  END IF;
+END
+$do$;
+--> statement-breakpoint
+-- A car with a home base is NEVER untracked — any insert path that skips
+-- placement fails at commit instead of minting a car search would list but
+-- checkout must reject (§8 parity). Deferred + re-reads the FINAL row (§3):
+-- insert-untracked-then-place in one tx must pass.
+CREATE OR REPLACE FUNCTION vehicle_home_base_tracked_check() RETURNS trigger AS $$
+DECLARE
+  v record;
+BEGIN
+  SELECT "pickupLocationId", "custodyState" INTO v FROM "vehicles" WHERE "id" = NEW."id";
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  IF v."pickupLocationId" IS NOT NULL AND v."custodyState" IS NULL THEN
+    RAISE EXCEPTION 'vehicles_home_base_tracked: vehicle % has a home base but no custody placement — place it (baseline period + AT_STATION) in the same transaction',
+      NEW."id" USING ERRCODE = '23514';
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER vehicles_home_base_tracked
+  AFTER INSERT OR UPDATE ON "vehicles"
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION vehicle_home_base_tracked_check();
 ```
 
-> **NO home-base⇒tracked trigger in this migration — or anywhere in this branch (decision 22).** `deploy.yml` migrates BEFORE deploying the Worker, so a trigger here would break OLD code still creating home-based untracked cars in the migrate→deploy window, and any rollback after it. The trigger is Task 24's separate follow-up PR, merged only after this feature is deployed. Until then the guarantee is process-level: the seed (Step 2b), the fixtures, and the Task 12 service all place atomically.
+> **rev.8 (decision 22): the trigger lives HERE, after the backfill in the same migration file** — the old Task 24 follow-up PR is deleted. The expand–contract split remains the documented PRODUCTION procedure (spec §13): after the beta flip, a constraint like this must ship additive-code-first with the trigger in a post-deploy follow-up migration. Its raw-SQL tests are Task 9 case 21 (unplaced home-based insert fails 23514 at commit; insert-untracked-then-place in one tx passes; homeless insert passes).
 
 - [ ] **Step 2: Apply + verify + spot-check**
 
@@ -1661,7 +1717,7 @@ docker exec kuruma-custody-pg psql -U kuruma -d kuruma_custody -c "SELECT count(
 
 Expected: verify green; every vehicle with a pickup location is `tracked` with a baseline period (a freshly-migrated empty DB shows 0/0 — seed in Step 2b for a non-trivial check).
 
-- [ ] **Step 2b: Seeds place their own vehicles (P0-B — decision 21).** Seed runs AFTER migration, so the backfill cannot cover seeded rows; without this the flag-ON E2E (Task 21) books a car whose `physicalLocationId` is null — search lists it (COALESCE fallback), checkout rejects it. **Edit the REAL insert site, `packages/shared/src/db/seed.ts` (vehicle loop ~`:408`) — `scripts/seed.ts` is only the CLI wrapper.** Constraint: the prod seed db is neon-http (NO interactive transactions — CLAUDE.md gotcha) and a CTE cannot insert-and-update the same row in one statement (shared snapshot), so use the two-step shape (decision 21): (1) **drop `pickupLocationId` from the per-vehicle insert NOW** — vehicles are born untracked AND homeless, so a crash between the steps leaves an invisible untracked car, never the home-based-untracked §8 parity bug (and the shape is already Task-24-trigger-safe under autocommit); (2) AFTER the vehicle loop, ONE data-modifying-CTE statement over all seeded vehicles: insert a baseline `custody_periods` row per still-untracked seeded vehicle (owner-host, rate snapshots 0, `openedByLegId` NULL) and `UPDATE vehicles` setting **`pickupLocationId` + `custodyState 'AT_STATION'` + physical pair + `openCustodyPeriodId` together** (home + custody land in the same statement); idempotent via the same `custodyState IS NULL` guard, so re-seeding is safe. Write it as a small exported helper **`placeSeededVehicles(db, placements: Array<{ vehicleId: string; homeLocationId: string }>)`** — it must receive each vehicle's intended home explicitly (rev.6 P1-6: once inserts omit the home column, ids alone cannot reconstruct it; join the placements as a `VALUES` list in the CTE). Run it immediately after the vehicle loop, before any later seed step that reads vehicle homes. Task 24 then touches nothing here. Verify:
+- [ ] **Step 2b: Seeds place their own vehicles (P0-B — decision 21).** Seed runs AFTER migration, so the backfill cannot cover seeded rows; without this the flag-ON E2E (Task 21) books a car whose `physicalLocationId` is null — search lists it (COALESCE fallback), checkout rejects it. **Edit the REAL insert site, `packages/shared/src/db/seed.ts` (vehicle loop ~`:408`) — `scripts/seed.ts` is only the CLI wrapper.** Constraint: the prod seed db is neon-http (NO interactive transactions — CLAUDE.md gotcha) and a CTE cannot insert-and-update the same row in one statement (shared snapshot), so use the two-step shape (decision 21): (1) **drop `pickupLocationId` from the per-vehicle insert NOW** — vehicles are born untracked AND homeless, so a crash between the steps leaves an invisible untracked car, never the home-based-untracked §8 parity bug (and the shape is trigger-safe under autocommit — the Step 1 trigger is already installed when the seed runs); (2) AFTER the vehicle loop, ONE data-modifying-CTE statement over all seeded vehicles: insert a baseline `custody_periods` row per still-untracked seeded vehicle (owner-host, rate snapshots 0, `openedByLegId` NULL) and `UPDATE vehicles` setting **`pickupLocationId` + `custodyState 'AT_STATION'` + physical pair + `openCustodyPeriodId` together** (home + custody land in the same statement); idempotent via the same `custodyState IS NULL` guard, so re-seeding is safe. Write it as a small exported helper **`placeSeededVehicles(db, placements: Array<{ vehicleId: string; homeLocationId: string }>)`** — it must receive each vehicle's intended home explicitly (rev.6 P1-6: once inserts omit the home column, ids alone cannot reconstruct it; join the placements as a `VALUES` list in the CTE). Run it immediately after the vehicle loop, before any later seed step that reads vehicle homes. Verify:
 
 ```bash
 DATABASE_URL="postgresql://kuruma:kuruma@localhost:5499/kuruma_custody" bun run db:seed
@@ -1670,7 +1726,7 @@ docker exec kuruma-custody-pg psql -U kuruma -d kuruma_custody -c "SELECT count(
 
 Expected: `0` — no seeded car is home-based-but-untracked.
 
-> **Fixture fallout (fix NOW, sealed LATER):** Task 24's trigger will fail ANY raw insert of a home-based vehicle without placement — integration-test fixtures and e2e `testSql` inserts included. Grep `tests/integration` + `e2e/real-db` for direct `vehicles` inserts with a `pickupLocationId` and give each the same placement (extract a tiny SQL helper next to the fixture utils; test DBs are TCP postgres-js, so a plain transaction is fine there). Do it in THIS branch — an unplaced fixture car already breaks §8 search/checkout parity today; Task 24 only turns the mistake into a loud failure.
+> **Fixture fallout (fix NOW — the seal is live from this task on):** the Step 1 trigger fails ANY raw insert of a home-based vehicle without placement at commit — integration-test fixtures and e2e `testSql` inserts included. Grep `tests/integration` + `e2e/real-db` for direct `vehicles` inserts with a `pickupLocationId` and give each the same placement (extract a tiny SQL helper next to the fixture utils; test DBs are TCP postgres-js, so a plain transaction is fine there). An unplaced fixture car already breaks §8 search/checkout parity; the trigger just turns the mistake into a loud failure.
 
 - [ ] **Step 3: Commit**
 
@@ -2513,10 +2569,10 @@ with the matching `import type` from `'./types-custody'`. (`vehicleTimelineLock`
   18. **lifecycle trigger, reverse side (§3 rev.9)**: `markReceived` a leg (raw UPDATE) while a vehicle still references it via `inFlightLegId`, WITHOUT updating the vehicle in the same tx → COMMIT fails; **raw `UPDATE movement_legs SET "departedAt" = NULL` on a referenced in-flight leg → COMMIT fails too (the cleared-departure hole, P1-viii)**; the full §5 shape (leg received + period opened + vehicle written, one tx) commits. Same for closing a period a vehicle still references as open.
   19. **leg-endpoint update guard (§6 rev.9)**: raw `UPDATE movement_legs SET "toLocationId" = <other>` on a leg that already has a matching ARRIVAL receipt → COMMIT fails with `movement_legs_endpoint_receipts` (23514); the recovery order (re-target `to*` then insert the matching receipt, same tx) still commits.
   20. **custody-period provenance (§11 rev.9)**: a period whose `ownerOperatorId` is not the vehicle's `operatorId` → 23503 `custody_periods_owner_vehicle_fk`; `openedByLegId`/`closedByLegId` naming ANOTHER vehicle's leg → 23503 `custody_periods_opened_leg_vehicle_fk`/`_closed_leg_vehicle_fk`; a baseline row (`openedByLegId` NULL) still inserts. Plus: a receipt superseding ITSELF → 23514 `handoff_receipts_no_self_supersede`.
-  (The home-base⇒tracked trigger test is Task 24's — the trigger does not exist in this branch, decision 22.)
+  21. **home-base⇒tracked trigger (§13 rev.11 — installed by Task 6's migration, so this case lands AFTER Task 6 applies; decision 22)**: inserting a vehicle with a `pickupLocationId` and no placement in the tx → COMMIT fails `vehicles_home_base_tracked` (23514); insert-untracked-then-place in ONE tx commits (the §3 re-read pin); insert without a home base commits.
 
 Run: `DATABASE_URL="postgresql://kuruma:kuruma@localhost:5499/kuruma_custody" bunx vitest run tests/integration/custody-repo.test.ts --root packages/api`
-Expected: PASS (20 tests).
+Expected: PASS (21 tests).
 
 - [ ] **Step 5: Full check + commit**
 
@@ -2713,7 +2769,7 @@ Run → FAIL (extra ctor args missing / custody fields not written).
   }
 ```
 
-`create`: when `input.pickupLocationId` is set, the insert + `placeAtHomeInTx` run in ONE `runInTransaction` — **a follow-up transaction is not acceptable** (P0-B): a crash between the two writes mints a home-based untracked car (search lists via the COALESCE fallback, checkout rejects on the null anchor); Task 24's trigger later turns exactly that split write into a commit-time failure. Wrap the existing insert if it is not already transactional (the insert may carry `pickupLocationId` — placement lands in the same tx, so the committed row is always placed).
+`create`: when `input.pickupLocationId` is set, the insert + `placeAtHomeInTx` run in ONE `runInTransaction` — **a follow-up transaction is not acceptable** (P0-B): a crash between the two writes mints a home-based untracked car (search lists via the COALESCE fallback, checkout rejects on the null anchor); the Task 6 trigger (rev.8) turns exactly that split write into a commit-time failure. Wrap the existing insert if it is not already transactional (the insert may carry `pickupLocationId` — placement lands in the same tx, so the committed row is always placed).
 `update` (merge block ~`:193`), after computing `nextPickup`:
 
 ```ts
@@ -3542,6 +3598,8 @@ git commit -m "test(custody): one-way homeward journey e2e (real-db lane)"
 
 ### Task 22: Flag-flip backfill script (run before AND after each flip)
 
+> **[BETA-FLIP PREREQUISITE — NOT a merge gate] (rev.8, spec §14.1 pre-beta scope).** Pre-beta there are no real commitments to protect across a flip, so this task does not block merging the feature; it may land in its own follow-up PR. It is a **hard prerequisite for the first `ONE_WAY_CUSTODY` flip in any long-lived environment**: flip only after this script has landed and run immediately before + after the flip, **or** wipe-and-reseed that environment at the flip — one of the two, always (flipping ON over pre-flip bookings without either breaks the §5 depart hook, which expects a leg). The design below is unchanged and stays reviewed; do not redesign it at landing time.
+
 **Files:**
 - Create: `scripts/backfill-movement-legs.ts`
 
@@ -3608,59 +3666,11 @@ Every line green. Any red = fix before proceeding (flaky = defect).
 
 - [ ] **Step 3: Docs + teardown.** Add a CLAUDE.md gotcha entry only if something surprising was hit (per the standing rule). `docker rm -f kuruma-custody-pg`. Then use **superpowers:finishing-a-development-branch**: rebase onto `origin/develop` (regenerate the migrations if numbers collided — drop + `db:generate`, never hand-rename), PR base `develop`, plain-English title "One-way rentals: cars can be dropped at another branch and rented home", body `Refs #882` + link to the spec, squash-merge, NO force-push (`gh pr update-branch` if behind).
 
-### Task 24: Contract migration — home-base⇒tracked trigger (SEPARATE follow-up PR, post-deploy)
-
-**Do NOT start this task until the Task 23 PR is merged AND deployed** (decision 22 — `deploy.yml` migrates before code, so shipping this trigger with the feature would break old Workers in the migrate→deploy window and on rollback). This is the expand–contract "contract" step, its own branch/PR.
-
-- [ ] **Step 1: Pre-checks (advisory triage only — the authoritative gate is INSIDE the migration, Step 2).** The feature is live (beta/prod as applicable); `SELECT count(*) FROM vehicles WHERE "pickupLocationId" IS NOT NULL AND "custodyState" IS NULL` returns 0 on the target DB so the migration won't abort mid-deploy (backfill + self-placing seed + atomic create have held); re-run the Task 6 fixture grep (`tests/integration` + `e2e/real-db` raw vehicle inserts) — any new unplaced fixture added since is fixed FIRST.
-- [ ] **Step 2: Migration** (`bun run db:generate --custom --name vehicles_home_base_tracked_seal`). **Lock, validate, and install in ONE migration transaction (rev.6 P1-5)** — an operational query before the migration proves nothing: a raw writer can slip a violating row between it and the trigger install, and the trigger never re-examines existing rows. The `LOCK TABLE` (SHARE ROW EXCLUSIVE — blocks writes, allows reads, and is what `CREATE TRIGGER` takes anyway) holds until commit, so validation and installation are race-free (separate the statements with `--> statement-breakpoint`; drizzle applies the file in one transaction):
-
-```sql
--- §13 rev.9 (contract step of expand-contract; expand shipped with the
--- feature). A car with a home base is NEVER untracked — any insert path that
--- skips placement fails at commit instead of minting a car search would list
--- but checkout must reject (§8 parity). Deferred + re-reads the FINAL row
--- (§3 rev.9): insert-untracked-then-place in one tx must pass.
-LOCK TABLE "vehicles" IN SHARE ROW EXCLUSIVE MODE;
---> statement-breakpoint
-DO $do$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM "vehicles"
-    WHERE "pickupLocationId" IS NOT NULL AND "custodyState" IS NULL
-  ) THEN
-    RAISE EXCEPTION 'vehicles_home_base_tracked: home-based untracked vehicle(s) exist — place them (baseline period + AT_STATION) or clear their home base, then re-run this migration';
-  END IF;
-END
-$do$;
---> statement-breakpoint
-CREATE OR REPLACE FUNCTION vehicle_home_base_tracked_check() RETURNS trigger AS $$
-DECLARE
-  v record;
-BEGIN
-  SELECT "pickupLocationId", "custodyState" INTO v FROM "vehicles" WHERE "id" = NEW."id";
-  IF NOT FOUND THEN RETURN NULL; END IF;
-  IF v."pickupLocationId" IS NOT NULL AND v."custodyState" IS NULL THEN
-    RAISE EXCEPTION 'vehicles_home_base_tracked: vehicle % has a home base but no custody placement — place it (baseline period + AT_STATION) in the same transaction',
-      NEW."id" USING ERRCODE = '23514';
-  END IF;
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE CONSTRAINT TRIGGER vehicles_home_base_tracked
-  AFTER INSERT OR UPDATE ON "vehicles"
-  DEFERRABLE INITIALLY DEFERRED
-  FOR EACH ROW EXECUTE FUNCTION vehicle_home_base_tracked_check();
-```
-
-- [ ] **Step 3: Seed shape verification (nothing to flip — rev.6 P1-6).** The Task 6 seed already inserts vehicles WITHOUT `pickupLocationId` and `placeSeededVehicles(db, placements)` sets home + custody in its single placement statement, so the seed is trigger-safe as-is. Verify: grep the vehicle insert for `pickupLocationId` (must be absent), re-run `db:seed` against the local container with the trigger installed, and confirm the Task 6 count query still returns 0.
-- [ ] **Step 4: Raw-SQL test** (extend `tests/integration/custody-repo.test.ts`): inserting a vehicle with a `pickupLocationId` and no placement in the tx → COMMIT fails with `vehicles_home_base_tracked` (23514); insert-untracked-then-place in ONE tx commits (the §3 re-read pin); insert without a home base commits.
-- [ ] **Step 5: Ship.** `db:verify`, full gate (Task 23 Step 1 list), own PR, base `develop`, body links the spec §13 + this plan; merge only when the feature deploy is confirmed stable.
+> **(Task 24 deleted in rev.8.)** The home-base⇒tracked trigger ships with the feature — end of Task 6's backfill migration, raw-SQL tests in Task 9 case 21 (decision 22). The expand–contract split it implemented survives as spec §13's documented production procedure for any contract-tightening constraint added after the beta flip.
 
 ---
 
-## Self-review notes (spec rev.10.1 coverage check, done at plan time)
+## Self-review notes (spec rev.11 coverage check, done at plan time)
 
 | Spec section | Task(s) |
 |---|---|
@@ -3675,11 +3685,11 @@ CREATE CONSTRAINT TRIGGER vehicles_home_base_tracked
 | §9 staff reposition (home-only, never gated) / promo-home (arrival compare) / re-label | 12, 13, 15, 18, 19, 20 — decision 18 |
 | §10/§11 custody periods at rate 0, close-on-departure, one-open seal, baseline rows | 5, 6, 9, 12, 13, 14 |
 | §12 schema & surface summary | 5, 16, 18 |
-| §13 bootstrap: untracked NULL, baseline periods, on-ramp, self-placing seeds, home-base⇒tracked (contract step) | 5 (columns), 6 (backfill + seed), 12 (same-tx on-ramp), 21 (pre-assert), 24 (trigger, post-deploy PR) |
+| §13 bootstrap: untracked NULL, baseline periods, on-ramp, self-placing seeds, home-base⇒tracked seal | 5 (columns), 6 (backfill + trigger + seed — rev.8 collapse), 9 (case 21), 12 (same-tx on-ramp), 21 (pre-assert) |
 | §14 slice boundaries (no cost fold, no cross-op money) | honored — no accrual math, no settlement table, snapshots 0, receiving == ownerActive |
-| §14.1 flag: outbound-gated, recovery never gated, OFF path folds legs, validated cutover fence | 10, 13, 15 (OFF fold), 18, 19, 22 (pass 0 + per-vehicle locked tx) |
+| §14.1 flag: outbound-gated, recovery never gated, OFF path folds legs, validated cutover fence | 10, 13, 15 (OFF fold), 18, 19, 22 (pass 0 + per-vehicle locked tx — **BETA-FLIP PREREQUISITE, not a merge gate**, rev.8) |
 | §15 Q1 P→P per-vehicle opt-in / Q2 pricing / Q3 strict + receipt / Q4 fees / Q5 checklist / Q6 combo deferral | Q1: 3/4/5/13/15/18/19 (decision 24) · Q2: untouched · Q3: 4/13/16 · Q4: n/a until Slice 2 · Q5: 5/13/18/19 · Q6: 16 |
 | §16 open questions | untouched (Slice 2): settlement cadence/rounding, host fee, liability, default checklist contents |
 | §17 out of scope | no free-roam, no displaced combo, no future repositions, no advance booking at unreceived stations |
 
-Known deliberate gaps (Slice 2+, per spec §14): cross-operator hosting/opt-in (receiving set widening), non-zero fees, settlement records, RENTAL departure-receipt UI, `CLASS_COMBO` for displaced cars, free-roam. Deviations from the spec letter are the 24 plan-level decisions up top (every rule they introduced — tail, home-only reposition, command keys, expand–contract, the round-trip opt-in — has since been folded into the spec itself, rev.8/rev.9/rev.10).
+Known deliberate gaps (Slice 2+, per spec §14): cross-operator hosting/opt-in (receiving set widening), non-zero fees, settlement records, RENTAL departure-receipt UI, `CLASS_COMBO` for displaced cars, free-roam. Deviations from the spec letter are the 24 plan-level decisions up top (every rule they introduced — tail, home-only reposition, command keys, the round-trip opt-in, the pre-beta trigger collapse — has since been folded into the spec itself, rev.8–rev.11; expand–contract survives as §13's documented production procedure).
