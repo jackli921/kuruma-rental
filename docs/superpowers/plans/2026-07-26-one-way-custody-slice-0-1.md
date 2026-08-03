@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Plan rev.9** (2026-08-03) — owner execution review folded (spec **rev.12**): **24 tasks, 25 decisions**. Core design approved; three rollout corrections: (1) `ONE_WAY_CUSTODY` becomes a **guarded flag** — the switchboard rejects it, the Task 22 fence script is the sole flip mechanism (decision 25), so Task 22 may stay a follow-up PR because enabling is technically impossible until it lands; (2) **invited operators' fleets preserved by default** — fence is the normal path, wipe-and-reseed needs named-environment owner approval (ideally after export); (3) **Task 24 RESTORED** (owner's recommendation) — the home-base⇒tracked trigger returns to a separate post-deploy expand–contract PR, reversing rev.8's collapse; round-11's still-valid hardening kept. Earlier: rev.8/8.1 = pre-beta re-scope + round-11 review; rev.7/7.1 = `allowRoundTripsWhileAway` opt-in + Q1 provenance + round-10 review. Maps below; earlier maps kept for history.
+> **Plan rev.9.1** (2026-08-03) — owner execution review + round-12 verify folded (spec **rev.12.1**): **24 tasks, 25 decisions**. Core design approved; three rollout corrections plus bookkeeping: (1) `ONE_WAY_CUSTODY` becomes a **guarded flag** — the switchboard rejects it, the Task 22 fence script is the sole flip mechanism (decision 25), so Task 22 may stay a follow-up PR because enabling is technically impossible until it lands; (2) **invited operators' fleets preserved by default** — fence is the normal path, wipe-and-reseed needs named-environment owner approval (ideally after export); (3) **Task 24 RESTORED** (owner's recommendation) — the home-base⇒tracked trigger returns to a separate post-deploy expand–contract PR, reversing rev.8's collapse; round-11's still-valid hardening kept. Earlier: rev.8/8.1 = pre-beta re-scope + round-11 review; rev.7/7.1 = `allowRoundTripsWhileAway` opt-in + Q1 provenance + round-10 review. Maps below; earlier maps kept for history.
 
 **Goal:** Implement Slice 0 (pure custody state machine + Q3-strict feasibility predicate) and Slice 1 (same-operator homeward one-way rentals: movement legs, receipt gate with configurable checklist, custody periods at rate 0, cancellation recovery, substitution/assignment legs, archival guard, staff reposition, promo-home, shared predicate on search + checkout) of the one-way custody network design.
 
-**Spec (source of truth):** `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md` (rev.12).
+**Spec (source of truth):** `docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md` (rev.12.1).
 
 **Architecture:** Pure Functional Core in `packages/shared/src/lib/` (fold + feasibility + custody transitions + fingerprint), imperative shell in `packages/api` (drizzle tables with full DB seals incl. state⇔reference FKs, repos behind ports, services orchestrating under a per-vehicle advisory lock inside `runInTransaction`), web surfaces in `packages/web` (operator custody actions, renter dropoff picker). Everything behavior-changing is dark behind one runtime flag `ONE_WAY_CUSTODY`; recovery operations are state-driven and never gated (§14.1).
 
@@ -51,7 +51,7 @@
 | OR-3 | Migrate-before-deploy: owner recommends restoring the separate trigger step over a write freeze | **Task 24 RESTORED** (24 tasks) — expand–contract is again the shipping plan (decision 22 reverted to the split; Task 6 loses the trigger; Task 9 back to 20 cases; trigger raw-SQL tests back on Task 24). Kept from round 11: sole-home-writer seed rule, Task 6 Step 1b backfill exercise, `--single-transaction` fallback (now on Task 24) |
 | OR-4 | Bookkeeping: runbook not staged in Task 22's commit; STATE.md stale | Task 22 Step 3 stages `docs/runbooks/one-way-custody-flip.md`; STATE.md rewritten to current state (gitignored, not part of this diff) |
 
-**Note on the rev.8 map below:** RS-1 (trigger collapse) is REVERSED by OR-3; RS-2/RS-4 are hardened by OR-1 (the prerequisite is now technical); RS-3's backfill assessment stands with its fleet-preservation role restored (OR-2). The rev.8 map is kept for history.
+**Note on the rev.8 map below:** RS-1 (trigger collapse) is REVERSED by OR-3; RS-2/RS-4 are hardened by OR-1 (the prerequisite is now technical) and RS-2's casual wipe-and-reseed clause is superseded by OR-2's named-environment approval rule; RS-3's backfill assessment stands with its fleet-preservation role restored (OR-2). The rev.8 map is kept for history.
 
 ## rev.8 changes at a glance (pre-beta rollout re-scope, owner 2026-08-03 → where it landed)
 
@@ -64,7 +64,7 @@ Context: pre-beta — no real bookings, no real renters. *(rev.9 correction: "al
 | RS-3 | §13 backfill | **Kept** (assessed per the change request) — its job is no longer data preservation but migration self-containment: it is what lets RS-1's zero-violations gate pass on a non-wiped DB without a mandated wipe ordering; no-op on an empty DB | Task 6 rationale + spec §13 |
 | RS-4 | `ONE_WAY_CUSTODY` kill-switch choreography | **Kept as code, demoted as gate**: the flag ships (beta needs it) and its SEMANTICS stay implemented (outbound-only gating, recovery never gated, kill-safe OFF path — same shared predicate, free while dark, and removing them would fork search vs checkout, §8 parity). Only the flip choreography (fence runs, runbook drills) is deferred per RS-2 | spec §14.1; Tasks 10/13/15/18/19 unchanged |
 
-**Parked-branch note:** the rev.8 collapse needs NO parked-branch change — the trigger lands in Task 6's migration, which is not yet built; Task 5's parked seals migrations correctly never contained it.
+**Parked-branch note:** no parked-branch change either way — the trigger is Task 24's separate post-deploy PR (restored rev.9), and Task 5's parked seals migrations correctly never contained it.
 
 **rev.8.1 (round-11 review, 2 P0 + 6 P1 + 5 nits folded):** stale contradictions scrubbed (spec §12 "post-deploy" label — P0-1; decision 16 "not in this branch" — P0-2); §14.1 gate rationale corrected (hooks NO-OP on legless dark bookings, silent wrong-state — P1-3); seed upsert may no longer write `pickupLocationId` (crash-then-reseed trap under the live trigger — P1-4, decision 21 + Task 6 Step 2b); Task 6 Step 1b added — pre-migration rows exercise the backfill, the only coverage the non-wiped path gets (P1-5); Task 9 fixtures born homeless (P1-6); flip runbook named as a Task 22 deliverable + Task 23 opens a blocker issue when Task 22 is deferred (P1-7); psql fallback for the trigger migration must be `--single-transaction` (P1-8); expected red window for vehicle-service integration suites between Tasks 6 and 12 documented.
 
@@ -159,8 +159,9 @@ packages/shared/src/db/custody.ts                     CREATE  movement_legs, cus
 packages/shared/src/db/schema.ts                      MODIFY  export * barrel line
 packages/shared/src/validators/custody.ts             CREATE  zod for custody routes
 packages/shared/src/feature-flags/registry.ts         MODIFY  ONE_WAY_CUSTODY entry + guarded field + isGuardedFlagKey (decision 25)
-packages/api/src/routes/feature-flags.ts              MODIFY  guarded-key 409 rejection (+ route test — decision 25)
-packages/shared/src/lib/error-codes.ts                MODIFY  8 new codes (+ membership test)
+packages/api/src/routes/feature-flags.ts              MODIFY  guarded-key 409 FLAG_GUARDED rejection (+ route test — decision 25)
+packages/web/src/routes/$locale/_admin/admin/feature-flags/index.tsx + src/vite/admin/feature-flags/FeatureFlagsView.tsx  MODIFY  guarded row disabled + runbook hint (decision 25)
+packages/shared/src/lib/error-codes.ts                MODIFY  9 new codes (+ membership test — FLAG_GUARDED in Task 10, rest in Tasks 13/15/17)
 drizzle/01NN_one_way_custody_schema.sql               GENERATE
 drizzle/01NN_custody_state_reference_seals.sql        CUSTOM  vehicles state⇔reference FKs + three-way CHECK + endpoint trigger
 drizzle/01NN_receipts_append_only_grants.sql          CUSTOM  #1556-style role-separation immutability
@@ -2565,9 +2566,10 @@ git commit -m "feat(custody): drizzle custody repositories + tx bundle + real-pg
 
 **Files:**
 - Modify: `packages/shared/src/feature-flags/registry.ts` (entry + `guarded` field + `isGuardedFlagKey` helper)
+- Modify: `packages/shared/src/lib/error-codes.ts` (+ membership test): add `'FLAG_GUARDED'`
 - Modify: `packages/web/src/vite/config/feature-flags-runtime.ts` (`BUILD_TIME_READERS`)
 - Modify: `packages/api/src/routes/feature-flags.ts` (guarded-key rejection) + its route test
-- Modify: the admin switchboard page's flag row (find it: `grep -rn "feature-flags" packages/web/src/vite --include='*.tsx' -l`) — render guarded rows disabled with a hint
+- Modify: `packages/web/src/routes/$locale/_admin/admin/feature-flags/index.tsx` (rows map `:40-46` gains `guarded`) + `packages/web/src/vite/admin/feature-flags/FeatureFlagsView.tsx` (`FeatureFlagRow` — disabled toggle + hint beside the existing `runtimeControlled` branch `:67-73`) + `messages/{en,ja,zh}.json` (hint string; `lint:i18n-parity`)
 
 - [ ] **Step 1: Registry entry** (alphabetical position among web flags):
 
@@ -2584,17 +2586,22 @@ git commit -m "feat(custody): drizzle custody repositories + tx bundle + real-pg
   },
 ```
 
-Extend the registry's entry type with `guarded?: boolean` and export `isGuardedFlagKey(key: FeatureFlagKey): boolean`.
+Extend BOTH registry types with `guarded?: boolean` — the web entry type (`registry.ts:26-31`, or the `satisfies` check rejects the excess property) and the wide `FeatureFlagEntry` read type (`:45-51`, or `FEATURE_FLAGS[key].guarded` won't typecheck) — and export `isGuardedFlagKey(key: FeatureFlagKey): boolean`.
 
 - [ ] **Step 2: Switchboard rejection (the technical gate).** In `routes/feature-flags.ts` PATCH handler, after the `isFeatureFlagKey` check:
 
 ```ts
       if (isGuardedFlagKey(key)) {
-        return fail(c, 'This flag is flipped by its runbook script, not the switchboard (docs/runbooks/one-way-custody-flip.md)', 409)
+        return fail(
+          c,
+          'This flag is flipped by its runbook script, not the switchboard (docs/runbooks/one-way-custody-flip.md)',
+          409,
+          { code: 'FLAG_GUARDED' satisfies ErrorCode },
+        )
       }
 ```
 
-Route tests: PATCH `ONE_WAY_CUSTODY` as platform admin → 409 (and the override table unchanged); PATCH a non-guarded flag → still 200 (pin that the guard is per-key, not a blanket). Web: the admin switchboard row for a guarded flag renders its toggle disabled with the runbook hint (small conditional off the same registry field the GET already exposes; a UI-less fallback — admin sees the 409 error — is acceptable if the flags page proves hard to reach, but the 409 itself is mandatory).
+(`fail(c, error, status, extras?)` — `routes/helpers.ts:18`; add `'FLAG_GUARDED'` to `error-codes.ts` + its membership test first.) Route tests: PATCH `ONE_WAY_CUSTODY` as platform admin → 409 `FLAG_GUARDED` (and the override table unchanged); PATCH a non-guarded flag → still 200 (pin that the guard is per-key, not a blanket). Web: the switchboard imports the registry directly (the GET returns only sparse overrides), so add `guarded` to the rows map in `routes/$locale/_admin/admin/feature-flags/index.tsx:40-46` and render a guarded row's toggle disabled with the runbook-hint `title` in `FeatureFlagsView.tsx`'s `FeatureFlagRow` — a small branch beside the existing `runtimeControlled` one (`:67-73`); hint string in all three locale files. The 409 is the mandatory gate; the disabled row is the courtesy.
 
 - [ ] **Step 3: Web build-time reader** — add to `BUILD_TIME_READERS` in `feature-flags-runtime.ts` (literal access so Vite inlines it):
 
@@ -2763,7 +2770,7 @@ Run → FAIL (extra ctor args missing / custody fields not written).
   }
 ```
 
-`create`: when `input.pickupLocationId` is set, the insert + `placeAtHomeInTx` run in ONE `runInTransaction` — **a follow-up transaction is not acceptable** (P0-B): a crash between the two writes mints a home-based untracked car (search lists via the COALESCE fallback, checkout rejects on the null anchor); the Task 6 trigger (rev.8) turns exactly that split write into a commit-time failure. Wrap the existing insert if it is not already transactional (the insert may carry `pickupLocationId` — placement lands in the same tx, so the committed row is always placed).
+`create`: when `input.pickupLocationId` is set, the insert + `placeAtHomeInTx` run in ONE `runInTransaction` — **a follow-up transaction is not acceptable** (P0-B): a crash between the two writes mints a home-based untracked car (search lists via the COALESCE fallback, checkout rejects on the null anchor); the Task 24 trigger (the post-deploy contract PR) will turn exactly that split write into a commit-time failure. Wrap the existing insert if it is not already transactional (the insert may carry `pickupLocationId` — placement lands in the same tx, so the committed row is always placed).
 `update` (merge block ~`:193`), after computing `nextPickup`:
 
 ```ts
@@ -3598,7 +3605,7 @@ git commit -m "test(custody): one-way homeward journey e2e (real-db lane)"
 - Create: `scripts/backfill-movement-legs.ts`
 - Create: `docs/runbooks/one-way-custody-flip.md` — **spec §14.1 prerequisite #2**: the written flip runbook (the script-owned fence→flip→fence invocation, the §14.1 pending-leg verification checklist, and the named-environment approval rule for wipe-and-reseed)
 
-Bookings created while the flag was OFF have no legs; dark-era COMPLETED one-ways left cars physically away from their materialized location. The §14.1 cutover fence: a fence pass **immediately before AND immediately after** every flip (either direction) — the second pass closes the race window; between passes the never-gated state-driven endpoints own every in-flight movement. **rev.9 (decision 25): the script owns the flip itself.** `--enable`/`--disable` (each REQUIRES `--apply` — a flip is never print-only) runs: fence pass → upsert the `feature_flags` override row for `ONE_WAY_CUSTODY` (the same row the switchboard would have written; direct DB write — the route is guarded) → fence pass. With no flip argument the script is a fence-only run (idempotent, usable any time). A pre-flip fence failure aborts before the flag is touched.
+Bookings created while the flag was OFF have no legs; dark-era COMPLETED one-ways left cars physically away from their materialized location. The §14.1 cutover fence: a fence pass **immediately before AND immediately after** every flip (either direction) — the second pass closes the race window; between passes the never-gated state-driven endpoints own every in-flight movement. **rev.9 (decision 25): the script owns the flip itself.** `--enable`/`--disable` (each REQUIRES `--apply` — a flip is never print-only) runs: fence pass → upsert the `feature_flags` override row for `ONE_WAY_CUSTODY` with `updatedBy: 'flip-fence-script'` (the same row the switchboard would have written — direct DB write, the route is guarded; the `updatedBy` pin keeps script flips distinguishable from admin flips in the audit trail) → fence pass. With no flip argument the script is a fence-only run (idempotent, usable any time). A pre-flip fence failure aborts before the flag is touched.
 
 **rev.4 (P0-A): the script validates before it writes, and writes under the same locks as the live system.** A migration must never materialize a schedule the model calls impossible — an existing A→B commitment followed by a later A pickup is exactly the stranded state §8 rules 3/6 exist to prevent.
 
@@ -3606,7 +3613,7 @@ Bookings created while the flag was OFF have no legs; dark-era COMPLETED one-way
 
 ```ts
 // scripts/backfill-movement-legs.ts
-// One-way custody flip runbook (§14.1 rev.8). VALIDATE → then three synthesis
+// One-way custody flip fence (§14.1). VALIDATE → then three synthesis
 // passes, all idempotent, each vehicle in its own tx under the §4 lock:
 //  0. VALIDATION (always, even print-only): per affected vehicle, fold the
 //     complete would-be schedule — existing live legs + every leg passes 1-3
@@ -3720,7 +3727,7 @@ CREATE CONSTRAINT TRIGGER vehicles_home_base_tracked
 
 ---
 
-## Self-review notes (spec rev.11 coverage check, done at plan time)
+## Self-review notes (spec rev.12 coverage check, done at plan time)
 
 | Spec section | Task(s) |
 |---|---|
