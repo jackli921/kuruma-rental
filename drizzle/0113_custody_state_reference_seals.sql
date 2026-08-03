@@ -28,7 +28,7 @@ ALTER TABLE "vehicles"
 -- they fire at COMMIT with no statement context — in a tx that wrote several
 -- receipts, a message without ids cannot say which one failed. (2) Each sets
 -- CONSTRAINT explicitly; plpgsql leaves err.constraint NULL otherwise, and that
--- is the field the API's pg-errors.ts `getViolatedConstraint` dispatches on, so
+-- is the field the API's pg-errors.ts `pgConstraintName` dispatches on, so
 -- an unset one degrades a mappable domain error into a generic 500.
 CREATE OR REPLACE FUNCTION handoff_receipt_endpoint_check() RETURNS trigger AS $$
 DECLARE
