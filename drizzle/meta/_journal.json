@@ -785,6 +785,27 @@
       "when": 1784243216799,
       "tag": "0111_consent_acceptances_append_only_role",
       "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1785765090077,
+      "tag": "0112_one_way_custody_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1785765110264,
+      "tag": "0113_custody_state_reference_seals",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1785765207447,
+      "tag": "0114_receipts_append_only_grants",
+      "breakpoints": true
     }
   ]
 }

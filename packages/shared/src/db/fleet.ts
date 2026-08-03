@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
+  boolean,
   check,
   date,
   foreignKey,
@@ -12,6 +13,7 @@ import {
   unique,
 } from 'drizzle-orm/pg-core'
 import {
+  CUSTODY_STATES,
   TRANSMISSIONS,
   VEHICLE_BLOCK_KINDS,
   VEHICLE_CLASS_STATUSES,
@@ -28,6 +30,8 @@ export const luggageSizeEnum = pgEnum('luggage_size', LUGGAGE_SIZES)
 export const vehicleClassStatusEnum = pgEnum('vehicle_class_status', VEHICLE_CLASS_STATUSES)
 export const vehicleStatusEnum = pgEnum('vehicle_status', VEHICLE_STATUSES)
 export const vehicleBlockKindEnum = pgEnum('vehicle_block_kind', VEHICLE_BLOCK_KINDS)
+// One-way custody network (§3): where the car physically is RIGHT NOW.
+export const custodyStateEnum = pgEnum('custody_state', CUSTODY_STATES)
 
 // Issue #247: vehicle classes — renter-facing catalog categories.
 // Renters browse and book classes (e.g. "Compact"); owner manages
@@ -130,6 +134,30 @@ export const vehicles = pgTable(
     hourlyRateJpy: integer('hourlyRateJpy'),
     shakenExpiryDate: date('shakenExpiryDate', { mode: 'string' }),
     insuranceExpiryDate: date('insuranceExpiryDate', { mode: 'string' }),
+    // --- One-way custody network (§3). pickupLocationId is REINTERPRETED as the
+    // vehicle's HOME BASE (a re-label never moves the car); the pair below is the
+    // materialized physical state, written ONLY by placement/receipt/departure.
+    // NULL custodyState = custody-untracked (no home base assigned yet, §13).
+    custodyState: custodyStateEnum('custodyState'),
+    physicalHostOperatorId: text('physicalHostOperatorId'),
+    physicalLocationId: text('physicalLocationId'),
+    // §3 state⇔reference seals: the in-flight leg (IN_TRANSIT) / open custody
+    // period (AT_STATION). Bare columns here — their composite FKs + the
+    // three-way CHECK live in the custom seals migration (plan decision 16:
+    // fleet.ts↔custody.ts would otherwise import each other circularly).
+    inFlightLegId: text('inFlightLegId'),
+    openCustodyPeriodId: text('openCustodyPeriodId'),
+    // §3: listing suppression on a received car (reposition queued / promo-home
+    // / owner hold) + the per-car relist policy (default wait-for-owner).
+    heldOffline: boolean('heldOffline').notNull().default(false),
+    autoRelistOnReceipt: boolean('autoRelistOnReceipt').notNull().default(false),
+    // §9 promo-home: discount for a booking that lands the car at its home base
+    // by the cutoff (compared against ARRIVAL). Cleared by a receipt at home.
+    homewardPromoPercent: integer('homewardPromoPercent'),
+    homewardPromoCutoffAt: timestamp('homewardPromoCutoffAt', {
+      withTimezone: true,
+      mode: 'date',
+    }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -188,6 +216,25 @@ export const vehicles = pgTable(
     // booking's operator. id is already PK-unique; this names the (operatorId,
     // id) key. Mirrors vehicle_classes_operatorId_id_unique.
     unique('vehicles_operatorId_id_unique').on(table.operatorId, table.id),
+    // Physical state may cross operators in Slice 2; the operator component is
+    // what makes the FK real (§3). Target: locations_operatorId_id_unique.
+    foreignKey({
+      columns: [table.physicalHostOperatorId, table.physicalLocationId],
+      foreignColumns: [locations.operatorId, locations.id],
+      name: 'vehicles_physical_location_fk',
+    }),
+    index('idx_vehicles_physicalHostOperatorId').on(table.physicalHostOperatorId),
+    index('idx_vehicles_physicalLocationId').on(table.physicalLocationId),
+    index('idx_vehicles_inFlightLegId').on(table.inFlightLegId),
+    index('idx_vehicles_openCustodyPeriodId').on(table.openCustodyPeriodId),
+    check(
+      'vehicles_homeward_promo_pair',
+      sql`(${table.homewardPromoPercent} IS NULL) = (${table.homewardPromoCutoffAt} IS NULL)`,
+    ),
+    check(
+      'vehicles_homeward_promo_percent_range',
+      sql`${table.homewardPromoPercent} IS NULL OR (${table.homewardPromoPercent} BETWEEN 1 AND 100)`,
+    ),
   ],
 )
 

@@ -24,6 +24,11 @@ export const operators = pgTable('operators', {
   name: text('name').notNull(),
   // §9 item 2: external pre-auth/handoff URL (separate Stripe site, post-MVP)
   preAuthHandoffUrl: text('pre_auth_handoff_url'),
+  // §6/Q5: owner-configurable receipt checklist (RECEIPT_CHECKLIST_ITEMS
+  // values). Empty = minimal core only (vehicle, location, receiver, time) —
+  // the v1 default. Snapshotted onto the leg at departure; the snapshot, not
+  // this live value, is what the receiver must satisfy.
+  receiptChecklist: text('receiptChecklist').array().notNull().default([]),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   // #1088: soft-deactivation. NULL = active; set = deactivated (hidden from
