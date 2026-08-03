@@ -106,6 +106,8 @@ export const vehicles = pgTable(
     // composite FK below (#387 slice 2). Nullable + MATCH SIMPLE: a vehicle
     // with no assigned location is unconstrained. Operationally attached to
     // bookings in slice 6 — this slice adds the additive column + seal only.
+    // Under one-way custody this is REINTERPRETED as the vehicle's HOME BASE,
+    // no longer "where the car is" — see the custody column block below.
     pickupLocationId: text('pickupLocationId'),
     name: text('name').notNull(),
     description: text('description'),
@@ -223,6 +225,11 @@ export const vehicles = pgTable(
       foreignColumns: [locations.operatorId, locations.id],
       name: 'vehicles_physical_location_fk',
     }),
+    // NOT lint:fk-indexes-forced: the FKs covering inFlightLegId and
+    // openCustodyPeriodId live in raw SQL (0113), so schema introspection cannot
+    // see them. These exist because 0113's backref triggers look vehicles up BY
+    // those columns on every receipt / void / period close — unindexed, each of
+    // those writes would seq-scan the whole fleet.
     index('idx_vehicles_physicalHostOperatorId').on(table.physicalHostOperatorId),
     index('idx_vehicles_physicalLocationId').on(table.physicalLocationId),
     index('idx_vehicles_inFlightLegId').on(table.inFlightLegId),

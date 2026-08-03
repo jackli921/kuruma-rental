@@ -24,9 +24,8 @@ BEGIN
 END
 $$;
 --> statement-breakpoint
--- Explicit, not inherited: a DB restored or branched before 0111's default
--- privileges took effect would otherwise leave the runtime role unable to write
--- receipts at all. GRANT first, then REVOKE — order matters.
+-- Belt-and-braces, not a repair: the migrator always applies 0111 before 0112,
+-- so this GRANT is a no-op that states the intended end state next to the REVOKE.
 GRANT SELECT, INSERT ON handoff_receipts TO kuruma_runtime;
 --> statement-breakpoint
 -- Append-only seal: SELECT + INSERT stay, UPDATE/DELETE never.

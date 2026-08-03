@@ -22,6 +22,14 @@ ALTER TABLE "vehicles"
 --> statement-breakpoint
 -- §6: a receipt matches its leg's endpoint. Deferred so a recovery re-target
 -- (leg to* updated in the same tx) is always checked against the final pair.
+--
+-- Two conventions every RAISE in this file follows. (1) The message names the
+-- offending ROW, not just the mismatched value: these are DEFERRED triggers, so
+-- they fire at COMMIT with no statement context — in a tx that wrote several
+-- receipts, a message without ids cannot say which one failed. (2) Each sets
+-- CONSTRAINT explicitly; plpgsql leaves err.constraint NULL otherwise, and that
+-- is the field the API's pg-errors.ts `getViolatedConstraint` dispatches on, so
+-- an unset one degrades a mappable domain error into a generic 500.
 CREATE OR REPLACE FUNCTION handoff_receipt_endpoint_check() RETURNS trigger AS $$
 DECLARE
   leg_from text;
@@ -30,12 +38,14 @@ BEGIN
   SELECT "fromLocationId", "toLocationId" INTO leg_from, leg_to
     FROM "movement_legs" WHERE "id" = NEW."legId";
   IF NEW."phase" = 'ARRIVAL' AND NEW."atLocationId" <> leg_to THEN
-    RAISE EXCEPTION 'handoff_receipts_endpoint_match: ARRIVAL receipt at % but leg arrives at %',
-      NEW."atLocationId", leg_to USING ERRCODE = '23514';
+    RAISE EXCEPTION 'handoff_receipts_endpoint_match: receipt % on leg %: ARRIVAL recorded at % but leg arrives at %',
+      NEW."id", NEW."legId", NEW."atLocationId", leg_to
+      USING ERRCODE = '23514', CONSTRAINT = 'handoff_receipts_endpoint_match';
   END IF;
   IF NEW."phase" = 'DEPARTURE' AND NEW."atLocationId" <> leg_from THEN
-    RAISE EXCEPTION 'handoff_receipts_endpoint_match: DEPARTURE receipt at % but leg departs from %',
-      NEW."atLocationId", leg_from USING ERRCODE = '23514';
+    RAISE EXCEPTION 'handoff_receipts_endpoint_match: receipt % on leg %: DEPARTURE recorded at % but leg departs from %',
+      NEW."id", NEW."legId", NEW."atLocationId", leg_from
+      USING ERRCODE = '23514', CONSTRAINT = 'handoff_receipts_endpoint_match';
   END IF;
   RETURN NEW;
 END;
@@ -53,17 +63,21 @@ CREATE CONSTRAINT TRIGGER handoff_receipts_endpoint_match
 CREATE OR REPLACE FUNCTION movement_leg_endpoint_receipts_check() RETURNS trigger AS $$
 DECLARE
   l record;
+  orphaned_receipt_id text;
 BEGIN
   -- §3 rev.9: NEW is an event-time snapshot — evaluate the FINAL row.
   SELECT "fromLocationId", "toLocationId" INTO l FROM "movement_legs" WHERE "id" = NEW."id";
   IF NOT FOUND THEN RETURN NULL; END IF;
-  PERFORM 1 FROM "handoff_receipts" r
+  -- SELECT INTO, not PERFORM: the offending receipt id is the whole diagnostic.
+  SELECT r."id" INTO orphaned_receipt_id FROM "handoff_receipts" r
     WHERE r."legId" = NEW."id"
       AND ((r."phase" = 'ARRIVAL' AND r."atLocationId" <> l."toLocationId")
-        OR (r."phase" = 'DEPARTURE' AND r."atLocationId" <> l."fromLocationId"));
+        OR (r."phase" = 'DEPARTURE' AND r."atLocationId" <> l."fromLocationId"))
+    LIMIT 1;
   IF FOUND THEN
-    RAISE EXCEPTION 'movement_legs_endpoint_receipts: leg % endpoint update orphans an existing receipt',
-      NEW."id" USING ERRCODE = '23514';
+    RAISE EXCEPTION 'movement_legs_endpoint_receipts: leg % endpoint update orphans receipt %',
+      NEW."id", orphaned_receipt_id
+      USING ERRCODE = '23514', CONSTRAINT = 'movement_legs_endpoint_receipts';
   END IF;
   RETURN NULL;
 END;
@@ -93,15 +107,17 @@ BEGIN
       WHERE l."id" = v."inFlightLegId"
         AND l."departedAt" IS NOT NULL AND l."receivedAt" IS NULL AND l."voidedAt" IS NULL;
     IF NOT FOUND THEN
-      RAISE EXCEPTION 'vehicles_custody_lifecycle: vehicle % IN_TRANSIT but leg % is not in flight',
-        NEW."id", v."inFlightLegId" USING ERRCODE = '23514';
+      RAISE EXCEPTION 'vehicles_custody_lifecycle: vehicle % is IN_TRANSIT but leg % is not in flight',
+        NEW."id", v."inFlightLegId"
+        USING ERRCODE = '23514', CONSTRAINT = 'vehicles_custody_lifecycle';
     END IF;
   ELSIF v."custodyState" = 'AT_STATION' THEN
     PERFORM 1 FROM "custody_periods" p
       WHERE p."id" = v."openCustodyPeriodId" AND p."departedAt" IS NULL;
     IF NOT FOUND THEN
-      RAISE EXCEPTION 'vehicles_custody_lifecycle: vehicle % AT_STATION but period % is not open',
-        NEW."id", v."openCustodyPeriodId" USING ERRCODE = '23514';
+      RAISE EXCEPTION 'vehicles_custody_lifecycle: vehicle % is AT_STATION but period % is not open',
+        NEW."id", v."openCustodyPeriodId"
+        USING ERRCODE = '23514', CONSTRAINT = 'vehicles_custody_lifecycle';
     END IF;
   END IF;
   RETURN NULL;
@@ -120,15 +136,17 @@ CREATE CONSTRAINT TRIGGER vehicles_custody_lifecycle
 CREATE OR REPLACE FUNCTION movement_leg_backref_check() RETURNS trigger AS $$
 DECLARE
   l record;
+  referencing_vehicle_id text;
 BEGIN
   SELECT "departedAt", "receivedAt", "voidedAt" INTO l
     FROM "movement_legs" WHERE "id" = NEW."id";
   IF NOT FOUND THEN RETURN NULL; END IF;
   IF l."departedAt" IS NULL OR l."receivedAt" IS NOT NULL OR l."voidedAt" IS NOT NULL THEN
-    PERFORM 1 FROM "vehicles" v WHERE v."inFlightLegId" = NEW."id";
+    SELECT v."id" INTO referencing_vehicle_id FROM "vehicles" v WHERE v."inFlightLegId" = NEW."id" LIMIT 1;
     IF FOUND THEN
-      RAISE EXCEPTION 'vehicles_custody_lifecycle: leg % is no longer in flight but a vehicle still references it',
-        NEW."id" USING ERRCODE = '23514';
+      RAISE EXCEPTION 'movement_legs_vehicle_backref: leg % is no longer in flight but vehicle % still references it',
+        NEW."id", referencing_vehicle_id
+        USING ERRCODE = '23514', CONSTRAINT = 'movement_legs_vehicle_backref';
     END IF;
   END IF;
   RETURN NULL;
@@ -143,14 +161,16 @@ CREATE CONSTRAINT TRIGGER movement_legs_vehicle_backref
 CREATE OR REPLACE FUNCTION custody_period_backref_check() RETURNS trigger AS $$
 DECLARE
   p record;
+  referencing_vehicle_id text;
 BEGIN
   SELECT "departedAt" INTO p FROM "custody_periods" WHERE "id" = NEW."id";
   IF NOT FOUND THEN RETURN NULL; END IF;
   IF p."departedAt" IS NOT NULL THEN
-    PERFORM 1 FROM "vehicles" v WHERE v."openCustodyPeriodId" = NEW."id";
+    SELECT v."id" INTO referencing_vehicle_id FROM "vehicles" v WHERE v."openCustodyPeriodId" = NEW."id" LIMIT 1;
     IF FOUND THEN
-      RAISE EXCEPTION 'vehicles_custody_lifecycle: period % closed while a vehicle still references it as open',
-        NEW."id" USING ERRCODE = '23514';
+      RAISE EXCEPTION 'custody_periods_vehicle_backref: period % closed while vehicle % still references it as open',
+        NEW."id", referencing_vehicle_id
+        USING ERRCODE = '23514', CONSTRAINT = 'custody_periods_vehicle_backref';
     END IF;
   END IF;
   RETURN NULL;

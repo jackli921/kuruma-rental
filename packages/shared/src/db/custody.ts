@@ -4,6 +4,8 @@
 // custody_periods is the accrual ledger [receivedAt, departedAt) — the time a
 // host ACTUALLY holds the car. handoff_receipts is immutable evidence with a
 // sealed minimal core (append-only, private photos — NOT the catalog pipeline).
+// Every § below refers to the design doc:
+// docs/superpowers/specs/2026-07-26-one-way-custody-network-design.md
 import { sql } from 'drizzle-orm'
 import {
   boolean,
@@ -265,6 +267,10 @@ export const handoffReceipts = pgTable(
     uniqueIndex('handoff_receipts_supersedes_unique')
       .on(table.supersedesReceiptId)
       .where(sql`${table.supersedesReceiptId} IS NOT NULL`),
+    // Looks PK-redundant (id alone is already unique), but it is the named key
+    // handoff_receipts_correction_same_end_fk points at: a composite FK needs a
+    // unique constraint over EXACTLY its referenced columns, so this is what
+    // makes "a correction cites the same leg and phase" checkable at all.
     unique('handoff_receipts_id_legId_phase_unique').on(table.id, table.legId, table.phase),
     // rev.9: a receipt can never supersede itself (the same-row FK would pass).
     check(
