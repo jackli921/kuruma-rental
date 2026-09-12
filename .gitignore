@@ -70,3 +70,6 @@ docs/meeting_notes/
 docs/handoffs/
 docs/*-handoff.md
 STATE.md
+
+# Generated review artifacts from the lavish skill
+.lavish/
