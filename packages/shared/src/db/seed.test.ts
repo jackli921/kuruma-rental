@@ -1,6 +1,8 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
+import type { getDb } from './index'
 import { seed } from './seed'
 import { seedBookings } from './seed-bookings'
+import { placeSeededVehicles } from './seed-custody'
 
 // The DIP seam (#445): the seed modules are now pure libraries — they used to
 // call getDb() + process.exit() at module scope, which made them unusable from a
@@ -16,5 +18,15 @@ describe('seed injection seam', () => {
   test('exposes seedBookings(db) as a one-argument injectable function', () => {
     expect(typeof seedBookings).toBe('function')
     expect(seedBookings.length).toBe(1)
+  })
+})
+
+describe('placeSeededVehicles', () => {
+  // The empty case must short-circuit: with no rows the CTE would emit a bare
+  // `VALUES` list and the statement would be a syntax error, not a no-op.
+  test('issues no statement when there is nothing to place', async () => {
+    const execute = vi.fn()
+    await placeSeededVehicles({ execute } as unknown as ReturnType<typeof getDb>, [])
+    expect(execute).not.toHaveBeenCalled()
   })
 })

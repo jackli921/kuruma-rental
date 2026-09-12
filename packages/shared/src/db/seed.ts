@@ -18,6 +18,7 @@ import {
   vehicleClasses,
   vehicles,
 } from './schema'
+import { placeSeededVehicles } from './seed-custody'
 import {
   DEMO_ADD_ON_OPTIONS,
   DEMO_ADD_ON_TEMPLATES,
@@ -400,8 +401,16 @@ export async function seed(db: ReturnType<typeof getDb>) {
       })
   }
 
-  // 8. Vehicles — both composite FKs resolve now (classes + locations seeded).
+  // 8. Vehicles — the class composite FK resolves now (classes seeded above).
   // shakenExpiryDate is stamped demo-time-relative (fixtures omit it, §3.3).
+  //
+  // One-way custody §13: a vehicle is born custody-untracked AND homeless —
+  // `pickupLocationId` is written by `placeSeededVehicles` below, together with
+  // the custody state and its baseline period. `pickupLocationId` is likewise
+  // absent from the conflict-update: the loop must never write a home on its
+  // own, or a re-seed after a crashed run would resurrect a home-based car with
+  // no custody row. Moving an already-placed car's home is a custody operation,
+  // not a seed upsert, so a fixture home change no longer re-homes a warm branch.
   console.log(`Seeding ${DEMO_VEHICLES.length} vehicles...`)
   const shakenExpiryDate = demoExpiry(SHAKEN_VALIDITY_DAYS)
   const insuranceExpiryDate = demoExpiry(INSURANCE_VALIDITY_DAYS)
@@ -412,7 +421,6 @@ export async function seed(db: ReturnType<typeof getDb>) {
         id: seedId(v.id),
         operatorId: seedId(v.operatorId),
         classId: seedId(v.classId),
-        pickupLocationId: seedId(v.pickupLocationId),
         name: v.name,
         make: v.make,
         model: v.model,
@@ -432,7 +440,6 @@ export async function seed(db: ReturnType<typeof getDb>) {
         target: vehicles.id,
         set: {
           classId: seedId(v.classId),
-          pickupLocationId: seedId(v.pickupLocationId),
           name: v.name,
           dailyRateJpy: v.dailyRateJpy,
           hourlyRateJpy: v.hourlyRateJpy,
@@ -443,6 +450,18 @@ export async function seed(db: ReturnType<typeof getDb>) {
         },
       })
   }
+
+  // 8b. Place the fleet (§13, decision 21). ONE statement: a baseline custody
+  // period per still-untracked car + the vehicle's home, physical pair and open
+  // period set together. Runs immediately after the loop, before anything that
+  // reads a vehicle's home (`seedBookings` assigns cars by pickup location).
+  await placeSeededVehicles(
+    db,
+    DEMO_VEHICLES.map((v) => ({
+      vehicleId: seedId(v.id),
+      homeLocationId: seedId(v.pickupLocationId),
+    })),
+  )
 
   // 9. Consent documents (#877). 4 types × 3 locales = 12 PUBLISHED rows.
   // Idempotent: upsert on stable id. The RENTER_LIABILITY body is verbatim from
